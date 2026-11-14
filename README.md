@@ -4,9 +4,9 @@
 
 [English](README_EN.md) · [使用指南](docs/USER_GUIDE.md)
 
-**免费开源 · Windows x64 · 中文 / English · 正式版 2.0.1**
+**免费开源 · Windows x64 · 中文 / English · 源码版本 2.0.3**
 
-[下载 Windows x64 安装包](https://github.com/Spicyfish95/minepix/releases/tag/minepix-v2.0.1)
+[下载 Windows x64 安装包](https://github.com/Spicyfish95/minepix/releases/latest)
 
 ![MinePix 深色工作区：中央像素画布、左侧色板、右侧预览与图层、底部四帧动画时间轴](docs/images/workspace.png)
 
@@ -41,6 +41,10 @@
 ![参考板与画布同屏：左侧保留角色和配色参考，中央编辑像素作品](docs/images/reference-board.png)
 
 *角色设定和配色样张留在画布旁，导出时只包含作品。可打开[参考板示例](examples/reference-board.pix)体验。*
+
+### 快速截图并收集参考
+
+按 `Ctrl+1` 进入截图模式，在鼠标所在显示器拖动框选，选区内双击或按 Enter 复制；待选时双击可截取整屏。鼠标位于参考栏目时按 `Ctrl+V` 导入剪贴板图片，参考、预览及地形预览的独立窗口可使用 Pin 按钮置顶。
 
 ### 保留可编辑项目，按用途交付
 

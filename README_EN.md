@@ -4,9 +4,9 @@ A Windows desktop editor for pixel art, frame-by-frame animation and game assets
 
 [简体中文](README.md) · [User guide (Chinese)](docs/USER_GUIDE.md)
 
-**Free and open source · Windows x64 · Chinese / English · Stable 2.0.1**
+**Free and open source · Windows x64 · Chinese / English · Source version 2.0.3**
 
-[Download the Windows x64 installer](https://github.com/Spicyfish95/minepix/releases/tag/minepix-v2.0.1)
+[Download the Windows x64 installer](https://github.com/Spicyfish95/minepix/releases/latest)
 
 ![MinePix dark workspace with the pixel canvas, palette, preview, layers and a four-frame animation timeline](docs/images/workspace-en.png)
 
@@ -45,6 +45,10 @@ Import multiple reference images, move and scale them, pick colors and change th
 ### Keep editable projects and export for each purpose
 
 Compressed binary **PIX** projects retain layers, frames, palettes and references. Use **ASE / Aseprite** for exchange with other editors, and export PNG, GIF, WebP, PNG sequences or engine atlases for delivery.
+
+### Capture and collect references
+
+Press `Ctrl+1` to enter capture mode on the monitor under the pointer. Drag a selection, then double-click inside it or press Enter to copy; double-click before selecting to capture the full monitor. Hover over the reference panel and press `Ctrl+V` to import clipboard images. Detached reference, preview and terrain preview windows can be pinned on top.
 
 ## Drawing and animation tools
 
