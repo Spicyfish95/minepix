@@ -5,6 +5,7 @@ import {pathToFileURL} from 'node:url';
 import path from 'node:path';
 import {blockmap} from './update-blockmap.mjs';
 export const repository='Spicyfish95/minepix';
+export const releaseAssetName=version=>`MinePix.Tauri_${version}_x64-setup.exe`;
 export const sha256=bytes=>createHash('sha256').update(bytes).digest('hex');
 export function compareVersions(a,b){
  const parse=value=>{const [core,...suffix]=value.split('-');return {core:core.split('.').map(Number),pre:suffix.join('-').split('.').filter(Boolean)};};
@@ -25,7 +26,8 @@ export function compareVersions(a,b){
 }
 export function verifyManifest(manifest,version,bytes,signature){
  const filename=`MinePix Tauri_${version}_x64-setup.exe`;
- const url=`https://github.com/${repository}/releases/download/tauri-v${version}/${encodeURIComponent(filename)}`;
+ const assetName=releaseAssetName(version);
+ const url=`https://github.com/${repository}/releases/download/tauri-v${version}/${assetName}`;
  assert.equal(manifest.version,version);
  assert.ok(Number.isFinite(Date.parse(manifest.pub_date)));
  assert.equal(typeof manifest.notes,'string');
@@ -33,7 +35,7 @@ export function verifyManifest(manifest,version,bytes,signature){
   assert.deepEqual(manifest.platforms[platform],{signature:signature.trim(),url});
  }
  assert.deepEqual(manifest.minepixBlockmap,blockmap(bytes,version,url));
- return {filename,bytes:bytes.length,sha256:sha256(bytes),url};
+ return {filename,assetName,bytes:bytes.length,sha256:sha256(bytes),url};
 }
 export async function verifyRelease(){
  const read=async name=>JSON.parse(await readFile(name,'utf8'));

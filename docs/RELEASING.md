@@ -21,6 +21,8 @@ npm run package
 
 main 和 PR 执行回归及前端构建，不生成签名安装包。tauri-v<版本> 标签才构建签名安装包并触发版本发布，安装器和 .sig 归属对应版本 Release。latest.json 指向版本资产，更新频道标签为 tauri-latest。先上传并验证版本资产，最后提升频道。已发布版本资产不覆盖；频道拒绝被较低版本回退。
 
+本地 NSIS 文件名包含空格；发布时将相同字节暂存为不含空格的 `MinePix.Tauri_<版本>_x64-setup.exe` 及 `.sig`。更新 URL 与差分块图均绑定此公开名称，避免 GitHub 自动将空格转为点号后出现 404。
+
 日常先提交并执行 `git push origin main`，等待该提交的 Actions 通过，再为相同提交创建与应用版本一致的标签，例如 `git tag tauri-v2.0.0-alpha.1`、`git push origin tauri-v2.0.0-alpha.1`。标签工作流通过后，用户从对应 Release 下载安装包，已安装版本从 tauri-latest 读取更新。后续发布必须先同步上述五处版本号并提高版本；同版本重新构建不能替换已发布安装包，也不能使客户端识别为新版本。
 
 ## 更新安全与验收

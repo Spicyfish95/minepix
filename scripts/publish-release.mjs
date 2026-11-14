@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
-import {readFile} from 'node:fs/promises';
+import {readFile,copyFile} from 'node:fs/promises';
 import {verifyRelease,repository,sha256,compareVersions} from './verify-release.mjs';
 const exec=promisify(execFile);
 const gh=async(...args)=>(await exec('gh',[...args,'--repo',repository],{windowsHide:true})).stdout;
@@ -32,7 +32,10 @@ if(!version){
  version=await release(tag);
 }
 if(version.isDraft){
- await gh('release','upload',tag,installer,installer+'.sig','artifacts/release/validation.json','--clobber');
+ const publicInstaller=`artifacts/release/${local.artifact.assetName}`;
+ await copyFile(installer,publicInstaller);
+ await copyFile(installer+'.sig',publicInstaller+'.sig');
+ await gh('release','upload',tag,publicInstaller,publicInstaller+'.sig','artifacts/release/validation.json','--clobber');
  const flags=local.version.includes('-')?['--prerelease']:[];
  await gh('release','edit',tag,'--draft=false','--latest=false',...flags);
 }
