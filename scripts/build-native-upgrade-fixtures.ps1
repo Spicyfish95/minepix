@@ -3,7 +3,9 @@ $taskRepo=Split-Path $PSScriptRoot -Parent
 $taskRoot=Join-Path $taskRepo 'artifacts\native-upgrade\rebuilt'
 New-Item -ItemType Directory -Path $taskRoot -Force|Out-Null
 . (Join-Path $PSScriptRoot 'rust-env.ps1')
-$env:TAURI_SIGNING_PRIVATE_KEY=(Resolve-Path (Join-Path (Split-Path $taskRepo -Parent) '.signing\minepix-tauri.key')).Path
+if (-not $env:TAURI_SIGNING_PRIVATE_KEY) {
+ $env:TAURI_SIGNING_PRIVATE_KEY=Join-Path $env:USERPROFILE '.ssh\minepix-tauri.key'
+}
 $env:CI='true'
 $taskOverride=Join-Path $taskRoot 'alpha2.json'
 [IO.File]::WriteAllText($taskOverride,'{"version":"2.0.0-alpha.2"}'+"`n",[Text.UTF8Encoding]::new($false))

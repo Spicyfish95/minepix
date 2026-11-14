@@ -6,6 +6,15 @@
 
 签名使用环境变量 TAURI_SIGNING_PRIVATE_KEY 和 TAURI_SIGNING_PRIVATE_KEY_PASSWORD。私钥可为 Tauri 支持的文件路径或内容，不得提交或输出。固定公钥保存在 tauri.conf.json，签名必须绑定版本。
 
+本机私钥存放于 `$env:USERPROFILE\.ssh\minepix-tauri.key`，独立公钥文件为同目录的 `minepix-tauri.key.pub`。本地签名前设置路径即可，无需复制密钥到项目目录：
+
+```powershell
+$env:TAURI_SIGNING_PRIVATE_KEY=Join-Path $env:USERPROFILE '.ssh\minepix-tauri.key'
+npm run package
+```
+
+密钥位置调整不改变已发布应用的信任关系。应用配置中保留用于验证更新的固定公钥。此本地迁移不会配置 GitHub Actions Secret。
+
 ## GitHub Actions
 
 构建使用 Windows runner、Node 24、Rust stable 和锁文件。仓库 Actions secrets 保存 TAURI_SIGNING_PRIVATE_KEY 和 TAURI_SIGNING_PRIVATE_KEY_PASSWORD。

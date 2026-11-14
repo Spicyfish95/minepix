@@ -1,10 +1,11 @@
 import {mkdir,writeFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import path from 'node:path';
+import {homedir} from 'node:os';
 await mkdir('artifacts/updater',{recursive:true});
 const payload=path.resolve('artifacts/updater/protocol.bin');
 const bytes=Buffer.alloc(2*1024*1024);
 for(let i=0;i<bytes.length;i++)bytes[i]=i%251;
 await writeFile(payload,bytes);
-execFileSync(process.execPath,['node_modules/@tauri-apps/cli/tauri.js','signer','sign','--private-key-path',path.resolve('../.signing/minepix-tauri.key'),'--app-version','2.0.0-alpha.2',payload],{stdio:'ignore'});
+execFileSync(process.execPath,['node_modules/@tauri-apps/cli/tauri.js','signer','sign','--private-key-path',path.join(homedir(),'.ssh','minepix-tauri.key'),'--app-version','2.0.0-alpha.2',payload],{stdio:'ignore'});
 console.log('Prepared a signed protocol fixture; it is intentionally not an installer.');
