@@ -14,6 +14,14 @@ test('使用当前用户安装身份与明确安装钩子',()=>{
  assert.equal(nsis.installMode,'currentUser');assert.equal(config.identifier,'com.minepix.tauri');
  assert.equal(config.productName,'MinePix');assert.equal(nsis.installerHooks,'windows/installer-hooks.nsh');
 });
+test('安装包文件显式使用软件图标而非默认安装器或PIX文档图标',()=>{
+ assert.equal(nsis.installerIcon,'../src/assets/app-icon.ico');
+ assert.ok(config.bundle.icon.includes(nsis.installerIcon));
+ const icon=readFileSync(new URL('../src-tauri/'+nsis.installerIcon,import.meta.url));
+ assert.equal(icon.readUInt16LE(0),0);assert.equal(icon.readUInt16LE(2),1);
+ assert.ok(icon.readUInt16LE(4)>0);
+ assert.notEqual(nsis.installerIcon,'../src/assets/project-icon.ico');
+});
 test('PIX和Applications注册使用随包分发的专用文档图标',()=>{
  assert.equal(config.bundle.resources['../src/assets/project-icon.ico'],'project-icon.ico');
  assert.equal(config.bundle.resources['../src/assets/app-icon.png'],'notification-icon.png');

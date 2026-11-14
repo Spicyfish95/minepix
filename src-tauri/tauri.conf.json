@@ -29,6 +29,7 @@
     "shortDescription": "Pixel art and animation editor",
     "windows": {
       "nsis": {
+        "installerIcon": "../src/assets/app-icon.ico",
         "installerHooks": "windows/installer-hooks.nsh",
         "template": "windows/installer.nsi",
         "displayLanguageSelector": true,
