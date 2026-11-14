@@ -62,7 +62,7 @@ function windowBridge(target){
 
 export async function initializeDesktop(){
  const bridge={testing:false,secondary:current.label!=='main'};
- const methods=['openRepository','appInfo','editorInfo','editorReady','detachDocument','moveDocument','recordInputAudit','testNotification','recentFiles','recentThumbs','removeRecent','clearRecent','openRecent','startupFiles','openKeymap','openPalette','open','exportAseprite','exportSheetMetadata','exportSheet','exportAnimation','save','saveProject','activateDocument','setDirty','checkUpdates','installUpdate','downloadUpdate','cancelUpdate','updateState','openUpdateRelease','setAutoUpdate','setLocale'];
+ const methods=['captureScreen','clipboardImages','openRepository','appInfo','editorInfo','editorReady','detachDocument','moveDocument','recordInputAudit','testNotification','recentFiles','recentThumbs','removeRecent','clearRecent','openRecent','startupFiles','openKeymap','openPalette','open','exportAseprite','exportSheetMetadata','exportSheet','exportAnimation','save','saveProject','activateDocument','setDirty','checkUpdates','installUpdate','downloadUpdate','cancelUpdate','updateState','openUpdateRelease','setAutoUpdate','setLocale'];
  for(const method of methods)bridge[method]=(...args)=>call(method,...args);
  bridge.saveProject=(data,name,saveAs=false)=>invokeBackend('save_project_packed',packProjectSave(data,name,saveAs));
  bridge.recentThumbs=async()=>{
@@ -82,7 +82,7 @@ export async function initializeDesktop(){
   const name=String(options.name||'animation').replace(/[<>:"/\\|?*\x00-\x1f]/g,'_').replace(/[. ]+$/g,'').slice(0,100)||'animation',base=name+'-sheet';
   return call('exportSheet',{...options,engineFiles:engineFiles({...options.metadata,image:base+'.png'},base,options.engineFormat||'native')});
  };
- for(const [method,event]of Object.entries({onCommand:'command',onEditorError:'editor:error',onUpdateState:'update:state',onNotificationAction:'notification:action',onWindowMenu:'menu-changed'}))bridge[method]=callback=>subscribe(event,callback);
+ for(const [method,event]of Object.entries({onCapture:'capture:complete',onCommand:'command',onEditorError:'editor:error',onUpdateState:'update:state',onNotificationAction:'notification:action',onWindowMenu:'menu-changed'}))bridge[method]=callback=>subscribe(event,callback);
  let incoming=Promise.resolve();
  bridge.onOpenFile=callback=>subscribe('open-file-data',file=>{incoming=incoming.then(async()=>callback(await resolveOpened(file))).catch(error=>dispatch('editor:error',error.message));});
  bridge.onDocumentRequest=callback=>subscribe('editor:request',async({requestId,operation,data})=>{

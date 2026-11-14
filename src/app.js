@@ -2455,6 +2455,7 @@ async function sliceDialog(){
 }
 const help=createHelp({desktop:window.desktop,modal,message,report:error=>showError(error.message)});
 const actions={
+ screenshot:()=>window.desktop?.captureScreen(),
  'help-guide':()=>help.guide(),'about':()=>help.about(),'check-updates':()=>help.check(),
   'close-document':()=>closeDocumentTab(),'reopen-document':reopenDocument,'recent-files':recentDialog,
   ...Object.fromEntries(['ellipse','lasso','polygon','wand'].map(kind=>['selection-'+kind,()=>{$('selection-kind').value=kind;setTool('select');}])),
@@ -2683,6 +2684,13 @@ $('group-mode').onchange=()=>{const pass=$('group-mode').value==='pass';mutate((
 $('layer-blend').replaceChildren(...BLEND_MODES.map(([id,name])=>new Option(name,id)));$('palette-library').onchange=event=>{if(event.target.value)applyPaletteLibrary(event.target.value);else{paletteLibraryId='';syncRemapButton();}syncPaletteLibraryButtons();};
 $('layer-blend').onchange=()=>{const value=$('layer-blend').value;mutate(()=>{if(value==='normal')delete doc.layers[li].blendMode;else{doc.layers[li].blendMode=value;doc.requiredFeatures=[...new Set([...doc.requiredFeatures,'layer-blending'])];}},'已更改图层混合模式');};
 initI18n();initContextUI();renderPaletteLibrary();syncRemapButton();colorAdjustments=initColorAdjustments({onPreview:value=>{const index=paletteTargetIndex();if(index!==null)previewPaletteColor(index,value);else setColor(value);},onCommit:value=>{const index=paletteTargetIndex();if(index!==null)setPaletteColor(index,value);else setColor(value);}});uiAll('input[type=checkbox]').forEach(input=>input.setAttribute('role','switch'));window.chromeReady=initWindowChrome();void help.start();for(const key of ['grid','symmetry'])$(key).checked=!!JSON.parse(localStorage.getItem(APP_SETTINGS_KEY)||'{}')[key];$('selection-kind').addEventListener('change',()=>{syncToolSlots();syncContextUI();syncInteraction();});decorateInterface();initVisualWorkspace();initToolbarControls({getBrush:()=>({size:brush,...clone(brushSettings)}),applyBrush:applyBrushPreset});syncGridLabel();syncGridGuideLabel();initPaletteEditing();initPaletteSizeMenu();refreshKeymapLabels();initTheme();window.workspaceLayout=initWorkspaceLayout({canShowPanel:id=>panelAvailable(id,{hasDocument:documentTabs.items.length>0,hasTileset:doc.layers.some(isTileset)})});initReferenceBoard();tilesetPanel=initTilesetPanel({panel:$('tileset-panel'),getDocument:()=>doc,mutate,message});updateBrushControls();syncTextControls();renderColors();$('theme-toggle').addEventListener('click',drawOverlay);setTool('pencil');enterEmptyState();fit();initFormLayout();
+if(window.desktop){
+
+ window.desktop.onCapture(file=>{
+  message('截图已复制到剪贴板');
+  if(!documentTabs.items.length)void importFile(file,true).catch(error=>showError('截图导入失败：'+error.message));
+ });
+}
 async function recover(){
   if(!filePath)return message('请先打开项目');
   const copy=await window.desktop?.recoveryForPath(filePath);

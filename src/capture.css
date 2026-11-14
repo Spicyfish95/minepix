@@ -1,0 +1,14 @@
+:root{font:14px "Segoe UI","Microsoft YaHei",sans-serif;color:#fff;background:#16191d}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden}
+.capture-root{position:relative;cursor:crosshair;user-select:none;touch-action:none}
+.capture-image{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.capture-selection{position:absolute;border:2px solid #75c9ff;box-shadow:0 0 0 40000px #0009;pointer-events:none}
+.capture-size{position:absolute;top:6px;left:6px;background:#171c24dd;padding:4px 8px;border-radius:4px;white-space:nowrap}
+.capture-toolbar{position:absolute;display:flex;gap:6px;padding:8px;background:#202630;border:1px solid #8993a3;border-radius:8px;box-shadow:0 4px 18px #0008;cursor:default}
+.capture-toolbar button,body>button{font:inherit;white-space:nowrap;color:inherit;background:#394454;border:0;border-radius:4px;padding:8px 12px;cursor:pointer}
+.capture-toolbar button:hover{background:#4c5e76}
+.capture-toolbar .primary{background:#237caa}
+.capture-toolbar button:disabled{opacity:.5;cursor:wait}
+.capture-status{position:absolute;left:12px;bottom:12px;background:#16191ddd;border-radius:4px;padding:6px 10px;pointer-events:none}
+.capture-status:empty{display:none}

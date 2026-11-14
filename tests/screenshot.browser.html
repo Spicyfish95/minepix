@@ -1,0 +1,28 @@
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="../src/capture.css"><style>html,body{height:600px;width:800px}#root{height:600px;width:800px}#result{display:none}</style><div id="root"></div><pre id="result">pending</pre>
+<script type="module">
+import {mountScreenshot} from '../src/screenshot-selection.js';
+const results=[],check=(name,pass)=>{results.push({name,pass:!!pass});if(!pass)throw new Error(name);};
+try{
+ const root=document.getElementById('root');let confirmed=[],cancelled=0;
+ const ui=mountScreenshot(root,{src:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',width:1600,height:1200,confirm:async region=>{confirmed.push(region);},cancel:async()=>{cancelled++;}});
+ check('默认选中整个截图物理像素',JSON.stringify(ui.region())===JSON.stringify([0,0,1600,1200]));
+ check('工具栏完整位于屏幕内',root.querySelector('.capture-toolbar').getBoundingClientRect().bottom<=600);
+ const event=(type,x,y)=>new PointerEvent(type,{bubbles:true,pointerId:1,button:0,clientX:x,clientY:y});
+ // Synthetic pointer events have no active native pointer capture.
+ root.setPointerCapture=()=>{};root.hasPointerCapture=()=>false;
+ root.dispatchEvent(event('pointerdown',300,250));root.dispatchEvent(event('pointermove',100,50));root.dispatchEvent(event('pointerup',100,50));
+ check('鼠标反向拖动选区按物理尺寸换算',JSON.stringify(ui.region())===JSON.stringify([200,100,400,400]));
+ document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
+ check('Esc取消不触发复制',cancelled===1&&confirmed.length===0);
+ root.querySelector('button').click();
+ check('全屏按钮恢复默认选区',ui.region()[2]===1600&&ui.region()[3]===1200);
+ document.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));await Promise.resolve();
+ check('Enter确认只提交选区且不会复制工具栏',confirmed.length===1&&JSON.stringify(confirmed[0])===JSON.stringify([0,0,1600,1200]));
+ ui.dispose();
+ let attempts=0;
+ mountScreenshot(root,{src:'',width:800,height:600,confirm:async()=>{attempts++;throw new Error('剪贴板被占用');},cancel:async()=>{}});
+ const confirm=root.querySelector('.primary');await confirm.onclick();
+ check('复制失败保留界面允许重试',attempts===1&&!confirm.disabled&&root.querySelector('[role=status]').textContent==='剪贴板被占用');
+ document.getElementById('result').textContent=JSON.stringify({ok:true,results});
+}catch(error){document.getElementById('result').textContent=JSON.stringify({ok:false,results,error:error.stack});}
+</script>

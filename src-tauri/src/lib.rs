@@ -6,6 +6,7 @@ mod files;
 mod formats;
 mod notifications;
 pub mod project;
+mod screen_capture;
 mod storage;
 mod updater;
 mod windows;
@@ -83,6 +84,27 @@ async fn desktop_call(
 ) -> Result<Value, String> {
     let io_error = |error: std::io::Error| error.to_string();
     match method.as_str() {
+        "captureScreen" => {
+            screen_capture::start(&window)?;
+            Ok(Value::Null)
+        }
+        "captureImage" | "finishCapture" => {
+            if window.label() != "screen-capture" {
+                return Err("只能由截图窗口完成截图".into());
+            }
+            if method == "captureImage" {
+                screen_capture::image(window.app_handle())
+            } else {
+                let region = if args.first().is_some_and(|value| !value.is_null()) {
+                    Some(serde_json::from_value::<[u32; 4]>(args[0].clone()).map_err(|e| e.to_string())?)
+                } else {
+                    None
+                };
+                screen_capture::finish(window.app_handle(), region)?;
+                Ok(Value::Null)
+            }
+        }
+        "clipboardImages" => screen_capture::clipboard(),
         "editorInfo" => Ok(json!({"id": window.label(), "detached": window.label() != "main"})),
         "editorReady" => {
             state.windows.mark_ready(window.label());
@@ -646,6 +668,7 @@ pub fn run() {
                 windows: windows::Windows::default(),
                 updates,
             });
+            app.manage(screen_capture::Capture::default());
             notifications::register(app.handle())?;
             app.state::<Backend>()
                 .windows
