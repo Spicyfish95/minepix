@@ -2,7 +2,11 @@
 
 使用 Tauri 2 和 Rust 构建的 Windows x64 像素画与动画编辑器。界面使用系统 WebView2，项目存储、文件操作、格式编解码和更新由 Rust 处理。
 
-当前下载与更新发布暂停：2026-11-14 的安装测试触发 Defender 检测，正在核查，尚未完成交付验收。版本资产暂存为草稿，详见[发布状态](docs/RELEASING.md)。
+[English](README_EN.md) · [使用指南](docs/USER_GUIDE.md)
+
+当前预览版为 **2.0.0-alpha.4**，Windows x64 安装包已发布，安装与软件内更新验证通过。
+
+[下载 Windows x64 安装包](https://github.com/Spicyfish95/minepix/releases/download/tauri-v2.0.0-alpha.4/MinePix.Tauri_2.0.0-alpha.4_x64-setup.exe)
 
 ## 功能
 
@@ -18,7 +22,7 @@
 
 在对应版本的 `tauri-v<版本>` Release 中下载 `MinePix.Tauri_<版本>_x64-setup.exe`；`.sig` 为软件自动使用的更新签名，不需要手动打开。`tauri-latest` 用于保存更新频道清单。
 
-这是预发布版本，重要作品请保留副本。自动检查更新默认关闭，可通过帮助菜单手动检查。当前频道状态见发布指南。
+这是预发布版本，重要作品请保留副本。自动检查更新默认关闭，可通过“帮助 → 检查更新”手动检查，或在“帮助 → 关于”启用启动时自动检查。下载完成后点击“重启并更新”，按提示处理未保存项目，再完成覆盖和重启。
 
 ## 开发
 
