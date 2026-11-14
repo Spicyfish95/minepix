@@ -1,5 +1,6 @@
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.Windows.Forms
+$taskCursor=[Windows.Forms.Cursor]::Position
 if (Get-Process -Name 'minepix-tauri','MinePix' -ErrorAction SilentlyContinue) { throw 'Close MinePix before running the isolated desktop checks' }
 $taskClipboard=[Windows.Forms.DataObject]::new()
 $taskOriginal=[Windows.Forms.Clipboard]::GetDataObject()
@@ -18,6 +19,7 @@ try {
     node scripts/capture-desktop.mjs
     if ($LASTEXITCODE) { throw 'Capture and pin desktop checks failed' }
 } finally {
+    [Windows.Forms.Cursor]::Position=$taskCursor
     [Windows.Forms.Clipboard]::SetDataObject($taskClipboard,$true)
     if ($taskHadSettings) { [IO.File]::WriteAllBytes($taskSettings,$taskSettingsBytes) }
     else { Remove-Item -LiteralPath $taskSettings -ErrorAction SilentlyContinue }

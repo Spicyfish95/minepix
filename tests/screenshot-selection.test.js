@@ -10,6 +10,9 @@ test('selection normalizes reverse drags and clips to the screen',()=>{
 test('physical crop uses independent viewport scales and consistent shared edges',()=>{
  assert.deepEqual(imageRegion({x:10,y:20,width:80,height:40},{width:100,height:100},{width:150,height:200}),[15,40,120,80]);
  assert.deepEqual(imageRegion({x:0,y:0,width:1280,height:720},{width:1280,height:720},{width:1920,height:1080}),[0,0,1920,1080]);
+ const viewport={width:2560/1.5,height:1440/1.5};
+ const rect=selectionRect({x:0,y:0},{x:64/1.5,y:48/1.5},viewport.width,viewport.height);
+ assert.deepEqual(imageRegion(rect,viewport,{width:2560,height:1440}),[0,0,64,48]);
 });
 test('both profiles support configurable foreground screenshot Ctrl+1',()=>{
  for(const profile of [defaultKeymap(),asepriteKeymap()]){

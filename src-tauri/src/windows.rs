@@ -296,6 +296,12 @@ pub fn build_editor(app: &AppHandle, label: &str) -> tauri::Result<WebviewWindow
             }
             tauri::WindowEvent::Destroyed => {
                 state.windows.destroyed(&label);
+                if state.windows.editors.lock().unwrap().is_empty() {
+                    if let Some(overlay) = handle.get_webview_window("screen-capture") {
+                        let _ = overlay.destroy();
+                    }
+                    handle.exit(0);
+                }
                 state.files.lock().unwrap().active.remove(&label);
                 state.dirty.lock().unwrap().remove(&label);
             }

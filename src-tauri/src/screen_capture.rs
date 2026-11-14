@@ -11,11 +11,76 @@ pub struct Image {
 struct Session {
     image: Image,
     owner: String,
+    origin: (i32, i32),
+    screens: Vec<Screen>,
+    current: usize,
+    locked: bool,
+}
+#[derive(Clone, Copy, serde::Serialize)]
+struct Screen {
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+}
+impl Screen {
+    fn contains(&self, x: f64, y: f64) -> bool {
+        x >= self.x as f64
+            && y >= self.y as f64
+            && x < self.x as f64 + self.width as f64
+            && y < self.y as f64 + self.height as f64
+    }
+    fn region(
+        &self,
+        origin: (i32, i32),
+        [x, y, width, height]: [u32; 4],
+    ) -> Result<[u32; 4], String> {
+        if width == 0
+            || height == 0
+            || x.checked_add(width).is_none_or(|right| right > self.width)
+            || y.checked_add(height)
+                .is_none_or(|bottom| bottom > self.height)
+        {
+            return Err("截图选区超出当前显示器".into());
+        }
+        Ok([
+            (self.x - origin.0) as u32 + x,
+            (self.y - origin.1) as u32 + y,
+            width,
+            height,
+        ])
+    }
+    fn place(&self, window: &WebviewWindow) -> Result<(), String> {
+        window
+            .set_position(PhysicalPosition::new(self.x, self.y))
+            .map_err(|e| e.to_string())?;
+        window
+            .set_size(PhysicalSize::new(self.width, self.height))
+            .map_err(|e| e.to_string())
+    }
+}
+fn screen_at(screens: &[Screen], current: usize, locked: bool, x: f64, y: f64) -> usize {
+    if locked {
+        current
+    } else {
+        screens
+            .iter()
+            .position(|screen| screen.contains(x, y))
+            .unwrap_or(current)
+    }
 }
 #[derive(Default)]
 pub struct Capture(Mutex<Option<Session>>);
 
 impl Image {
+    fn transfer(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(8 + self.rgba.len());
+        bytes.extend_from_slice(&self.width.to_le_bytes());
+        bytes.extend_from_slice(&self.height.to_le_bytes());
+        bytes.extend_from_slice(&self.rgba);
+        bytes
+    }
+
     fn crop(&self, x: u32, y: u32, width: u32, height: u32) -> Result<Image, String> {
         if width == 0
             || height == 0
@@ -58,57 +123,140 @@ impl Image {
 
 pub fn start(window: &WebviewWindow) -> Result<(), String> {
     let app = window.app_handle();
+    prepare(app)?;
     let state = app.state::<Capture>();
     let mut active = state.0.lock().unwrap();
     if active.is_some() {
         return Ok(());
     }
     let (image, x, y) = native::capture()?;
-    let (width, height) = (image.width, image.height);
+    let screens: Vec<Screen> = window
+        .available_monitors()
+        .map_err(|e| e.to_string())?
+        .iter()
+        .map(|monitor| Screen {
+            x: monitor.position().x,
+            y: monitor.position().y,
+            width: monitor.size().width,
+            height: monitor.size().height,
+        })
+        .collect();
+    if screens.is_empty() {
+        return Err("未找到显示器".into());
+    }
+    let cursor = window.cursor_position().map_err(|e| e.to_string())?;
+    let current = screen_at(&screens, 0, false, cursor.x, cursor.y);
+    let screen = screens[current];
     *active = Some(Session {
         image,
         owner: window.label().into(),
+        origin: (x, y),
+        screens,
+        current,
+        locked: false,
     });
-    let result = tauri::WebviewWindowBuilder::new(
+    let overlay = app
+        .get_webview_window("screen-capture")
+        .ok_or("截图窗口未就绪")?;
+    drop(active);
+    if let Err(error) = screen.place(&overlay).and_then(|_| {
+        overlay
+            .eval("window.startCapture?.()")
+            .map_err(|e| e.to_string())
+    }) {
+        state.0.lock().unwrap().take();
+        return Err(error);
+    }
+    Ok(())
+}
+
+pub fn prepare(app: &AppHandle) -> Result<(), String> {
+    if app.get_webview_window("screen-capture").is_some() {
+        return Ok(());
+    }
+    let overlay = tauri::WebviewWindowBuilder::new(
         app,
         "screen-capture",
         WebviewUrl::App("capture.html".into()),
     )
     .title("MinePix · 截图")
     .decorations(false)
+    .shadow(false)
     .resizable(false)
+    .transparent(true)
     .always_on_top(true)
     .skip_taskbar(true)
     .visible(false)
     .disable_drag_drop_handler()
     .build()
-    .and_then(|overlay| {
-        overlay.set_position(PhysicalPosition::new(x, y))?;
-        overlay.set_size(PhysicalSize::new(width, height))?;
-        overlay.show()?;
-        overlay.set_focus()?;
-        let handle = app.clone();
-        overlay.on_window_event(move |event| {
-            if matches!(event, tauri::WindowEvent::Destroyed) {
-                handle.state::<Capture>().0.lock().unwrap().take();
+    .map_err(|e| e.to_string())?;
+    let handle = app.clone();
+    overlay.on_window_event(move |event| match event {
+        tauri::WindowEvent::CloseRequested { api, .. } => {
+            api.prevent_close();
+            if handle.state::<Capture>().0.lock().unwrap().is_some() {
+                let _ = finish(&handle, None);
             }
-        });
-        Ok(())
-    });
-    if let Err(error) = result {
-        active.take();
-        if let Some(overlay) = app.get_webview_window("screen-capture") {
-            let _ = overlay.destroy();
         }
-        return Err(error.to_string());
-    }
+        tauri::WindowEvent::Destroyed => {
+            handle.state::<Capture>().0.lock().unwrap().take();
+        }
+        _ => (),
+    });
     Ok(())
 }
 
-pub fn image(app: &AppHandle) -> Result<Value, String> {
+pub fn active(app: &AppHandle) -> bool {
+    app.state::<Capture>().0.lock().unwrap().is_some()
+}
+pub fn pixels(app: &AppHandle) -> Result<Vec<u8>, String> {
     let state = app.state::<Capture>();
     let active = state.0.lock().unwrap();
-    active.as_ref().ok_or("截图已结束")?.image.file()
+    let session = active.as_ref().ok_or("截图已结束")?;
+    let screen = session.screens[session.current];
+    let [x, y, width, height] =
+        screen.region(session.origin, [0, 0, screen.width, screen.height])?;
+    Ok(session.image.crop(x, y, width, height)?.transfer())
+}
+
+pub fn monitor(window: &WebviewWindow) -> Result<Value, String> {
+    let app = window.app_handle();
+    let state = app.state::<Capture>();
+    let mut active = state.0.lock().unwrap();
+    let session = active.as_mut().ok_or("截图已结束")?;
+    let cursor = window.cursor_position().map_err(|e| e.to_string())?;
+    let target = screen_at(
+        &session.screens,
+        session.current,
+        session.locked,
+        cursor.x,
+        cursor.y,
+    );
+    let changed = target != session.current;
+    if changed {
+        window.hide().map_err(|e| e.to_string())?;
+        session.screens[target].place(window)?;
+        session.current = target;
+    }
+    let screen = session.screens[session.current];
+    Ok(json!({"index": session.current, "screen": screen,
+        "pointer": {"x": cursor.x - screen.x as f64, "y": cursor.y - screen.y as f64},
+        "screens": session.screens, "locked": session.locked, "changed": changed}))
+}
+
+pub fn lock(app: &AppHandle, locked: bool) -> Result<(), String> {
+    let state = app.state::<Capture>();
+    let mut active = state.0.lock().unwrap();
+    active.as_mut().ok_or("截图已结束")?.locked = locked;
+    Ok(())
+}
+
+pub fn ready(window: &WebviewWindow) -> Result<(), String> {
+    if !active(window.app_handle()) {
+        return Ok(());
+    }
+    window.show().map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())
 }
 
 pub fn finish(app: &AppHandle, region: Option<[u32; 4]>) -> Result<(), String> {
@@ -117,6 +265,8 @@ pub fn finish(app: &AppHandle, region: Option<[u32; 4]>) -> Result<(), String> {
     let session = active.as_ref().ok_or("截图已结束")?;
     let owner = app.get_webview_window(&session.owner);
     if let Some([x, y, width, height]) = region {
+        let [x, y, width, height] =
+            session.screens[session.current].region(session.origin, [x, y, width, height])?;
         let image = session.image.crop(x, y, width, height)?;
         let overlay = app
             .get_webview_window("screen-capture")
@@ -129,7 +279,10 @@ pub fn finish(app: &AppHandle, region: Option<[u32; 4]>) -> Result<(), String> {
     active.take();
     drop(active);
     if let Some(overlay) = app.get_webview_window("screen-capture") {
-        overlay.destroy().map_err(|e| e.to_string())?;
+        overlay.hide().map_err(|e| e.to_string())?;
+        overlay
+            .eval("window.stopCapture?.()")
+            .map_err(|e| e.to_string())?;
     }
     if let Some(owner) = owner {
         let _ = owner.set_focus();
@@ -487,6 +640,56 @@ mod native {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn monitor_selection_handles_negative_origins_boundaries_and_lock() {
+        let screens = [
+            Screen {
+                x: -1920,
+                y: -120,
+                width: 1920,
+                height: 1080,
+            },
+            Screen {
+                x: 0,
+                y: 0,
+                width: 2560,
+                height: 1440,
+            },
+        ];
+        assert_eq!(screen_at(&screens, 1, false, -1.0, 100.0), 0);
+        assert_eq!(screen_at(&screens, 0, false, 0.0, 100.0), 1);
+        assert_eq!(screen_at(&screens, 0, true, 200.0, 100.0), 0);
+        assert_eq!(screen_at(&screens, 0, false, -100.0, 1400.0), 0);
+        assert_eq!(screen_at(&screens, 1, false, -1920.0, -120.0), 0);
+        assert_eq!(
+            screens[1].region((-1920, -120), [10, 20, 64, 48]).unwrap(),
+            [1930, 140, 64, 48]
+        );
+        assert_eq!(
+            screens[0]
+                .region((-1920, -120), [0, 0, 1920, 1080])
+                .unwrap(),
+            [0, 0, 1920, 1080]
+        );
+        assert!(screens[0].region((-1920, -120), [1900, 0, 64, 48]).is_err());
+        assert!(
+            screens[1]
+                .region((-1920, -120), [0, 0, u32::MAX, 1])
+                .is_err()
+        );
+    }
+    #[test]
+    fn binary_transfer_preserves_dimensions_and_exact_rgba() {
+        let image = Image {
+            width: 2,
+            height: 1,
+            rgba: vec![12, 34, 56, 255, 78, 90, 123, 255],
+        };
+        let bytes = image.transfer();
+        assert_eq!(&bytes[..8], &[2, 0, 0, 0, 1, 0, 0, 0]);
+        assert_eq!(&bytes[8..], image.rgba);
+        assert_eq!(bytes.len(), 8 + 2 * 4);
+    }
     #[test]
     fn crop_preserves_exact_rows_and_rejects_invalid_regions() {
         let image = Image {

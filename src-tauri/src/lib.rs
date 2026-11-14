@@ -76,6 +76,14 @@ async fn read_project_packed(
 }
 
 #[tauri::command]
+async fn capture_pixels(window: tauri::WebviewWindow) -> Result<tauri::ipc::Response, String> {
+    if window.label() != "screen-capture" {
+        return Err("只能由截图窗口读取截图".into());
+    }
+    screen_capture::pixels(window.app_handle()).map(tauri::ipc::Response::new)
+}
+
+#[tauri::command]
 async fn desktop_call(
     method: String,
     args: Vec<Value>,
@@ -88,12 +96,20 @@ async fn desktop_call(
             screen_capture::start(&window)?;
             Ok(Value::Null)
         }
-        "captureImage" | "finishCapture" => {
+        "captureReady" | "captureMonitor" | "captureLock" | "captureActive" | "finishCapture" => {
             if window.label() != "screen-capture" {
                 return Err("只能由截图窗口完成截图".into());
             }
-            if method == "captureImage" {
-                screen_capture::image(window.app_handle())
+            if method == "captureActive" {
+                Ok(json!(screen_capture::active(window.app_handle())))
+            } else if method == "captureMonitor" {
+                screen_capture::monitor(&window)
+            } else if method == "captureLock" {
+                screen_capture::lock(window.app_handle(), args.first().and_then(Value::as_bool).unwrap_or(false))?;
+                Ok(Value::Null)
+            } else if method == "captureReady" {
+                screen_capture::ready(&window)?;
+                Ok(Value::Null)
             } else {
                 let region = if args.first().is_some_and(|value| !value.is_null()) {
                     Some(serde_json::from_value::<[u32; 4]>(args[0].clone()).map_err(|e| e.to_string())?)
@@ -108,6 +124,9 @@ async fn desktop_call(
         "editorInfo" => Ok(json!({"id": window.label(), "detached": window.label() != "main"})),
         "editorReady" => {
             state.windows.mark_ready(window.label());
+            if let Err(error) = screen_capture::prepare(window.app_handle()) {
+                eprintln!("无法预载截图窗口：{error}");
+            }
             Ok(Value::Null)
         }
         "editorReply" => {
@@ -687,6 +706,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             desktop_call,
+            capture_pixels,
             read_project_packed,
             save_project_packed,
             recovery_write,
