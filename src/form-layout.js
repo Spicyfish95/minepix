@@ -1,3 +1,5 @@
+import {onUI} from './ui-surfaces.js';
+import {installSwitchLabels} from './switch-labels.js';
 const UNIT_PATTERN=/^\s*(px|%|°|ms|像素|毫秒|秒|度)\s*$/;
 const CAPTION_UNIT=/\s*[（(](px|%|°|ms|像素|毫秒|秒|度)[）)]\s*$/;
 export function normalizeNumberUnits(root){
@@ -56,6 +58,7 @@ export function orderFormOptions(root){
 }
 
 export function initFormLayout(){
+ installSwitchLabels(onUI);
  normalizeFormLayout(document.body);
  const observer=new MutationObserver(records=>{
   for(const record of records)for(const node of record.addedNodes)if(node.nodeType===Node.ELEMENT_NODE)normalizeFormLayout(node);

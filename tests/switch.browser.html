@@ -1,0 +1,33 @@
+<!doctype html><meta charset="utf-8">
+<label id="setting"><span>说明文字</span><input type="checkbox" role="switch"></label>
+<label id="external-label" for="external">外部说明</label><input id="external" type="checkbox" role="switch">
+<label class="toolbar-toggle-label" id="icon"><span>图标按钮</span><input type="checkbox"></label>
+<label id="normal">普通复选框<span><input type="checkbox"></span></label>
+<pre id="result">pending</pre>
+<script type="module">
+import {onUI,registerSurface} from '../src/ui-surfaces.js';
+import {installSwitchLabels} from '../src/switch-labels.js';
+const results=[],check=(name,pass)=>{results.push({name,pass:!!pass});if(!pass)throw new Error(name);};
+try{
+ installSwitchLabels(onUI);
+ const label=document.getElementById('setting'),input=label.control;let changed=0;
+ input.onchange=()=>changed++;
+ label.querySelector('span').click();label.click();
+ check('点击文字或标签空白不触发switch',!input.checked&&changed===0);
+ input.click();check('点击开关只切换一次',input.checked&&changed===1);
+ input.click();check('再次点击可关闭',!input.checked&&changed===2);
+ document.getElementById('external-label').click();check('外部for关联说明也不触发switch',!document.getElementById('external').checked);
+ const dynamic=document.createElement('label');dynamic.innerHTML='弹窗动态说明<input type="checkbox" role="switch">';document.body.append(dynamic);
+ dynamic.click();check('动态添加的开关立即生效',!dynamic.control.checked);
+ dynamic.control.click();check('动态开关本体仍可操作',dynamic.control.checked);
+ document.getElementById('normal').click();check('普通复选框维持标签点击行为',document.querySelector('#normal input').checked);
+ document.querySelector('#icon span').click();check('已有工具图标按钮维持行为',document.querySelector('#icon input').checked);
+ const frame=document.createElement('iframe');document.body.append(frame);
+ const dom=frame.contentDocument;const unregister=registerSurface(dom);dom.body.append(dynamic);
+ dynamic.control.checked=false;dynamic.click();check('独立面板内文字不触发switch',!dynamic.control.checked);
+ dynamic.control.click();check('独立面板内开关本体可操作',dynamic.control.checked);
+ check('保留原生标签无障碍关联与键盘焦点',dynamic.control.labels[0]===dynamic&&dynamic.control.tabIndex===0);
+ unregister();
+ document.getElementById('result').textContent=JSON.stringify({ok:true,results});
+}catch(error){document.getElementById('result').textContent=JSON.stringify({ok:false,results,error:error.stack});}
+</script>

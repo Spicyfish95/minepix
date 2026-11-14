@@ -38,6 +38,8 @@ npm run package
 
 ## 定向测试
 
+Switch 文字点击的定向范围：静态和动态弹窗、独立面板中的说明文字及空白不再触发开关；直接点击开关仍触发一次 change，保留原生键盘操作和无障碍名称；普通复选框及工具图标按钮不受影响。运行 Switch 浏览器专项和相关表单、前端构建检查。
+
 独立窗口置顶与截图粘贴的定向范围：参考、地形预览、预览独立窗口的 Pin 开关与主题状态；前台可配置 `Ctrl+1` 启动截图，全屏默认选区、反向拖选、工具栏边界、取消不改剪贴板、确认复制与无项目导入；参考区悬停 `Ctrl+V` 导入单张位图和多个图片文件，停靠和独立窗口均支持，文本输入及像素粘贴保持原行为。运行相关 Node/浏览器专项、Rust 图像裁剪与剪贴板格式测试及本地 Debug 构建；原生专项只验证窗口和截图剪贴板，不运行安装或更新。
 
 版本说明的定向范围：按发布版本提取 `CHANGELOG.md` 对应二级标题下的内容，排除未发布及其他版本，保留段落与子标题；缺失、重复或空章节中止生成。验证自定义说明文件、更新清单实际生成和 Release 共用说明来源；运行相关 Node 发布测试与仓库检查，不构建安装包、不发布或修改已有 Release。
@@ -51,7 +53,7 @@ node scripts/check-repository.mjs
 git diff --check
 ```
 
-截图、参考粘贴和 Pin 交互可分别执行 `node scripts/test-panels-browser.mjs screenshot`、`reference-paste`、`pin`浏览器专项。截图选区和快捷键测试为 `node --test tests/screenshot-selection.test.js tests/keymap.test.js`，原始裁剪与 PNG 往返测试为 Cargo 的 `screen_capture::tests`。
+截图、参考粘贴、Pin 和 Switch 文字交互可分别执行 `node scripts/test-panels-browser.mjs screenshot`、`reference-paste`、`pin`、`switch` 浏览器专项。截图选区和快捷键测试为 `node --test tests/screenshot-selection.test.js tests/keymap.test.js`，原始裁剪与 PNG 往返测试为 Cargo 的 `screen_capture::tests`。
 
 构建本地 Debug 版后，在关闭已有 MinePix 的情况下执行 `powershell -NoProfile -STA -File scripts/test-capture-desktop.ps1`。该专项使用隔离 WebView 配置，验证真实屏幕像素、图片剪贴板、参考粘贴和原生置顶，结束时恢复原剪贴板及更新偏好；不执行安装或更新。报告保存在本地 `artifacts/capture-desktop/`。
 
