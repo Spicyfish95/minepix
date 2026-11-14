@@ -14,9 +14,9 @@ A Windows desktop editor for pixel art, frame-by-frame animation and game assets
 
 ## MinePix highlights
 
-### Small distribution size
+### An installer of about 1.99 MiB
 
-Built with Tauri 2, Rust and system WebView2, with Rust handling file operations, project storage and format codecs. See the matching Release asset for the Windows x64 installer size. This excludes the shared WebView2 Runtime and is not the installed footprint; the installer is also cached for updates.
+Built with Tauri 2, Rust and system WebView2, with Rust handling file operations, project storage and format codecs. The stable 2.0.0 Windows x64 installer is **2,083,311 bytes (about 1.99 MiB)**. This excludes the shared WebView2 Runtime and is not the installed footprint; the installer is also cached for updates.
 
 ### Check terrain connections as you draw tiles
 
@@ -70,7 +70,7 @@ You can also open the [mushroom example](examples/mushroom.pix). See the [user g
 
 Keep copies of important artwork. Automatic checks default to off. Use Help → Check for updates, or enable startup checks in Help → About. After downloading, choose Restart and update and follow the prompts for unsaved projects.
 
-Independent installation and the alpha.3 → alpha.4 in-app update previously passed verification on the test machine. The 2.0.0 release checks cover build and publication; local installation and update tests are not repeated. For manual downloads, choose `MinePix.Tauri_<version>_x64-setup.exe` from the matching `minepix-v<version>` release. The `.sig` file is used by the updater. The `tauri-latest` release hosts the update channel manifest.
+For manual downloads, choose `MinePix.Tauri_<version>_x64-setup.exe` from the matching `minepix-v<version>` release. The `.sig` file is used by the updater. The `tauri-latest` release hosts the update channel manifest.
 
 ## Development
 
