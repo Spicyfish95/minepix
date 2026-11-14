@@ -79,6 +79,7 @@ import { initTheme,setTheme,getTheme,setAppearance,getAppearance } from './theme
 import {menuAvailability,panelAvailable} from './menu-availability.js';
 import { TOOLS, TOOL_GROUPS, shortcut, isTextTarget, pointerMode, cursorStyle, constrainPoint } from './interaction.js';
 import { createWelcomeState } from './welcome.js';
+import {installReferencePaste} from './reference-paste.js';
 
 const editorHost=window.desktop?await window.desktop.editorInfo():{id:0,detached:false};window.editorHost=editorHost;
 const $=uiGet;
@@ -2685,7 +2686,16 @@ $('layer-blend').replaceChildren(...BLEND_MODES.map(([id,name])=>new Option(name
 $('layer-blend').onchange=()=>{const value=$('layer-blend').value;mutate(()=>{if(value==='normal')delete doc.layers[li].blendMode;else{doc.layers[li].blendMode=value;doc.requiredFeatures=[...new Set([...doc.requiredFeatures,'layer-blending'])];}},'已更改图层混合模式');};
 initI18n();initContextUI();renderPaletteLibrary();syncRemapButton();colorAdjustments=initColorAdjustments({onPreview:value=>{const index=paletteTargetIndex();if(index!==null)previewPaletteColor(index,value);else setColor(value);},onCommit:value=>{const index=paletteTargetIndex();if(index!==null)setPaletteColor(index,value);else setColor(value);}});uiAll('input[type=checkbox]').forEach(input=>input.setAttribute('role','switch'));window.chromeReady=initWindowChrome();void help.start();for(const key of ['grid','symmetry'])$(key).checked=!!JSON.parse(localStorage.getItem(APP_SETTINGS_KEY)||'{}')[key];$('selection-kind').addEventListener('change',()=>{syncToolSlots();syncContextUI();syncInteraction();});decorateInterface();initVisualWorkspace();initToolbarControls({getBrush:()=>({size:brush,...clone(brushSettings)}),applyBrush:applyBrushPreset});syncGridLabel();syncGridGuideLabel();initPaletteEditing();initPaletteSizeMenu();refreshKeymapLabels();initTheme();window.workspaceLayout=initWorkspaceLayout({canShowPanel:id=>panelAvailable(id,{hasDocument:documentTabs.items.length>0,hasTileset:doc.layers.some(isTileset)})});initReferenceBoard();tilesetPanel=initTilesetPanel({panel:$('tileset-panel'),getDocument:()=>doc,mutate,message});updateBrushControls();syncTextControls();renderColors();$('theme-toggle').addEventListener('click',drawOverlay);setTool('pencil');enterEmptyState();fit();initFormLayout();
 if(window.desktop){
-
+ installReferencePaste({
+  onUI,panel:boardPanel,readImages:()=>window.desktop.clipboardImages(),
+  blocked:()=>busy||!!gesture||!!shapeSession||!!celGesture||$('modal').open,
+  importImages:async files=>{
+   if(!documentTabs.items.length)replaceDocument(createDocument(DEFAULT_APPLICATION.width,DEFAULT_APPLICATION.height),false,null,crypto.randomUUID(),true);
+   for(const file of files)await addBoardImage(file.data,file.name,file.mime);
+   boardMessage('已粘贴 '+files.length+' 张参考图');
+  },
+  onError:error=>showError('参考图片粘贴失败：'+error.message)
+ });
  window.desktop.onCapture(file=>{
   message('截图已复制到剪贴板');
   if(!documentTabs.items.length)void importFile(file,true).catch(error=>showError('截图导入失败：'+error.message));

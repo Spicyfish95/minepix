@@ -51,6 +51,10 @@ node scripts/check-repository.mjs
 git diff --check
 ```
 
+截图、参考粘贴和 Pin 交互可分别执行 `node scripts/test-panels-browser.mjs screenshot`、`reference-paste`、`pin`浏览器专项。截图选区和快捷键测试为 `node --test tests/screenshot-selection.test.js tests/keymap.test.js`，原始裁剪与 PNG 往返测试为 Cargo 的 `screen_capture::tests`。
+
+构建本地 Debug 版后，在关闭已有 MinePix 的情况下执行 `powershell -NoProfile -STA -File scripts/test-capture-desktop.ps1`。该专项使用隔离 WebView 配置，验证真实屏幕像素、图片剪贴板、参考粘贴和原生置顶，结束时恢复原剪贴板及更新偏好；不执行安装或更新。报告保存在本地 `artifacts/capture-desktop/`。
+
 ASE 编解码测试需要先构建真实 Rust 工具：
 
 ```powershell

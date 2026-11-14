@@ -1,0 +1,28 @@
+<!doctype html><meta charset="utf-8"><section id="reference-panel"><canvas></canvas><input></section><div id="outside"></div><pre id="result">pending</pre>
+<script type="module">
+import {installReferencePaste} from '../src/reference-paste.js';
+const results=[],check=(name,pass)=>{results.push({name,pass:!!pass});if(!pass)throw new Error(name);};
+try{
+ const panel=document.getElementById('reference-panel'),canvas=panel.querySelector('canvas'),outside=document.getElementById('outside');
+ let reads=0,imports=[],files=[{name:'one.png'},{name:'two.jpg'}],blocked=false,error=null;
+ installReferencePaste({onUI:(type,listener,options)=>document.addEventListener(type,listener,options),panel:()=>panel,readImages:async()=>{reads++;return files;},importImages:async value=>{imports.push(value);},blocked:()=>blocked,onError:value=>{error=value;}});
+ const key=target=>{const event=new KeyboardEvent('keydown',{key:'v',ctrlKey:true,bubbles:true,cancelable:true});target.dispatchEvent(event);return event;};
+ const settle=async()=>{await Promise.resolve();await Promise.resolve();await Promise.resolve();};
+ canvas.dispatchEvent(new PointerEvent('pointerover',{bubbles:true}));
+ check('参考区悬停会截获Ctrl+V',key(document.body).defaultPrevented);await settle();
+ check('一次粘贴导入多个文件且顺序保持',reads===1&&imports[0]===files&&imports[0].length===2);
+ check('文字输入不截获粘贴',!key(panel.querySelector('input')).defaultPrevented);
+ blocked=true;check('模态及编辑忙碌期间不导入',!key(document.body).defaultPrevented);blocked=false;
+ files=[];key(document.body);await settle();check('没有图片时不创建项目或导入',imports.length===1);
+ canvas.dispatchEvent(new PointerEvent('pointerout',{bubbles:true,relatedTarget:outside}));
+ check('离开参考区保留像素粘贴',!key(outside).defaultPrevented&&reads===2);
+ const child=document.createElement('iframe');document.body.append(child);
+ const childDoc=child.contentDocument;childDoc.body.append(panel);
+ // The production surface registry attaches the same listeners to detached documents.
+ const listeners=[];
+ installReferencePaste({onUI:(type,listener,options)=>{childDoc.addEventListener(type,listener,options);listeners.push([type,listener,options]);},panel:()=>panel,readImages:async()=>[{name:'截图.png'}],importImages:async value=>imports.push(value),onError:value=>{error=value;}});
+ canvas.dispatchEvent(new PointerEvent('pointerover',{bubbles:true}));key(childDoc.body);await settle();
+ check('独立参考窗口导入剪贴板截图',imports.length===2&&imports[1][0].name==='截图.png'&&!error);
+ document.getElementById('result').textContent=JSON.stringify({ok:true,results});
+}catch(error){document.getElementById('result').textContent=JSON.stringify({ok:false,results,error:error.stack});}
+</script>
