@@ -1,6 +1,6 @@
 {
   "name": "minepix-tauri",
-  "version": "2.0.0-alpha.4",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "description": "MinePix pixel art and animation editor with Tauri 2 and Rust",

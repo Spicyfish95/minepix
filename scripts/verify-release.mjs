@@ -7,6 +7,7 @@ import {blockmap} from './update-blockmap.mjs';
 export const repository='Spicyfish95/minepix';
 export const releaseAssetName=version=>`MinePix.Tauri_${version}_x64-setup.exe`;
 export const sha256=bytes=>createHash('sha256').update(bytes).digest('hex');
+export const releasePolicy=version=>({prerelease:version.includes('-'),latest:!version.includes('-')});
 export function compareVersions(a,b){
  const parse=value=>{const [core,...suffix]=value.split('-');return {core:core.split('.').map(Number),pre:suffix.join('-').split('.').filter(Boolean)};};
  const left=parse(a),right=parse(b);

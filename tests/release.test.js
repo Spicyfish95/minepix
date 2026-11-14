@@ -1,8 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {verifyManifest,repository,compareVersions} from '../scripts/verify-release.mjs';
+import {verifyManifest,repository,compareVersions,releasePolicy} from '../scripts/verify-release.mjs';
 import {blockmap} from '../scripts/update-blockmap.mjs';
 const version='2.0.0-alpha.1',bytes=Buffer.from('release payload'),signature='test signature';
+test('stable releases are Latest while prereleases remain outside the stable entry',()=>{
+ assert.deepEqual(releasePolicy('2.0.0'),{prerelease:false,latest:true});
+ assert.deepEqual(releasePolicy('2.0.1'),{prerelease:false,latest:true});
+ assert.deepEqual(releasePolicy('2.1.0-rc.1'),{prerelease:true,latest:false});
+ assert.deepEqual(releasePolicy('2.0.0-alpha.4'),{prerelease:true,latest:false});
+});
 test('update channel ordering compares numeric prereleases and stable versions',()=>{
  for(const [a,b]of [['2.0.0-alpha.10','2.0.0-alpha.2'],['2.0.0','2.0.0-alpha.10'],['2.1.0','2.0.9'],['2.0.0-beta','2.0.0-alpha'],['2.0.0-alpha.1','2.0.0-alpha']]){
   assert.equal(compareVersions(a,b),1);assert.equal(compareVersions(b,a),-1);

@@ -4,9 +4,9 @@
 
 [English](README_EN.md) · [使用指南](docs/USER_GUIDE.md)
 
-**免费开源 · Windows x64 · 中文 / English · 当前预览版 2.0.0-alpha.4**
+**免费开源 · Windows x64 · 中文 / English · 正式版 2.0.0**
 
-[下载 Windows x64 安装包](https://github.com/Spicyfish95/minepix/releases/download/tauri-v2.0.0-alpha.4/MinePix.Tauri_2.0.0-alpha.4_x64-setup.exe)
+[下载 Windows x64 安装包](https://github.com/Spicyfish95/minepix/releases/download/tauri-v2.0.0/MinePix.Tauri_2.0.0_x64-setup.exe)
 
 ![MinePix 深色工作区：中央像素画布、左侧色板、右侧预览与图层、底部四帧动画时间轴](docs/images/workspace.png)
 
@@ -14,9 +14,9 @@
 
 ## MinePix 特色
 
-### 约 1.99 MiB 的安装包
+### 小体积分发
 
-使用 Tauri 2、Rust 和系统 WebView2；文件操作、项目存储及格式编解码由 Rust 处理。当前 alpha.4 的 Windows x64 安装包为 **2,082,628 字节**。该体积不含共享 WebView2 Runtime，也不等于安装后占用；安装器另有更新缓存。
+使用 Tauri 2、Rust 和系统 WebView2；文件操作、项目存储及格式编解码由 Rust 处理。Windows x64 安装包体积以对应 Release 资产为准，不含共享 WebView2 Runtime，也不等于安装后占用；安装器另有更新缓存。
 
 ### 画图块时就检查地形拼接
 
@@ -68,9 +68,9 @@
 
 ## 软件更新
 
-这是预发布版本，重要作品请保留副本。自动检查更新默认关闭，可通过“帮助 → 检查更新”手动检查，或在“帮助 → 关于”启用启动时自动检查。下载完成后点击“重启并更新”，按提示处理未保存项目，再完成覆盖和重启。
+重要作品建议保留副本。自动检查更新默认关闭，可通过“帮助 → 检查更新”手动检查，或在“帮助 → 关于”启用启动时自动检查。下载完成后点击“重启并更新”，按提示处理未保存项目，再完成覆盖和重启。
 
-当前版本已在测试机完成独立安装及 alpha.3 → alpha.4 的软件内更新验证。手动下载请进入对应的 `tauri-v<版本>` Release，选择 `MinePix.Tauri_<版本>_x64-setup.exe`；`.sig` 由更新器使用，无需手动打开。`tauri-latest` 保存更新频道清单。
+此前 alpha.4 已在测试机完成独立安装及 alpha.3 → alpha.4 的软件内更新验证；2.0.0 本次仅核验构建与发布，不新增本机安装更新测试。手动下载请进入对应的 `tauri-v<版本>` Release，选择 `MinePix.Tauri_<版本>_x64-setup.exe`；`.sig` 由更新器使用，无需手动打开。`tauri-latest` 保存更新频道清单。
 
 ## 开发
 

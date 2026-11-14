@@ -4,9 +4,9 @@ A Windows desktop editor for pixel art, frame-by-frame animation and game assets
 
 [简体中文](README.md) · [User guide (Chinese)](docs/USER_GUIDE.md)
 
-**Free and open source · Windows x64 · Chinese / English · Preview 2.0.0-alpha.4**
+**Free and open source · Windows x64 · Chinese / English · Stable 2.0.0**
 
-[Download the Windows x64 installer](https://github.com/Spicyfish95/minepix/releases/download/tauri-v2.0.0-alpha.4/MinePix.Tauri_2.0.0-alpha.4_x64-setup.exe)
+[Download the Windows x64 installer](https://github.com/Spicyfish95/minepix/releases/download/tauri-v2.0.0/MinePix.Tauri_2.0.0_x64-setup.exe)
 
 ![MinePix dark workspace with the pixel canvas, palette, preview, layers and a four-frame animation timeline](docs/images/workspace-en.png)
 
@@ -14,9 +14,9 @@ A Windows desktop editor for pixel art, frame-by-frame animation and game assets
 
 ## MinePix highlights
 
-### An installer of about 1.99 MiB
+### Small distribution size
 
-Built with Tauri 2, Rust and system WebView2, with Rust handling file operations, project storage and format codecs. The alpha.4 Windows x64 installer is **2,082,628 bytes**. This excludes the shared WebView2 Runtime and is not the installed footprint; the installer is also cached for updates.
+Built with Tauri 2, Rust and system WebView2, with Rust handling file operations, project storage and format codecs. See the matching Release asset for the Windows x64 installer size. This excludes the shared WebView2 Runtime and is not the installed footprint; the installer is also cached for updates.
 
 ### Check terrain connections as you draw tiles
 
@@ -68,9 +68,9 @@ You can also open the [mushroom example](examples/mushroom.pix). See the [user g
 
 ## Updates
 
-This is a prerelease; keep copies of important artwork. Automatic checks default to off. Use Help → Check for updates, or enable startup checks in Help → About. After downloading, choose Restart and update and follow the prompts for unsaved projects.
+Keep copies of important artwork. Automatic checks default to off. Use Help → Check for updates, or enable startup checks in Help → About. After downloading, choose Restart and update and follow the prompts for unsaved projects.
 
-Independent installation and the alpha.3 → alpha.4 in-app update passed verification on the test machine. For manual downloads, choose `MinePix.Tauri_<version>_x64-setup.exe` from the matching `tauri-v<version>` release. The `.sig` file is used by the updater. The `tauri-latest` release hosts the update channel manifest.
+Independent installation and the alpha.3 → alpha.4 in-app update previously passed verification on the test machine. The 2.0.0 release checks cover build and publication; local installation and update tests are not repeated. For manual downloads, choose `MinePix.Tauri_<version>_x64-setup.exe` from the matching `tauri-v<version>` release. The `.sig` file is used by the updater. The `tauri-latest` release hosts the update channel manifest.
 
 ## Development
 
