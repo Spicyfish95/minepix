@@ -1,5 +1,7 @@
 # 构建、签名、发布与更新
 
+当前状态（2026-11-14）：公开分发已暂停。Defender 在真实更新测试中隔离 EXE，检测名为 `Trojan:Win32/Bearfoos.A!ml`。alpha.1–alpha.3 与更新频道均已改为草稿，alpha.4 构建已取消；保留资产供核查，当前不提供公开下载或更新。功能专项成功不等于此检测已解决，也不能直接认定误报。恢复发布前需完成产物与依赖核查、检测复核及防护开启状态下的验收；不以排除项或关闭防护替代。
+
 ## 本地构建
 
 版本号维护在 package.json、package-lock.json、src-tauri/tauri.conf.json、Cargo.toml 和 Cargo.lock。Windows x64 NSIS 安装器采用当前用户安装，运行依赖 WebView2。执行 npm ci、npm run build、npm run package。

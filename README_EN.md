@@ -2,6 +2,8 @@
 
 A Windows x64 pixel art and animation editor built with Tauri 2, Rust and system WebView2.
 
+Downloads and update releases are currently suspended following a Defender detection during installation testing on November 14, 2026. Release assets are retained as drafts pending investigation; delivery acceptance is incomplete. See [release status](docs/RELEASING.md).
+
 Features include layers and groups, selection and transforms, animation tags, linked cels, indexed color, references, tilesets, compressed binary PIX projects, ASE interchange and image/animation export.
 
 Download the installer from this repository's Releases. Installation is per user and preserves existing file defaults. This is a prerelease; keep copies of important artwork. Automatic update checks default to off; use Help to check manually.

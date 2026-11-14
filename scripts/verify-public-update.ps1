@@ -19,6 +19,7 @@ $taskSaved=@{}
 $taskInstalled=$false
 $taskOk=$false
 $taskCleaning=$false
+$taskStarted=Get-Date
 function Check([string]$Name,[bool]$Pass){
  $taskResults.Add([pscustomobject]@{name=$Name;pass=$Pass})
  if(-not $Pass -and -not $taskCleaning){throw $Name}
@@ -79,6 +80,17 @@ try{
 }finally{
  $taskCleaning=$true
  try{
+ try{
+ $taskDetections=@(Get-MpThreatDetection -ErrorAction Stop | Where-Object {
+  $_.InitialDetectionTime -ge $taskStarted -and
+  @($_.Resources | Where-Object {$_ -like ('*'+$taskExe+'*')}).Count -gt 0
+ })
+ Check 'No Defender detection for this test executable' ($taskDetections.Count -eq 0)
+ if($taskDetections.Count){$taskOk=$false}
+ }catch{
+  $taskOk=$false
+  $taskResults.Add([pscustomobject]@{name='Defender detection history could not be verified';pass=$false;error=$_.Exception.Message})
+ }
  foreach($process in @(Get-Process minepix-tauri -ErrorAction SilentlyContinue|Where-Object {$_.Path -eq $taskExe})){Stop-Process -Id $process.Id}
  if($taskInstalled){
   $remove=Start-Process -FilePath (Join-Path $taskInstall 'uninstall.exe') -ArgumentList '/S' -WindowStyle Hidden -Wait -PassThru
