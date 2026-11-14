@@ -290,14 +290,8 @@ async fn desktop_call(
         )
         .map_err(|error| error.to_string()),
         "openRecent" => {
-            let index = args
-                .first()
-                .and_then(Value::as_u64)
-                .ok_or("最近文件条目无效")? as usize;
-            let mut files = state.files.lock().unwrap();
-            let entries = files.recent().map_err(io_error)?;
-            let path = entries.get(index).ok_or("最近文件条目已失效")?.path.clone();
-            files.open_for_transfer(std::path::Path::new(&path)).map_err(io_error)
+            let path = args.first().and_then(Value::as_str).ok_or("最近文件路径无效")?;
+            state.files.lock().unwrap().open_recent(path).map_err(io_error)
         }
         "startupFiles" => {
             let mut files = state.files.lock().unwrap();

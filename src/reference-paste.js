@@ -1,6 +1,6 @@
 import {isTextTarget} from './interaction.js';
 
-export function installReferencePaste({onUI,panel,readImages,importImages,blocked=()=>false,onError}){
+export function installReferencePaste({onUI,panel,readImages,importImages,captureTarget=()=>null,blocked=()=>false,onError}){
  let hovered=null,pasting=false;
  onUI('pointerover',event=>{hovered=event.target.closest?.('#reference-panel')||null;});
  onUI('pointerout',event=>{if(hovered?.contains(event.target)&&!hovered.contains(event.relatedTarget))hovered=null;});
@@ -13,7 +13,7 @@ export function installReferencePaste({onUI,panel,readImages,importImages,blocke
   if(event.repeat||pasting)return;
   pasting=true;
   void (async()=>{
-   try{const images=await readImages();if(images.length)await importImages(images);}
+   try{const target=captureTarget(),images=await readImages();if(images.length)await importImages(images,target);}
    catch(error){onError(error);}
    finally{pasting=false;}
   })();

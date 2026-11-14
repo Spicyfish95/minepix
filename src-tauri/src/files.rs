@@ -184,6 +184,13 @@ impl Files {
         Ok(Vec::new())
     }
 
+    pub fn open_recent(&mut self, path: &str) -> io::Result<Value> {
+        let entry = self.recent()?.into_iter()
+            .find(|entry| key(&entry.path) == key(path))
+            .ok_or_else(|| error("最近文件条目已失效"))?;
+        self.open_for_transfer(Path::new(&entry.path))
+    }
+
     pub fn open_for_transfer(&mut self, path: &Path) -> io::Result<Value> {
         if !path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("pix")) {
             return self.open(path);
@@ -261,6 +268,29 @@ impl Files {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recent_paths_do_not_shift_after_removal_or_reordering() {
+        let root = tempfile::tempdir().unwrap();
+        let mut files = Files::new(root.path().join("settings")).unwrap();
+        let sample = include_str!("../../tests/fixtures/documents/mushroom.json");
+        let a = root.path().join("a.pix");
+        let b = root.path().join("b.pix");
+        files.save_project("main", &b, sample).unwrap();
+        files.save_project("main", &a, sample).unwrap();
+        let entries = files.recent().unwrap();
+        let path_a = entries[0].path.clone();
+        let path_b = entries[1].path.clone();
+        // Another window opening B changes the order after the UI took its snapshot.
+        files.add_recent(&b).unwrap();
+        assert_eq!(files.open_recent(&path_a).unwrap()["name"], "a.pix");
+        fs::remove_file(&a).unwrap();
+        assert!(files.open_recent(&path_a).is_err());
+        assert_eq!(files.open_recent(&path_b).unwrap()["name"], "b.pix");
+        assert_eq!(files.recent().unwrap().len(), 1);
+        files.clear_recent().unwrap();
+        assert!(files.open_recent(&path_b).is_err());
+    }
 
     #[test]
     fn raw_project_read_records_only_valid_completed_reads() {

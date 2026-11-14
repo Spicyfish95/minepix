@@ -1,3 +1,4 @@
+param([string]$Script='scripts/capture-desktop.mjs')
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.Windows.Forms
 $taskCursor=[Windows.Forms.Cursor]::Position
@@ -13,14 +14,19 @@ if ($taskOriginal) {
 $taskSettings=Join-Path $env:APPDATA 'com.minepix.tauri\updater-settings.json'
 $taskHadSettings=Test-Path -LiteralPath $taskSettings
 $taskSettingsBytes=if ($taskHadSettings) { [IO.File]::ReadAllBytes($taskSettings) }
+$taskRecent=Join-Path $env:APPDATA 'com.minepix.tauri\recent-files.json'
+$taskHadRecent=Test-Path -LiteralPath $taskRecent
+$taskRecentBytes=if ($taskHadRecent) { [IO.File]::ReadAllBytes($taskRecent) }
 try {
     [IO.Directory]::CreateDirectory((Split-Path $taskSettings -Parent)) | Out-Null
     [IO.File]::WriteAllText($taskSettings,'{"autoUpdate":false}',[Text.UTF8Encoding]::new($false))
-    node scripts/capture-desktop.mjs
-    if ($LASTEXITCODE) { throw 'Capture and pin desktop checks failed' }
+    node $Script
+    if ($LASTEXITCODE) { throw "Desktop checks failed: $Script" }
 } finally {
     [Windows.Forms.Cursor]::Position=$taskCursor
     [Windows.Forms.Clipboard]::SetDataObject($taskClipboard,$true)
     if ($taskHadSettings) { [IO.File]::WriteAllBytes($taskSettings,$taskSettingsBytes) }
     else { Remove-Item -LiteralPath $taskSettings -ErrorAction SilentlyContinue }
+    if ($taskHadRecent) { [IO.File]::WriteAllBytes($taskRecent,$taskRecentBytes) }
+    else { Remove-Item -LiteralPath $taskRecent -ErrorAction SilentlyContinue }
 }

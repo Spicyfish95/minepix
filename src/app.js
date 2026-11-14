@@ -1663,9 +1663,8 @@ function renderWelcome(){
 }
 async function removeWelcomeRecent(path){welcomeEntries=await window.desktop.removeRecent(path);welcomeThumbs.delete(path);welcomeRecentKey='';renderWelcomeRecent();}
 async function openWelcomeRecent(path){
- const index=welcomeEntries.findIndex(entry=>entry.path===path);
- if(index<0)return;
- await importFile(await window.desktop.openRecent(index),true);
+ if(!welcomeEntries.some(entry=>entry.path===path))return;
+ await importFile(await window.desktop.openRecent(path),true);
 }
 function renderEmptyDocument(){
  renderDocumentTabs();
@@ -1707,7 +1706,7 @@ async function recentDialog(){
   window.desktop.recentThumbs().then(list=>{for(const item of list)thumbs.set(item.path,item);syncPreview();},syncPreview);
   clear.onclick=async()=>{await window.desktop.clearRecent();entries.length=0;syncEntries();welcomeEntries=[];welcomeThumbs.clear();welcomeRecentKey='';renderWelcomeRecent();};
  });
- if(values&&entries.length){const file=await window.desktop.openRecent(+values.index);await importFile(file,true);}
+ if(values&&entries.length){const file=await window.desktop.openRecent(entries[+values.index].path);await importFile(file,true);}
 }
 async function newDocument(){const defaults={...DEFAULT_APPLICATION,...JSON.parse(localStorage.getItem(APP_SETTINGS_KEY)||'{}')};const values=await modal('新建像素项目','<label>项目名称 <input type="text" name="name" value="未命名" maxlength="100" required></label><label>宽度 <input type="number" name="width" value="'+defaults.width+'" min="1" required></label><label>高度 <input type="number" name="height" value="'+defaults.height+'" min="1" required></label><p>宽高不设固定上限；所有图层与帧的总像素最多 32M。</p>');if(values){const next=createDocument(+values.width,+values.height,values.name);next.frames[0].duration=defaults.duration;next.canvasBackground=validateCanvasBackground(defaults.canvasBackground||DEFAULT_CANVAS_BACKGROUND);replaceDocument(next,false,null,crypto.randomUUID(),true);}}
 function replaceDocument(value,isSaved=true,nextPath=null,id=crypto.randomUUID(),newTab=false){
@@ -1767,11 +1766,12 @@ async function importFile(file,newTab=false){
 async function saveData(data,kind,name,binary=['bmp','gif','ico','jpeg','jpg','png','webp'].includes(kind)){if(window.desktop)return window.desktop.save(data,kind,name,binary);const blob=new Blob([binary?Uint8Array.from(atob(data),c=>c.charCodeAt(0)):data]);const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name+'.'+(kind==='project'?'pix':kind);a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return true;}
 async function saveProject(saveAs=false){
   if(busy||gesture)return false;setBusy(true);stop();
+  const revision=history.revision,referenceRevision=boardRevision;
   try{
     const result=window.desktop?await window.desktop.saveProject(doc,doc.name,saveAs):await saveData(JSON.stringify(doc),'project',doc.name);
     if(!result){message('已取消保存');return false;}
     if(window.desktop){filePath=result.filePath;doc.name=result.name;}
-    saved=history.revision;savedBoardRevision=boardRevision;changed();render();await flushRecovery();message('项目已保存');return true;
+    saved=revision;savedBoardRevision=referenceRevision;changed();render();await flushRecovery();message(dirty?'项目已保存，仍有新的未保存更改':'项目已保存');return true;
   }catch(error){showError('保存失败：'+error.message);return false;}finally{setBusy(false);}
 }
 // ── 参考面板：独立于绘制内容的图片参考板（不进合成 / 导出 / 历史栈）──
@@ -2133,22 +2133,41 @@ async function decodeBoardPng(base64,mime='image/png'){
   const context=canvas.getContext('2d');context.drawImage(image,0,0);
   return{width:image.width,height:image.height,data:context.getImageData(0,0,image.width,image.height).data};
 }
-async function addBoardImage(base64,name,mime){
-  const image=await decodeBoardPng(base64,mime),items=boardItems(),reference=encodeReference(image.width,image.height,image.data);
+async function addBoardImage(base64,name,mime,targetId=documentId){
+  const image=await decodeBoardPng(base64,mime);
+  const state=targetId===documentId&&documentTabs.items.length?null:documentTabs.get(targetId);
+  const target=state?state.doc:doc,items=target.references||[],reference=encodeReference(image.width,image.height,image.data);
   const x=items.length?Math.ceil(Math.max(...items.map(item=>item.x+item.width*item.scale)))+16:16;
-  const item=addReference(doc,{...reference,id:crypto.randomUUID(),name:String(name||'参考图').slice(0,120),x,y:16});
-  boardChanged('已导入参考图 '+item.name);
+  const item=addReference(target,{...reference,id:crypto.randomUUID(),name:String(name||'参考图').slice(0,120),x,y:16});
+  if(state){
+    state.boardRevision++;state.dirty=true;renderDocumentTabs();setDirty(dirty);void flushRecovery(state);
+  }else boardChanged('已导入参考图 '+item.name);
   return item;
+}
+function referenceImportTarget(){return documentTabs.items.length?documentId:null;}
+function ensureReferenceDocument(targetId){
+  if(targetId!==null)return targetId;
+  replaceDocument(createDocument(DEFAULT_APPLICATION.width,DEFAULT_APPLICATION.height),false,null,crypto.randomUUID(),true);
+  return documentId;
+}
+async function importBoardImages(files,targetId){
+  if(!files?.length)return;
+  targetId=ensureReferenceDocument(targetId);
+  for(const file of files)await addBoardImage(file.data,file.name,file.mime,targetId);
+  if(targetId===documentId)boardMessage('已导入 '+files.length+' 张参考图');
 }
 async function referenceBoardImport(){
   if(!window.desktop)return boardMessage('参考图片导入请使用桌面版');
-  try{const files=await window.desktop.open('reference');if(!files?.length)return;for(const file of files)await addBoardImage(file.data,file.name,file.mime);boardMessage(files.length>1?'已导入 '+files.length+' 张参考图':'已导入参考图 '+files[0].name);}catch(error){boardMessage('参考图片导入失败：'+error.message);}
+  const targetId=referenceImportTarget();
+  try{await importBoardImages(await window.desktop.open('reference'),targetId);}catch(error){boardMessage('参考图片导入失败：'+error.message);}
 }
 async function dropReferenceFiles(files){
   const win=boardPanel().ownerDocument.defaultView;
+  let targetId=referenceImportTarget();
   for(const file of files)try{
     const base64=await new Promise((resolve,reject)=>{const reader=new win.FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(new Error('无法读取图片文件'));reader.readAsDataURL(file);});
-    await addBoardImage(base64,file.name,file.type);
+    targetId=ensureReferenceDocument(targetId);
+    await addBoardImage(base64,file.name,file.type,targetId);
   }catch(error){boardMessage('参考图片导入失败：'+error.message);}
 }
 function fitBoardContent(){
@@ -2653,13 +2672,14 @@ onUI('visibilitychange',event=>{if(event.target.hidden)resetInteraction('窗口�
 onUI('focusin',e=>{if(isTextTarget(e.target))resetInteraction();});
 let recoveryTimer;
 function scheduleRecovery(){clearTimeout(recoveryTimer);recoveryTimer=setTimeout(()=>{if(gesture||shapeSession||transformSession)scheduleRecovery();else void flushRecovery();},700);}
-async function flushRecovery(){
-  clearTimeout(recoveryTimer);
-  const snapshot=transformSession?.before||gesture?.before||shapeSession?.before||doc;
-  const record={id:documentId,filePath,dirty,...(filePath&&dirty?{data:JSON.stringify(snapshot),name:snapshot.name}:{})};
+async function flushRecovery(state=null){
+  if(!state)clearTimeout(recoveryTimer);
+  const current=state||{documentId,filePath,dirty,doc};
+  const snapshot=state?state.doc:transformSession?.before||gesture?.before||shapeSession?.before||doc;
+  const record={id:current.documentId,filePath:current.filePath,dirty:current.dirty,...(current.filePath&&current.dirty?{data:JSON.stringify(snapshot),name:snapshot.name}:{})};
   try{
     if(window.desktop)await window.desktop.saveRecovery(record);
-    else if(filePath&&dirty)localStorage.setItem('pixel-studio-recovery',JSON.stringify({doc:snapshot,filePath,dirty}));
+    else if(current.filePath&&current.dirty)localStorage.setItem('pixel-studio-recovery',JSON.stringify({doc:snapshot,filePath:current.filePath,dirty:current.dirty}));
     else localStorage.removeItem('pixel-studio-recovery');
     return true;
   }catch(error){showError('恢复副本写入失败：'+error.message);return false;}
@@ -2687,13 +2707,9 @@ $('layer-blend').onchange=()=>{const value=$('layer-blend').value;mutate(()=>{if
 initI18n();initContextUI();renderPaletteLibrary();syncRemapButton();colorAdjustments=initColorAdjustments({onPreview:value=>{const index=paletteTargetIndex();if(index!==null)previewPaletteColor(index,value);else setColor(value);},onCommit:value=>{const index=paletteTargetIndex();if(index!==null)setPaletteColor(index,value);else setColor(value);}});uiAll('input[type=checkbox]').forEach(input=>input.setAttribute('role','switch'));window.chromeReady=initWindowChrome();void help.start();for(const key of ['grid','symmetry'])$(key).checked=!!JSON.parse(localStorage.getItem(APP_SETTINGS_KEY)||'{}')[key];$('selection-kind').addEventListener('change',()=>{syncToolSlots();syncContextUI();syncInteraction();});decorateInterface();initVisualWorkspace();initToolbarControls({getBrush:()=>({size:brush,...clone(brushSettings)}),applyBrush:applyBrushPreset});syncGridLabel();syncGridGuideLabel();initPaletteEditing();initPaletteSizeMenu();refreshKeymapLabels();initTheme();window.workspaceLayout=initWorkspaceLayout({canShowPanel:id=>panelAvailable(id,{hasDocument:documentTabs.items.length>0,hasTileset:doc.layers.some(isTileset)})});initReferenceBoard();tilesetPanel=initTilesetPanel({panel:$('tileset-panel'),getDocument:()=>doc,mutate,message});updateBrushControls();syncTextControls();renderColors();$('theme-toggle').addEventListener('click',drawOverlay);setTool('pencil');enterEmptyState();fit();initFormLayout();
 if(window.desktop){
  installReferencePaste({
-  onUI,panel:boardPanel,readImages:()=>window.desktop.clipboardImages(),
+  onUI,panel:boardPanel,readImages:()=>window.desktop.clipboardImages(),captureTarget:referenceImportTarget,
   blocked:()=>busy||!!gesture||!!shapeSession||!!celGesture||$('modal').open,
-  importImages:async files=>{
-   if(!documentTabs.items.length)replaceDocument(createDocument(DEFAULT_APPLICATION.width,DEFAULT_APPLICATION.height),false,null,crypto.randomUUID(),true);
-   for(const file of files)await addBoardImage(file.data,file.name,file.mime);
-   boardMessage('已粘贴 '+files.length+' 张参考图');
-  },
+  importImages:importBoardImages,
   onError:error=>showError('参考图片粘贴失败：'+error.message)
  });
  window.desktop.onCapture(file=>{

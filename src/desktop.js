@@ -64,6 +64,12 @@ export async function initializeDesktop(){
  const bridge={testing:false,secondary:current.label!=='main'};
  const methods=['captureScreen','clipboardImages','openRepository','appInfo','editorInfo','editorReady','detachDocument','moveDocument','recordInputAudit','testNotification','recentFiles','recentThumbs','removeRecent','clearRecent','openRecent','startupFiles','openKeymap','openPalette','open','exportAseprite','exportSheetMetadata','exportSheet','exportAnimation','save','saveProject','activateDocument','setDirty','checkUpdates','installUpdate','downloadUpdate','cancelUpdate','updateState','openUpdateRelease','setAutoUpdate','setLocale'];
  for(const method of methods)bridge[method]=(...args)=>call(method,...args);
+ // Internal smoke helpers may select a fresh entry by index; IPC always receives its path.
+ bridge.openRecent=async entry=>{
+  const path=typeof entry==='number'?(await call('recentFiles'))[entry]?.path:entry;
+  if(!path)throw new Error('最近文件条目已失效');
+  return call('openRecent',path);
+ };
  bridge.saveProject=(data,name,saveAs=false)=>invokeBackend('save_project_packed',packProjectSave(data,name,saveAs));
  bridge.recentThumbs=async()=>{
   const {composite}=await import('./model.js'),entries=await call('recentFiles'),size=32,thumbnails=[];
