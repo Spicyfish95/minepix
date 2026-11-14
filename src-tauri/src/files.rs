@@ -269,22 +269,27 @@ mod tests {
         let target=root.path().join("读取 中文.pix");
         let document=json!({"format":"pixel-studio","frames":[{"cels":[[0,u32::MAX]]}]});
         fs::write(&target,crate::project::encode(&document).unwrap()).unwrap();
+        let canonical = fs::canonicalize(&target).unwrap();
+        let expected = canonical.to_string_lossy().trim_start_matches("\\\\?\\").to_owned();
         let descriptor=files.open_for_transfer(&target).unwrap();
         assert_eq!(descriptor["type"],"project");assert_eq!(descriptor["rawProject"],true);
-        assert_eq!(descriptor["filePath"].as_str(),target.to_str());
+        assert_eq!(descriptor["filePath"].as_str(),Some(expected.as_str()));
         assert!(files.recent().unwrap().is_empty());assert!(files.selected.is_empty());
         assert_eq!(&files.read_project_transfer(&target,false).unwrap()[..8],b"MPXREAD1");
         assert!(files.recent().unwrap().is_empty());assert!(files.selected.is_empty());
         files.read_project_transfer(&target,true).unwrap();
         let recent=serde_json::to_value(files.recent().unwrap()).unwrap();
-        assert_eq!(recent.as_array().unwrap().len(),1);assert!(files.selected.contains(target.to_str().unwrap()));
+        assert_eq!(recent.as_array().unwrap().len(),1);assert!(files.selected.contains(&expected));
+        assert_eq!(recent[0]["path"].as_str(),Some(expected.as_str()));
         files.read_project_transfer(&target,false).unwrap();
         assert_eq!(serde_json::to_value(files.recent().unwrap()).unwrap(),recent);
         let bad=root.path().join("损坏.pix");fs::write(&bad,b"corrupt").unwrap();
         assert!(files.open_for_transfer(&bad).is_ok());
         assert!(files.read_project_transfer(&bad,true).is_err());
         assert_eq!(serde_json::to_value(files.recent().unwrap()).unwrap(),recent);
-        assert!(!files.selected.contains(bad.to_str().unwrap()));
+        let bad_canonical = fs::canonicalize(&bad).unwrap();
+        let bad_expected = bad_canonical.to_string_lossy().trim_start_matches("\\\\?\\").to_owned();
+        assert!(!files.selected.contains(&bad_expected));
     }
 
     #[test]

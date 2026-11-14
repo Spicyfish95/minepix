@@ -1,5 +1,13 @@
 # 开发与验证
 
+## Windows CI 路径断言修复（2026-11-14）
+
+范围：仅修复 files 模块测试对临时目录路径的预期，不修改文件读取或更新逻辑。Windows runner 的 TEMP 可能包含 RUNNER~1，生产代码使用 canonicalize 返回 runneradmin；二者指向同一文件。断言应比较规范化后的路径，并检查描述符、最近文件和 selected 记录一致，损坏文件不被记录。定向运行 Cargo files::tests 与发布清单 Node 测试。
+
+发布规则保持：main 推送执行构建和回归，匹配应用版本的 tauri-v<版本> 标签触发签名安装包发布；公开资产验证后才更新 tauri-latest 频道。不改为 main 每次提交都发布。远程验证结果需独立记录，不能以本地通过代替。
+
+本次结果：Cargo files::tests 7/7，发布及安装配置 Node 测试 10/10；Vite 构建、生产资源及仓库引用/LF 检查通过。现有本地 alpha.1 安装包通过清单检查，以及固定公钥、签名版本绑定和篡改拒绝验证；未执行该安装包。远程状态读取两次因执行环境自动审批超时未启动，远程 CI、公开下载与实际更新仍待验证。
+
 ## 环境与命令
 
 Windows x64、Node.js 24、Rust stable MSVC、C++ Build Tools、Windows SDK、WebView2 Runtime。环境脚本优先使用系统工具链。
