@@ -6,10 +6,10 @@
 <pre id="result">pending</pre>
 <script type="module">
 import {onUI,registerSurface} from '../src/ui-surfaces.js';
-import {installSwitchLabels} from '../src/switch-labels.js';
+import {installFormLabels} from '../src/form-labels.js';
 const results=[],check=(name,pass)=>{results.push({name,pass:!!pass});if(!pass)throw new Error(name);};
 try{
- installSwitchLabels(onUI);
+ installFormLabels(onUI);
  const label=document.getElementById('setting'),input=label.control;let changed=0;
  input.onchange=()=>changed++;
  label.querySelector('span').click();label.click();

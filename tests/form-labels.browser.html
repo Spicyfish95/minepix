@@ -1,0 +1,46 @@
+<!doctype html><meta charset="utf-8">
+<button id="anchor">焦点基准</button>
+<label id="text"><span>名称</span><input value="原名称"></label>
+<label id="number">宽度<input type="number" value="32"> px</label>
+<label id="select"><span>绘制方式</span><select><option value="a">A</option><option value="b">B</option></select></label>
+<label id="textarea">说明<textarea>原内容</textarea></label>
+<label id="external-label" for="external"><span>关联输入框</span></label><input id="external" value="外部">
+<label id="radio-label">单选项<input id="radio" type="radio"></label>
+<label id="compound">组合控件<input id="first"><button id="inside" type="button"><span>独立操作</span></button><input id="second"><a href="#help">帮助</a></label>
+<pre id="result">pending</pre>
+<script type="module">
+import {onUI,registerSurface} from '../src/ui-surfaces.js';
+import {installFormLabels} from '../src/form-labels.js';
+import {normalizeFormLayout} from '../src/form-layout.js';
+const results=[],check=(name,pass)=>{results.push({name,pass:!!pass});if(!pass)throw new Error(name);};
+try{
+ installFormLabels(onUI);
+ const anchor=document.getElementById('anchor');
+ const checkField=(label,name)=>{
+  const dom=label.ownerDocument,control=label.control,baseline=dom.getElementById('anchor')||dom.body;
+  baseline.tabIndex=0;baseline.focus();
+  let clicks=0;control.addEventListener('click',()=>clicks++);
+  const value=control.value;
+  (label.querySelector('.field-caption')||label.querySelector('span')||label).click();
+  label.click();
+  check(name+'说明及空白不聚焦或转发点击',dom.activeElement===baseline&&clicks===0&&control.value===value);
+  const event=new MouseEvent('click',{bubbles:true,cancelable:true});control.dispatchEvent(event);
+  check(name+'控件本体仍接收点击',clicks===1&&!event.defaultPrevented);
+  control.focus();check(name+'可直接聚焦且保留无障碍标签',dom.activeElement===control&&[...control.labels].includes(label));
+ };
+ for(const [id,name]of [['text','文本输入'],['number','数值输入'],['select','下拉框'],['textarea','多行文本']])checkField(document.getElementById(id),name);
+ anchor.focus();document.querySelector('#external-label span').click();
+ check('for关联的说明不聚焦外部输入框',document.activeElement===anchor);
+ normalizeFormLayout(document.body);
+ checkField(document.getElementById('number'),'归一化数值单位布局');
+ const dynamic=document.createElement('label');dynamic.innerHTML='<span>动态选项</span><select><option>一</option><option>二</option></select>';document.body.append(dynamic);
+ checkField(dynamic,'动态弹窗');
+ document.getElementById('radio-label').click();check('单选标签保持原生行为',document.getElementById('radio').checked);
+ for(const id of ['inside','second']){const target=document.getElementById(id),event=new MouseEvent('click',{bubbles:true,cancelable:true});target.dispatchEvent(event);check('组合标签内其他控件不被拦截 '+id,!event.defaultPrevented);}
+ const link=document.querySelector('#compound a'),linkEvent=new MouseEvent('click',{bubbles:true,cancelable:true});link.dispatchEvent(linkEvent);check('说明内帮助链接保持可点击',!linkEvent.defaultPrevented);
+ const frame=document.createElement('iframe');document.body.append(frame);const dom=frame.contentDocument,unregister=registerSurface(dom);
+ for(const id of ['text','select','textarea']){const copy=document.getElementById(id).cloneNode(true);dom.body.append(copy);checkField(copy,'独立面板 '+id);}
+ unregister();
+ document.getElementById('result').textContent=JSON.stringify({ok:true,results});
+}catch(error){document.getElementById('result').textContent=JSON.stringify({ok:false,results,error:error.stack});}
+</script>
