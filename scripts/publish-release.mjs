@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
-import {readFile,copyFile} from 'node:fs/promises';
+import {readFile,copyFile,writeFile} from 'node:fs/promises';
 import {verifyRelease,repository,sha256,compareVersions,releasePolicy} from './verify-release.mjs';
 import {publicBytes} from './public-release-download.mjs';
 const exec=promisify(execFile);
@@ -15,6 +15,9 @@ const policy=releasePolicy(local.version);
 assert.equal(process.env.GITHUB_REF,`refs/tags/${tag}`,'Publication requires the matching version tag');
 const manifestBytes=await readFile('artifacts/release/latest.json');
 const metadata=JSON.parse(manifestBytes);
+const notesFile='artifacts/release/notes.md';
+assert.ok(metadata.notes?.trim(),'Publication requires version release notes');
+await writeFile(notesFile,metadata.notes+'\n');
 const installer=`src-tauri/target/release/bundle/nsis/${local.artifact.filename}`;
 const channelUrl=`https://github.com/${repository}/releases/download/tauri-latest/latest.json`;
 const current=await fetch(channelUrl,{headers:{'Cache-Control':'no-cache'}});
@@ -22,7 +25,7 @@ if(current.ok)assert.ok(compareVersions(local.version,(await current.json()).ver
 else assert.equal(current.status,404,'Cannot read existing public update channel');
 let version=await release(tag);
 if(!version){
- await gh('release','create',tag,'--verify-tag','--draft','--title',`MinePix ${local.version}`,'--notes-file','CHANGELOG.md');
+ await gh('release','create',tag,'--verify-tag','--draft','--title',`MinePix ${local.version}`,'--notes-file',notesFile);
  version=await release(tag);
 }
 if(version.isDraft){
@@ -30,7 +33,7 @@ if(version.isDraft){
  await copyFile(installer,publicInstaller);
  await copyFile(installer+'.sig',publicInstaller+'.sig');
  await gh('release','upload',tag,publicInstaller,publicInstaller+'.sig','artifacts/release/validation.json','--clobber');
- await gh('release','edit',tag,'--draft=false','--latest=false',`--prerelease=${policy.prerelease}`);
+ await gh('release','edit',tag,'--notes-file',notesFile,'--draft=false','--latest=false',`--prerelease=${policy.prerelease}`);
 }
 // A published version is never overwritten. Its public bytes must match this build.
 const downloaded=await publicBytes(local.artifact.url);

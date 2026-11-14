@@ -4,6 +4,7 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import {blockmap} from './update-blockmap.mjs';
 import {repository,releaseAssetName} from './verify-release.mjs';
+import {readReleaseNotes} from './release-notes.mjs';
 
 const config=JSON.parse(await readFile('src-tauri/tauri.conf.json','utf8'));
 const version=process.argv[2]||config.version;
@@ -17,7 +18,7 @@ assert.ok(config.plugins.updater.requireSignedVersion,'运行时必须校验签�
 assert.ok(!config.plugins.updater.dangerousInsecureTransportProtocol,'普通发行配置必须使用 HTTPS');
 const url=`https://github.com/${repository}/releases/download/minepix-v${version}/${releaseAssetName(version)}`;
 const target={signature,url};
-const notes=await readFile(process.env.MINEPIX_RELEASE_NOTES||'CHANGELOG.md','utf8');
+const notes=await readReleaseNotes(version,process.env.MINEPIX_RELEASE_NOTES);
 const bytes=await readFile(installer);
 const manifest={version,pub_date:new Date().toISOString(),notes,platforms:{'windows-x86_64-nsis':target,'windows-x86_64':target},minepixBlockmap:blockmap(bytes,version,url)};
 await mkdir('artifacts/release',{recursive:true});
