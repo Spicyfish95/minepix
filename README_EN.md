@@ -8,6 +8,10 @@ A Windows desktop editor for pixel art, frame-by-frame animation and game assets
 
 [Download the Windows x64 installer](https://github.com/Spicyfish95/minepix/releases/download/tauri-v2.0.0-alpha.4/MinePix.Tauri_2.0.0-alpha.4_x64-setup.exe)
 
+![MinePix dark workspace with the pixel canvas, palette, preview, layers and a four-frame animation timeline](docs/images/workspace-en.png)
+
+*The “Forest glow” example shows drawing and animation together. All screenshots were captured from the alpha.4 desktop app; the feature screenshots below use the Chinese interface.*
+
 ## MinePix highlights
 
 ### An installer of about 1.99 MiB
@@ -18,13 +22,25 @@ Built with Tauri 2, Rust and system WebView2, with Rust handling file operations
 
 Assign tile terrain and neighbor rules in the Tileset panel, then inspect connections in Terrain Preview. Pixel-based automatic annotation helps check corners and seams while creating assets. The preview is for checking assets and does not enter artwork composition or exports.
 
+![Dirt atlas in the center, connected terrain on the left and 32×32 corner-matching tile rules on the right](docs/images/terrain-preview.png)
+
+*Slice dirt.ase into 32×32 tiles, automatically annotate corner rules, then paint terrain in the preview to check connections. Try the [dirt corner-matching example](examples/dirt-corners.pix).*
+
 ### Deliver assets to game engines
 
 Export images, animations and sprite sheets, with presets for **Phaser 3 atlases and animations** and **Godot 4 SpriteFrames**. Configure trimming, packing and edge extrusion. Normal map export includes object, character, architecture and terrain presets, with a lighting preview to inspect the result.
 
+![Normal map export showing the generated normals beside an interactive lighting preview](docs/images/normal-map.png)
+
+*Inspect the normals and lighting before exporting a PNG with transparency. The [user guide](docs/USER_GUIDE.md) also illustrates engine atlas export settings.*
+
 ### Save references with your artwork
 
 Import multiple reference images, move and scale them, pick colors and change their stacking order. References are stored in the PIX project and stay out of exported artwork, ready for your next editing session.
+
+![Character and palette references beside the editable pixel canvas](docs/images/reference-board.png)
+
+*Keep character studies and palette samples beside the canvas without including them in exports. Try the [reference board example](examples/reference-board.pix).*
 
 ### Keep editable projects and export for each purpose
 
