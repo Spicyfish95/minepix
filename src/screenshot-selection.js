@@ -14,7 +14,7 @@ export function mountScreenshot(root,{image,width,height,pointer={x:width/2,y:he
  const selection=dom.createElement('div');selection.className='capture-selection';
  const label=dom.createElement('span');label.className='capture-size';selection.append(label);
  const toolbar=dom.createElement('div');toolbar.className='capture-toolbar';toolbar.setAttribute('role','toolbar');toolbar.setAttribute('aria-label','截图操作');
- const hint=dom.createElement('div');hint.className='capture-hint';hint.textContent='截图模式 · 拖动框选 · 单击选中整屏 · 双击截取整屏 · Esc 退出';
+ const hint=dom.createElement('div');hint.className='capture-hint';hint.textContent='截图模式 · 拖动框选 · 双击截取整屏 · Esc 退出';
  const status=dom.createElement('span');status.className='capture-status';status.setAttribute('role','status');
  let rect=null,start=null,dragged=false,busy=false,lastPoint=null;
  const viewport=()=>({width:root.clientWidth,height:root.clientHeight});
@@ -48,7 +48,8 @@ export function mountScreenshot(root,{image,width,height,pointer={x:width/2,y:he
  const point=event=>{const box=root.getBoundingClientRect();return{x:event.clientX-box.left,y:event.clientY-box.top};};
  root.onpointerdown=event=>{
   if(busy||event.button!==0||event.target.closest('.capture-toolbar'))return;
-  start=point(event);lastPoint=start;dragged=false;rect=null;lock(true);root.setPointerCapture(event.pointerId);event.preventDefault();render();
+  start=point(event);lastPoint=start;dragged=false;
+  lock(true);root.setPointerCapture(event.pointerId);event.preventDefault();render();
  };
  root.onpointermove=event=>{
   const p=point(event);positionHint(p.x,p.y);
@@ -59,12 +60,15 @@ export function mountScreenshot(root,{image,width,height,pointer={x:width/2,y:he
  root.onpointerup=event=>{
   if(!start)return;
   start=null;if(root.hasPointerCapture(event.pointerId))root.releasePointerCapture(event.pointerId);
-  if(!dragged||!rect?.width||!rect?.height)full();else render();
+  if(!rect?.width||!rect?.height)rect=null;
+  lock(!!rect);render();
  };
  root.onpointercancel=reset;
  root.ondblclick=event=>{
   if(busy||event.button!==0||event.target.closest('.capture-toolbar')||dragged)return;
-  event.preventDefault();full();void finish();
+  event.preventDefault();const p=point(event);
+  if(!rect||p.x<rect.x||p.x>=rect.x+rect.width||p.y<rect.y||p.y>=rect.y+rect.height)full();
+  void finish();
  };
  const key=event=>{if(event.key==='Escape'){event.preventDefault();if(!busy)void cancel();}else if(event.key==='Enter'){event.preventDefault();void finish();}};
  const resize=()=>{if(rect){rect=selectionRect({x:rect.x,y:rect.y},{x:rect.x+rect.width,y:rect.y+rect.height},root.clientWidth,root.clientHeight);}render();};
