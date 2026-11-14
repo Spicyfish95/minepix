@@ -1,0 +1,60 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "MinePix Tauri",
+  "version": "2.0.0-alpha.1",
+  "identifier": "com.minepix.tauri",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:14200",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost",
+      "devCsp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost ws://127.0.0.1:14200"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "../src/assets/app-icon.ico",
+      "../src/assets/app-icon.png"
+    ],
+    "category": "GraphicsAndDesign",
+    "shortDescription": "Pixel art and animation editor",
+    "windows": {
+      "nsis": {
+        "installerHooks": "windows/installer-hooks.nsh",
+        "displayLanguageSelector": true,
+        "languages": [
+          "English",
+          "SimpChinese",
+          "TradChinese"
+        ],
+        "installMode": "currentUser"
+      }
+    },
+    "createUpdaterArtifacts": true,
+    "resources": {
+      "../src/assets/app-icon.png": "notification-icon.png",
+      "../src/assets/project-icon.ico": "project-icon.ico"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI1Q0M0RTc3M0UyMEZBODUKUldTRitpQStkMDdNdFN2b3dCbW1aTzlEdEFWaUdRRlNVQjFUL09PdlVQMkI3NTRZL1pwcVFoYUUK",
+      "endpoints": [
+        "https://github.com/Spicyfish95/minepix/releases/download/tauri-latest/latest.json"
+      ],
+      "requireSignedVersion": true,
+      "windows": {
+        "installMode": "quiet"
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {createRequire} from 'node:module';
+import {sheetManifestPlan} from '../src/formats/sheet-manifest.js';
+const metadata=()=>({app:'pixel-studio',image:'sheet.png',size:{w:4,h:4},frames:[{frame:{x:2,y:2,w:2,h:2},duration:75},{frame:{x:0,y:0,w:2,h:2},duration:40}],tags:[{id:'walk',name:'Walk',color:'#112233',from:0,to:1,direction:'reverse'}]});
+test('清单顺序与时长保持，矩形和标签使用独立副本',()=>{const m=metadata(),p=sheetManifestPlan(m);assert.deepEqual(p.frames.map(f=>f.duration),[75,40]);assert.equal(p.frames[0].frame.x,2);p.frames[0].frame.x=1;p.tags[0].name='Changed';assert.equal(m.frames[0].frame.x,2);assert.equal(m.tags[0].name,'Walk');});
+test('拒绝其他格式、空帧和超出图像限制',()=>{for(const patch of [{app:'other'},{frames:[]},{size:{w:16385,h:1}},{size:{w:16384,h:16384}}])assert.throws(()=>sheetManifestPlan({...metadata(),...patch}));});
+test('拒绝越界、不等尺寸、旋转、裁边和非法时长',()=>{for(const patch of [{frame:{x:3,y:0,w:2,h:2}},{frame:{x:0,y:0,w:1,h:2}},{frame:{x:-1,y:0,w:2,h:2}},{rotated:true},{trimmed:true},{duration:10}]){const m=metadata();Object.assign(m.frames[1],patch);assert.throws(()=>sheetManifestPlan(m));}});
+test('项目帧数、容量与标签范围仍经过校验',()=>{const m=metadata();m.frames=Array(257).fill(m.frames[0]);assert.throws(()=>sheetManifestPlan(m));m.frames=Array(129).fill({frame:{x:0,y:0,w:512,h:512},duration:100});m.size={w:512,h:512};assert.throws(()=>sheetManifestPlan(m));const invalid=metadata();invalid.tags[0].to=2;assert.throws(()=>sheetManifestPlan(invalid),/标签/);});

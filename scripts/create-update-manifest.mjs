@@ -1,0 +1,26 @@
+import {readFile,writeFile,mkdir} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {blockmap} from './update-blockmap.mjs';
+
+const config=JSON.parse(await readFile('src-tauri/tauri.conf.json','utf8'));
+const version=process.argv[2]||config.version;
+assert.match(version,/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
+const filename=`MinePix Tauri_${version}_x64-setup.exe`;
+const installer=path.resolve('src-tauri/target/release/bundle/nsis',filename);
+const signature=(await readFile(installer+'.sig','utf8')).trim();
+const trusted=Buffer.from(signature,'base64').toString('utf8').split('\n').find(line=>line.startsWith('trusted comment:'));
+assert.ok(trusted?.split('\t').includes('version:'+version),'签名必须绑定对应应用版本');
+assert.ok(config.plugins.updater.requireSignedVersion,'运行时必须校验签名版本');
+assert.ok(!config.plugins.updater.dangerousInsecureTransportProtocol,'普通发行配置必须使用 HTTPS');
+const url=`https://github.com/Spicyfish95/minepix/releases/download/tauri-v${version}/${encodeURIComponent(filename)}`;
+const target={signature,url};
+const notes=await readFile(process.env.MINEPIX_RELEASE_NOTES||'CHANGELOG.md','utf8');
+const bytes=await readFile(installer);
+const manifest={version,pub_date:new Date().toISOString(),notes,platforms:{'windows-x86_64-nsis':target,'windows-x86_64':target},minepixBlockmap:blockmap(bytes,version,url)};
+await mkdir('artifacts/release',{recursive:true});
+await writeFile('artifacts/release/latest.json',JSON.stringify(manifest,null,2)+'\n');
+const report={version,installer,bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),signatureBindsVersion:true,published:false};
+await writeFile('artifacts/release/update-artifacts.json',JSON.stringify(report,null,2)+'\n');
+console.log(JSON.stringify(report,null,2));

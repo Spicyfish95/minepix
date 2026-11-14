@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "slots": {
+    "top": [
+      "tools"
+    ],
+    "left-top": [
+      "reference"
+    ],
+    "left-bottom": [
+      "colors"
+    ],
+    "right-top": [],
+    "right-bottom": [
+      "preview",
+      "layers"
+    ],
+    "bottom": [
+      "timeline"
+    ]
+  },
+  "active": {
+    "top": "tools",
+    "left-top": "reference",
+    "left-bottom": "colors",
+    "right-bottom": "layers",
+    "bottom": "timeline"
+  },
+  "sizes": {
+    "left": 304,
+    "right": 282,
+    "top": 80,
+    "bottom": 285,
+    "leftSplit": 0.3205680473372782,
+    "rightSplit": 0.3
+  },
+  "collapsed": false,
+  "floating": {}
+}

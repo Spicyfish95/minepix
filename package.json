@@ -1,0 +1,32 @@
+{
+  "name": "minepix-tauri",
+  "version": "2.0.0-alpha.1",
+  "private": true,
+  "type": "module",
+  "description": "MinePix pixel art and animation editor with Tauri 2 and Rust",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 14200 --strictPort",
+    "build": "vite build",
+    "tauri": "tauri",
+    "desktop": "powershell -NoProfile -File scripts/tauri.ps1 dev",
+    "package": "powershell -NoProfile -File scripts/tauri.ps1 build",
+    "test:project": "node --test tests/project-format.test.js",
+    "test:storage": "powershell -NoProfile -File scripts/cargo.ps1 test --manifest-path src-tauri/Cargo.toml storage::tests",
+    "test:backend": "powershell -NoProfile -File scripts/cargo.ps1 test --manifest-path src-tauri/Cargo.toml --lib",
+    "test": "node --test tests/*.test.js",
+    "release:manifest": "node scripts/create-update-manifest.mjs",
+    "pretest": "powershell -NoProfile -File scripts/cargo.ps1 build --locked --manifest-path src-tauri/Cargo.toml --example project-tool"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.12.4",
+    "@xprite/lighter": "0.1.1",
+    "@xprite/pixelate": "0.1.2",
+    "gifenc": "1.0.3"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.4",
+    "vite": "^7.0.0",
+    "omggif": "1.0.10"
+  }
+}

@@ -1,0 +1,108 @@
+import {checkFormLayout} from './form-layout-smoke.js';
+import {generateNormalMap} from './normal-map.js';
+
+export async function normalMapSmoke({$,actions,createDocument,replaceDocument,documentState,exportDialog,applyLocale}){
+ const results=[],check=(name,pass)=>{results.push({name,pass:!!pass});if(!pass)throw new Error(name);};
+ const waitFor=async predicate=>{const until=performance.now()+15000;while(!predicate()){if(performance.now()>until)throw new Error('等待法线预览超时：'+$('modal-error')?.textContent);await new Promise(r=>setTimeout(r,20));}};
+ const input=(el,value)=>{if(el.type==='checkbox')el.checked=value;else el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));};
+ try{
+  const sample=createDocument(16,16,'normal-test');for(let y=2;y<14;y++)for(let x=2;x<14;x++)sample.frames[0].cels[0][y*16+x]=((x<8?0xdc5a28:0x6e5a28)*256+(x===2?128:255))>>>0;
+  replaceDocument(sample,true);const original=JSON.stringify(documentState());
+  await waitFor(()=>document.querySelector('[data-menu-command="normal-map"]')?.disabled===false);
+  check('导出子菜单省略重复动作文案',document.querySelector('[data-menu-command="normal-map"]').textContent==='法线贴图…');
+  document.querySelector('[data-top-menu="文件"]').click();
+  const exportButton=[...document.querySelectorAll('.app-menu > button')].find(el=>el.textContent==='导出');exportButton.click();
+  document.querySelector('[data-menu-command="normal-map"]').click();
+  await waitFor(()=>$('modal').open);
+  check('导出菜单打开专用弹窗',$('modal-title').textContent==='导出法线贴图');
+  check('顶部预览与折叠高级设置',$('modal-content').firstElementChild===$('normal-preview-pair')&&$('normal-preview-pair').firstElementChild===$('image-import-preview')&&!$('normal-map-advanced').open);
+  check('法线占位包含耐心提示和不定进度条',$('import-preview-loading').textContent.includes('请耐心等待')&&!$('import-preview-progress').hasAttribute('value'));
+  check('处理中使用占位并禁用确认',$('modal-submit').disabled&&!$('import-preview-loading').hidden&&$('sheet-import-preview').hidden);
+  applyLocale('en');await new Promise(requestAnimationFrame);check('等待提示及进度条支持英文',!/[\u3400-\u9fff]/.test($('import-preview-loading').textContent)&&$('import-preview-progress').getAttribute('aria-label')==='Image processing progress');applyLocale('zh');
+  $('modal-form').requestSubmit($('modal-submit'));check('处理中无法提交',$('modal').open);
+  await waitFor(()=>!$('modal-submit').disabled);
+  await new Promise(requestAnimationFrame);
+  const canvas=$('sheet-import-preview'),area=$('image-import-preview').getBoundingClientRect(),zoom=$('import-preview-zoom'),initial=canvas.toDataURL(),initialZoom=zoom.textContent;
+  check('左右预览铺满弹窗宽度',$('normal-preview-pair').clientWidth>$('modal').clientWidth*.85&&area.height>=220);
+  await waitFor(()=>!$('normal-light-marker').hidden);
+  const light=$('normal-light-canvas'),lightArea=light.getBoundingClientRect(),beforeLight=light.toDataURL(),lightMarker=$('normal-light-marker');
+  check('小图右侧显示实时光照预览',lightArea.left>=area.right&&light.width>0&&!lightMarker.hidden);
+  const originalWorker=window.Worker;let lightWorkers=0;window.Worker=class extends originalWorker{constructor(...args){super(...args);lightWorkers++;}};
+  const lightCapture=light.setPointerCapture;light.setPointerCapture=()=>{};
+  light.dispatchEvent(new PointerEvent('pointerdown',{button:0,pointerId:93,clientX:lightArea.left+30,clientY:lightArea.top+30,bubbles:true,cancelable:true}));
+  light.dispatchEvent(new PointerEvent('pointermove',{pointerId:93,clientX:lightArea.right-40,clientY:lightArea.bottom-40,bubbles:true}));light.dispatchEvent(new PointerEvent('pointerup',{pointerId:93,bubbles:true}));light.setPointerCapture=lightCapture;
+  await new Promise(requestAnimationFrame);window.Worker=originalWorker;
+  check('拖动光源更新光照且不重新生成法线',light.toDataURL()!==beforeLight&&lightWorkers===0&&canvas.toDataURL()===initial);
+  const markerX=lightMarker.style.left;light.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true,cancelable:true}));await new Promise(requestAnimationFrame);check('方向键移动光源',lightMarker.style.left!==markerX);
+  canvas.dispatchEvent(new WheelEvent('wheel',{deltaY:-200,clientX:area.left+area.width/2,clientY:area.top+area.height/2,bubbles:true,cancelable:true}));check('滚轮缩放',zoom.textContent!==initialZoom&&canvas.toDataURL()!==initial);
+  const capture=canvas.setPointerCapture;canvas.setPointerCapture=()=>{};const zoomed=canvas.toDataURL();
+  canvas.dispatchEvent(new PointerEvent('pointerdown',{button:1,pointerId:91,clientX:100,clientY:100,bubbles:true,cancelable:true}));canvas.dispatchEvent(new PointerEvent('pointermove',{pointerId:91,clientX:140,clientY:125,bubbles:true}));canvas.dispatchEvent(new PointerEvent('pointerup',{button:1,pointerId:91,bubbles:true}));canvas.setPointerCapture=capture;
+  check('中键平移',canvas.toDataURL()!==zoomed);$('import-preview-fit').click();check('适应内容',zoom.textContent===initialZoom&&canvas.toDataURL()===initial);
+  $('normal-map-advanced').open=true;let form=$('modal-form');input(form.elements.preset,'character');check('预设更新高级参数',+form.elements.shapeStrength.value===65&&+form.elements.smoothing.value===2);
+  check('自动模式角度与方向盘只读',form.elements.paintedLightAngle.disabled&&$('normal-angle-guide').querySelector('svg').getAttribute('aria-disabled')==='true');
+  input(form.elements.normalStrength,0);input(form.elements.normalStrength,200);input(form.elements.invertY,true);check('快速修改参数重新锁定确认',$('modal-submit').disabled&&$('normal-light-marker').hidden);await waitFor(()=>!$('modal-submit').disabled);
+  input(form.elements.smoothing,7);check('无效参数清空预览并禁止导出',$('modal-submit').disabled&&!!$('modal-error').textContent);input(form.elements.smoothing,2);await waitFor(()=>!$('modal-submit').disabled);
+  $('modal').close('cancel');await new Promise(r=>setTimeout(r,30));check('取消不改项目',JSON.stringify(documentState())===original);
+  let pending=exportDialog();form=$('modal-form');form.elements.mode.value='normal-map';form.elements.mode.dispatchEvent(new Event('change'));await waitFor(()=>!!$('normal-map-advanced'));
+  check('导出内容下拉打开法线弹窗',$('modal-title').textContent==='导出法线贴图');form=$('modal-form');input(form.elements.autoLight,false);input(form.elements.paintedLightInfluence,0);input(form.elements.invertY,true);await waitFor(()=>!$('modal-submit').disabled);
+  const expectedSource=document.createElement('canvas');expectedSource.width=16;expectedSource.height=16;const context=expectedSource.getContext('2d'),rgba=new Uint8ClampedArray(16*16*4);
+  for(let y=2;y<14;y++)for(let x=2;x<14;x++)rgba.set([x<8?220:110,90,40,x===2?128:255],(y*16+x)*4);
+  context.putImageData(new ImageData(rgba,16,16),0,0);
+  // Read through Canvas too: premultiplied-alpha storage may round partial-alpha RGB.
+  const expected=generateNormalMap(context.getImageData(0,0,16,16),{invertY:true,paintedLightInfluence:0});context.putImageData(new ImageData(expected.data,16,16),0,0);const expectedPng=expectedSource.toDataURL().split(',')[1];
+  form.requestSubmit($('modal-submit'));await pending;
+  check('确认导出且不修改源图',$('status').textContent==='法线贴图已导出'&&JSON.stringify(documentState())===original);
+  pending=actions['normal-map']();$('modal').close('cancel');await pending;check('计算中取消后清理控件',!$('modal').open&&!$('modal-submit').disabled&&$('normal-light-marker').hidden&&$('import-preview-loading').hidden&&$('image-import-preview').getAttribute('aria-busy')==='false');
+  const WorkerClass=window.Worker;window.Worker=class{postMessage(){queueMicrotask(()=>this.onmessage({data:{error:'normal-map-test-failure'}}));}terminate(){}};
+  pending=actions['normal-map']();await waitFor(()=>$('error-dialog').open);window.Worker=WorkerClass;
+  check('计算错误提示并禁止确认',$('modal-submit').disabled&&$('error-detail').textContent.includes('normal-map-test-failure')&&$('import-preview-loading').hidden);$('error-dialog').close();
+  input($('modal-form').elements.normalStrength,120);await waitFor(()=>!$('modal-submit').disabled);check('错误后调整参数可重试',!$('error-dialog').open);$('modal').close('cancel');await pending;
+  documentState().name='cancel-save';pending=actions['normal-map']();await waitFor(()=>!$('modal-submit').disabled);$('modal-form').requestSubmit($('modal-submit'));await pending;
+  check('取消保存路径返回取消状态',$('status').textContent==='已取消导出');documentState().name='normal-test';
+  const large=createDocument(257,256,'large-normal');for(let y=90;y<165;y++)for(let x=90;x<165;x++)large.frames[0].cels[0][y*257+x]=0xb45a28ff;
+  replaceDocument(large,true);pending=actions['normal-map']();
+  check('超过旧限制的大图创建实时光照画布',!!$('normal-light-canvas')&&!$('normal-light-preview').textContent.includes('65,536'));
+  await waitFor(()=>!$('modal-submit').disabled&&!$('normal-light-marker').hidden);await new Promise(requestAnimationFrame);
+  const largeCanvas=$('normal-light-canvas'),beforeLarge=largeCanvas.toDataURL();largeCanvas.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',shiftKey:true,bubbles:true,cancelable:true}));await new Promise(requestAnimationFrame);
+  check('大图可移动光源并实际重绘',largeCanvas.toDataURL()!==beforeLarge&&!$('modal-submit').disabled);$('modal').close('cancel');await pending;
+  const estimatedDoc=createDocument(64,64,'estimated-angle-test'),radians=135*Math.PI/180;
+  for(let y=0;y<64;y++)for(let x=0;x<64;x++){const dx=(x-31.5)/27,dy=(y-31.5)/27;if(dx*dx+dy*dy<1){const v=Math.round(140+90*(dx*Math.cos(radians)-dy*Math.sin(radians)));estimatedDoc.frames[0].cels[0][y*64+x]=((v<<24)|(v<<16)|(v<<8)|255)>>>0;}}
+  replaceDocument(estimatedDoc,true);void actions['normal-map']();await waitFor(()=>!$('modal-submit').disabled&&!$('normal-light-marker').hidden);
+  applyLocale('en');await new Promise(requestAnimationFrame);check('英文标题参数与操作翻译',$('modal-title').textContent==='Export normal map'&&$('modal-submit').textContent.includes('Export PNG')&&$('normal-map-advanced').textContent.includes('Shape strength'));check('角度参考说明支持英文',!/[\u3400-\u9fff]/.test($('normal-angle-guide').textContent));check('实时光照预览操作支持英文',$('normal-light-preview').textContent.includes('Lighting preview')&&$('normal-light-canvas').getAttribute('aria-label')==='Drag the light or use arrow keys to move it');check('英文导出子菜单同步简化',document.querySelector('[data-menu-command="normal-map"]').textContent==='Normal map…');applyLocale('zh');await new Promise(requestAnimationFrame);check('切回中文恢复简化菜单',document.querySelector('[data-menu-command="normal-map"]').textContent==='法线贴图…');$('normal-map-advanced').open=true;await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);
+  checkFormLayout($('modal-content'),check,'法线贴图');
+  form=$('modal-form');const row=form.elements.autoLight.closest('.repair-option-row');
+  check('自动估光开关与角度单独一行',!!row&&row.children.length===2&&row.firstElementChild.contains(form.elements.autoLight)&&row.lastElementChild.contains(form.elements.paintedLightAngle));
+  check('自动估光仍控制角度输入',form.elements.paintedLightAngle.disabled===form.elements.autoLight.checked);
+  input(form.elements.autoLight,false);input(form.elements.paintedLightAngle,90);await waitFor(()=>!$('modal-submit').disabled&&!$('normal-light-marker').hidden&&$('import-preview-loading').hidden);await new Promise(requestAnimationFrame);
+  check('手动角度更新后预览实际完成',!$('sheet-import-preview').hidden&&!$('normal-light-marker').hidden);
+  check('手动90度参考箭头指向下方',!$('normal-angle-vector').hasAttribute('hidden')&&+$('normal-angle-vector').getAttribute('x2')===60&&+$('normal-angle-vector').getAttribute('y2')===96&&$('normal-angle-readout').textContent.includes('90°'));
+  check('界面已去掉仅作参考文字',!$('normal-angle-guide').textContent.includes('仅作参考'));
+  check('角度参考只存在界面且导出源画布不包含参考',!!$('normal-angle-guide').querySelector('svg')&&!$('normal-angle-guide').querySelector('canvas'));
+  input(form.elements.paintedLightAngle,0);await waitFor(()=>!$('modal-submit').disabled&&!$('normal-light-marker').hidden&&$('import-preview-loading').hidden);const zeroAnglePreview=$('sheet-import-preview').toDataURL();
+  input(form.elements.paintedLightAngle,180);await waitFor(()=>!$('modal-submit').disabled&&!$('normal-light-marker').hidden&&$('import-preview-loading').hidden);check('修改手动角度会实际改变法线生成预览',$('sheet-import-preview').toDataURL()!==zeroAnglePreview);
+  const dial=$('normal-angle-guide').querySelector('svg'),bounds=dial.getBoundingClientRect(),dialCapture=dial.setPointerCapture;dial.setPointerCapture=()=>{};
+  dial.dispatchEvent(new PointerEvent('pointerdown',{button:0,pointerId:125,clientX:bounds.left+bounds.width*.85,clientY:bounds.top+bounds.height*.5,bubbles:true,cancelable:true}));
+  check('点击角度盘反向更新输入为0度',+form.elements.paintedLightAngle.value===0);
+  dial.dispatchEvent(new PointerEvent('pointermove',{pointerId:125,clientX:bounds.left+bounds.width*.5,clientY:bounds.top+bounds.height*.85,bubbles:true}));
+  dial.dispatchEvent(new PointerEvent('pointerup',{pointerId:125,bubbles:true}));dial.setPointerCapture=dialCapture;
+  check('拖动角度盘反向更新输入为90度',+form.elements.paintedLightAngle.value===90);
+  dial.dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true,cancelable:true}));check('角度盘键盘更新输入为359度',+form.elements.paintedLightAngle.value===359);
+  input(form.elements.autoLight,true);await waitFor(()=>!$('modal-submit').disabled&&!$('normal-light-marker').hidden&&$('import-preview-loading').hidden);
+  check('自动估计实际角度同时显示在输入与方向盘',+form.elements.paintedLightAngle.value===135&&+dial.getAttribute('aria-valuenow')===135&&$('normal-angle-readout').textContent.includes('135°')&&!$('normal-angle-vector').hasAttribute('hidden'));
+  dial.dispatchEvent(new KeyboardEvent('keydown',{key:'Home',bubbles:true,cancelable:true}));dial.dispatchEvent(new PointerEvent('pointerdown',{button:0,pointerId:126,clientX:bounds.right,clientY:bounds.top+bounds.height/2,bubbles:true}));
+  check('自动模式输入和方向盘均不可编辑',form.elements.paintedLightAngle.disabled&&dial.getAttribute('aria-disabled')==='true'&&+form.elements.paintedLightAngle.value===135);
+  const guide=$('normal-angle-guide').getBoundingClientRect(),controls=$('normal-angle-guide').previousElementSibling.getBoundingClientRect();
+  check('角度盘位于光照与输出分组右侧',$('normal-angle-guide').closest('fieldset').querySelector('legend').textContent==='光照与输出'&&guide.left>=controls.right&&guide.top<controls.bottom);
+  const BurstWorker=window.Worker;let burstWorkers=0;window.Worker=class extends BurstWorker{constructor(...args){super(...args);burstWorkers++;}};
+  try{
+   const strength=+form.elements.normalStrength.value;input(form.elements.normalStrength,strength+1);input(form.elements.normalStrength,strength+2);input(form.elements.normalStrength,strength);
+   check('法线连续调整显示参数等待状态',$('import-preview-stage').textContent.includes('等待参数稳定'));
+   await new Promise(resolve=>setTimeout(resolve,100));check('法线参数未稳定时不启动后台生成',burstWorkers===0);
+   await waitFor(()=>!$('modal-submit').disabled&&!$('normal-light-marker').hidden&&$('import-preview-loading').hidden);
+   check('法线连续参数只生成最后一次',burstWorkers===1&&$('image-import-preview').getAttribute('aria-busy')==='false');
+  }finally{window.Worker=BurstWorker;}
+  const lightingCanvas=$('normal-light-canvas');check('展开高级设置后光照画布保持比例',Math.abs(lightingCanvas.width/lightingCanvas.height-lightingCanvas.clientWidth/lightingCanvas.clientHeight)<.01);
+  $('modal-content').scrollTop=$('modal-content').scrollHeight;await new Promise(requestAnimationFrame);
+  return{ok:true,results,expectedPng};
+ }catch(error){return{ok:false,results,error:error.stack};}
+}

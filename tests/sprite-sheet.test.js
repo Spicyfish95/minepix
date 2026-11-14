@@ -1,0 +1,14 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {createRequire} from 'node:module';
+import {sheetLayout,sheetImportPlan} from '../src/formats/sprite-sheet.js';
+import {sheetMetadata} from '../src/timeline-commands.js';
+import {createDocument} from '../src/model.js';
+test('布局将边距和双轴间距一并缩放，保留非满行',()=>{const p=sheetLayout(3,2,5,{columns:3,scale:2,margin:1,gapX:2,gapY:3});assert.deepEqual([p.width,p.height],[30,18]);assert.deepEqual(p.rects[4],{x:12,y:12,w:6,h:4});});
+test('逐列布局和导入坐标一致，并限定尾部空位',()=>{const p=sheetLayout(3,2,5,{columns:3,margin:1,gapX:2,gapY:3,order:'columns'});const q=sheetImportPlan(p.width,p.height,{width:3,height:2,margin:1,gapX:2,gapY:3,count:5,order:'columns'});assert.deepEqual(q.rects,p.rects);assert.deepEqual(q.rects[2],{x:6,y:1,w:3,h:2});});
+test('导入偏移、尾边忽略与默认时长',()=>{const p=sheetImportPlan(18,13,{width:3,height:2,offsetX:2,offsetY:1,margin:1,gapX:2,gapY:3,count:3,duration:75});assert.deepEqual(p.rects[0],{x:3,y:2,w:3,h:2});assert.equal(p.rects.length,3);assert.equal(p.duration,75);});
+test('越界、非整数、超量及无可用切片拒绝',()=>{assert.throws(()=>sheetLayout(512,512,256,{columns:16,scale:8}));assert.throws(()=>sheetLayout(2,2,2,{gapX:-1}));assert.throws(()=>sheetImportPlan(10,10,{width:2.5,height:2}));assert.throws(()=>sheetImportPlan(10,10,{width:2,height:2,count:26}));assert.throws(()=>sheetImportPlan(10,10,{width:2,height:2,offsetX:10}));assert.throws(()=>sheetImportPlan(512,512,{width:1,height:1}));});
+test('JSON 使用同一布局且保留源索引、时长与标签',()=>{const doc=createDocument(3,2,'scene');doc.frames.push({duration:75,cels:[[0,0,0,0,0,0]]});doc.tags=[{id:'walk',name:'Walk',color:'#112233',from:0,to:1,direction:'reverse'}];const m=sheetMetadata(doc,[1,0],1,2,{margin:1,gapY:3});assert.deepEqual(m.size,{w:10,h:18});assert.deepEqual(m.frames[1].frame,{x:2,y:12,w:6,h:4});assert.equal(m.frames[0].duration,75);assert.equal(m.tags[0].direction,'reverse');});

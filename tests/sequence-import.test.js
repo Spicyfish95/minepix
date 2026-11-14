@@ -1,0 +1,13 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {createRequire} from 'node:module';
+import {sequencePlan} from '../src/formats/png-sequence.js';
+const require=createRequire(import.meta.url);
+const source={width:4,height:4,name:'walk',files:['walk10.png','walk2.png','walk1.png'].map(name=>({name,data:''}))};
+const manifest=()=>({format:'pixel-studio-png-sequence',version:1,width:4,height:4,frames:[{file:'b.png',duration:40},{file:'a.png',duration:75}],tags:[{id:'walk',name:'Walk',color:'#112233',from:0,to:1,direction:'reverse'}]});
+test('自然排序、选择顺序与自然倒序不修改输入',()=>{assert.deepEqual(sequencePlan(source).frames.map(f=>f.name),['walk1.png','walk2.png','walk10.png']);assert.equal(sequencePlan(source,{order:'selected'}).frames[0].name,'walk10.png');assert.equal(sequencePlan(source,{order:'reverse'}).frames[0].name,'walk10.png');assert.equal(source.files[0].name,'walk10.png');});
+test('清单顺序、时长、标签独立恢复及默认时长覆盖',()=>{const m=manifest(),s={...source,files:m.frames.map(f=>({name:f.file})),manifest:m};const plan=sequencePlan(s,{order:'reverse'});assert.deepEqual(plan.frames.map(f=>f.duration),[40,75]);assert.equal(plan.frames[0].name,'b.png');plan.tags[0].name='Changed';assert.equal(m.tags[0].name,'Walk');const override=sequencePlan(s,{useTiming:false,useTags:false,duration:125});assert.deepEqual(override.frames.map(f=>f.duration),[125,125]);assert.deepEqual(override.tags,[]);});
+test('默认时长、容量与标签范围遵守项目限制',()=>{assert.throws(()=>sequencePlan(source,{duration:10}));assert.throws(()=>sequencePlan({...source,width:33554433}));const m=manifest();m.tags[0].to=2;assert.throws(()=>sequencePlan({...source,files:source.files.slice(0,2),manifest:m}));});

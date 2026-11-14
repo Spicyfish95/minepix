@@ -1,0 +1,13 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createDocument,selectionContains} from '../src/model.js';
+import {tiledPoint,tiledCopies,insideTiledCanvas} from '../src/tiled-mode.js';
+import {stampBrush,paintFill} from '../src/brush-engine.js';
+import {shapeSelection,wandSelection} from '../src/selection-mask.js';
+import {blurAt} from '../src/blur-tool.js';
+import {paintGradient} from '../src/gradient.js';
+test('横纵双向映射与三乘三副本范围',()=>{const d=createDocument(4,3);assert.deepEqual(tiledPoint(d,-1,3,'x'),{x:3,y:3});assert.deepEqual(tiledPoint(d,-1,3,'both'),{x:3,y:0});assert.deepEqual([tiledCopies('none').length,tiledCopies('x').length,tiledCopies('y').length,tiledCopies('both').length],[1,3,3,9]);assert.ok(insideTiledCanvas(d,{x:-4,y:5},'both'));assert.ok(!insideTiledCanvas(d,{x:-5,y:5},'both'));});
+test('大笔刷跨接缝、对称与选区使用原图坐标',()=>{const d=createDocument(4,3),p=d.frames[0].cels[0],options={size:3,tiledMode:'both',ink:'copy'};stampBrush(d,p,0,0,0xff0000ff,options);assert.equal(p[11],0xff0000ff);p.fill(0);stampBrush(d,p,4,0,0xff0000ff,options,{x:3,y:0,w:1,h:3});assert.equal(p[3],0xff0000ff);assert.equal(p[0],0);});
+test('填充与魔棒跨边连通，未开启轴不连通',()=>{const d=createDocument(4,1),p=[1,2,2,1];paintFill(d,p,4,0,3,{base:p.slice(),ink:'copy',opacity:1,tiledMode:'x'});assert.deepEqual(p,[3,2,2,3]);const selection=wandSelection(d,[1,2,2,1],-1,0,0,'x');assert.ok(selectionContains(selection,0,0)&&selectionContains(selection,3,0));});
+test('跨接缝矩形折叠到原图选区，模糊采样相邻副本',()=>{const d=createDocument(4,3),s=shapeSelection(d,'rect',[{x:3,y:1},{x:4,y:1}],'x');assert.ok(selectionContains(s,0,1)&&selectionContains(s,3,1));assert.ok(!selectionContains(s,1,1));const p=d.frames[0].cels[0];p[7]=0xffffffff;blurAt(d,p,0,1,[{x:0,y:0}],null,'x');assert.ok(p[4]);});
+test('渐变在副本拖动与主图同一区间一致',()=>{const d=createDocument(4,2),a=Array(8).fill(0),b=a.slice();paintGradient(d,a,{x:4,y:0},{x:5,y:0},0xff0000ff,0x0000ffff,{tiledMode:'x'});paintGradient(d,b,{x:0,y:0},{x:1,y:0},0xff0000ff,0x0000ffff,{tiledMode:'x'});assert.deepEqual(a,b);});

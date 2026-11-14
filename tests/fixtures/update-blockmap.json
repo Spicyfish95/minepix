@@ -1,0 +1,58 @@
+{
+  "seed": 3134984190,
+  "length": 65536,
+  "map": {
+    "format": "minepix-blockmap-v1",
+    "version": "2.0.0-alpha.2",
+    "url": "https://example.test/setup.exe",
+    "size": 65536,
+    "sha256": "c5173dc0b3c6f880f41df3360eda181a6be327d97997dac69ebe2f99588eb652",
+    "chunks": [
+      {
+        "offset": 0,
+        "size": 27741,
+        "sha256": "ae95c619eb74d29f81a190fd944b1d00d165fdedb820c147642a18c59c0dc2bf"
+      },
+      {
+        "offset": 27741,
+        "size": 3116,
+        "sha256": "587e4d9f32f122334ea7741dc7fc5261cd9ce5166de4526b3838eeb07f9af68b"
+      },
+      {
+        "offset": 30857,
+        "size": 2960,
+        "sha256": "2a3c2746b160c34d6c4b1d32f2ac848260562eee5753661940dec53599a38276"
+      },
+      {
+        "offset": 33817,
+        "size": 6585,
+        "sha256": "e8b44e479390c164a3fcd0a8dfcf2e1a00f1411b96e9355d3d3890d44a25f34e"
+      },
+      {
+        "offset": 40402,
+        "size": 3020,
+        "sha256": "3bf35da8627bfce3df5a29d36ef1381ab6c3ddd850717db2cb47680b893984a3"
+      },
+      {
+        "offset": 43422,
+        "size": 4045,
+        "sha256": "f76d8741d15e46e6d8e97997c5fdc64f480867aabe799000d2c972f4c2842bed"
+      },
+      {
+        "offset": 47467,
+        "size": 5914,
+        "sha256": "f7779e64ad3a9d10d793372d7280a28daad2c7b8e89932b2f306798191a0ede6"
+      },
+      {
+        "offset": 53381,
+        "size": 2177,
+        "sha256": "1144cd891dfcd060da10a1ec4180c7a9ba1ec28ae897d31efb068a92cea54927"
+      },
+      {
+        "offset": 55558,
+        "size": 9978,
+        "sha256": "9329c5db8f055136559315c4ab2c614b2ca16e8bbbfb9180843dee6a7ec67c88"
+      }
+    ]
+  }
+}

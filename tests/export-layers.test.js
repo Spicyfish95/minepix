@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createDocument,addLayer,addFrame,composite,colorValue} from '../src/model.js';
+import {exportLayerPlan} from '../src/export-layers.js';
+import {pickExportOptions} from '../src/export-settings.js';
+function fixture(){const doc=createDocument(1,1);doc.frames[0].cels[0][0]=colorValue('#ff0000');addLayer(doc,0);doc.layers[1].opacity=50;doc.layers[1].locked=true;doc.frames[0].cels[1][0]=colorValue('#0000ff');addLayer(doc,1);doc.layers[2].visible=false;doc.frames[0].cels[2][0]=colorValue('#00ff00');return doc;}
+test('可见图层范围保持原始 RGBA 合成，不改变文档',()=>{const doc=fixture(),before=structuredClone(doc),plan=exportLayerPlan(doc);assert.deepEqual(plan.indices,[0,1]);assert.deepEqual(composite(plan.document,0),composite(doc,0));assert.deepEqual(doc,before);});
+test('当前隐藏图层可导出，保留不透明度与只读锁定',()=>{const doc=fixture(),hidden=exportLayerPlan(doc,'current',2);assert.deepEqual([...composite(hidden.document,0)],[0,255,0,255]);const locked=exportLayerPlan(doc,'current',1);assert.deepEqual([...composite(locked.document,0)],[0,0,255,128]);assert.equal(doc.layers[2].visible,false);assert.equal(doc.layers[1].locked,true);});
+test('自定义选择去重并保持层序，覆盖关系独立于选择顺序',()=>{const doc=fixture(),plan=exportLayerPlan(doc,'custom',0,[2,0,2]);assert.deepEqual(plan.indices,[0,2]);assert.deepEqual([...composite(plan.document,0)],[0,255,0,255]);assert.deepEqual(plan.sourceLayers.map(l=>l.sourceIndex),[0,2]);assert.equal(plan.sourceLayers[1].visible,false);});
+test('跨帧共享范围并保留逐帧内容与半透明合成',()=>{const doc=fixture();addFrame(doc,0,true);doc.frames[1].cels[2][0]=colorValue('#ffffff80');const plan=exportLayerPlan(doc,'custom',0,[2]);assert.deepEqual([...composite(plan.document,0)],[0,255,0,255]);assert.deepEqual([...composite(plan.document,1)],[255,255,255,128]);assert.equal(doc.frames[0].cels[2][0],colorValue('#00ff00'));});
+test('空选择、全部隐藏和失效索引明确拒绝',()=>{const doc=fixture();assert.throws(()=>exportLayerPlan(doc,'custom',0,[]),/至少/);assert.throws(()=>exportLayerPlan(doc,'current',3),/不存在/);doc.layers.forEach(l=>l.visible=false);assert.throws(()=>exportLayerPlan(doc),/可见/);assert.deepEqual(exportLayerPlan(doc,'current',1).indices,[1]);});
+test('设置与预设不携带项目特定的图层范围',()=>{const values={mode:'sheet-pair',scale:1,layerScope:'custom',sourceLayers:[2],layers:[2]};const options=pickExportOptions(values);assert.ok(!('layerScope'in options));assert.ok(!('sourceLayers'in options));assert.ok(!('layers'in options));});

@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {readFile,writeFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+const source=await readFile('src-tauri/target/release/minepix-tauri.exe');
+const installed=await readFile('../minepix-tauri-validation/installed/minepix-tauri.exe');
+const marker=Buffer.from('__TAURI_BUNDLE_TYPE_VAR_UNK');
+const offset=source.indexOf(marker);
+assert.ok(offset>=0&&source.indexOf(marker,offset+1)===-1,'Expected a single Tauri bundle marker');
+const expected=Buffer.from(source);
+expected.write('NSS',offset+marker.length-3,'ascii');
+assert.ok(expected.equals(installed),'Installed binary differs beyond the documented Tauri NSIS marker');
+const report={ok:true,marker:'UNK -> NSS',markerOffset:offset,bytes:installed.length,installedSha256:createHash('sha256').update(installed).digest('hex')};
+await writeFile('artifacts/release/installed.json',JSON.stringify(report,null,2)+'\n');
+console.log(JSON.stringify(report,null,2));

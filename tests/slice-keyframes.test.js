@@ -1,0 +1,18 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {sliceAtFrame,setSliceKey,deleteSliceKey,validateSlices,remapSliceFrames} from '../src/slices.js';
+import {createDocument,validateDocument,addFrame} from '../src/model.js';
+import {duplicateFrames,deleteFrames,reverseFrames} from '../src/timeline-commands.js';
+import {spriteSize,reframe,flipSprite} from '../src/canvas-commands.js';
+import {atlasMetadata} from '../src/formats/atlas.js';
+import {sheetManifestPlan} from '../src/formats/sheet-manifest.js';
+import {readAseprite,writeAseprite} from './helpers/aseprite.js';
+const box=x=>({bounds:{x,y:1,w:2,h:2},pivot:{x:1,y:1},center:{x:0,y:0,w:1,h:1}});
+const sample=()=>{const d=createDocument(12,8);addFrame(d,0);addFrame(d,1);d.slices=[setSliceKey({id:'s',name:'slice',...box(1)},2,box(6))];return d;};
+const xs=d=>d.frames.map((_,f)=>sliceAtFrame(d.slices[0],f)?.bounds.x??null);
+test('关键帧保持到下一关键帧，删除及工程往返',()=>{const d=sample();assert.deepEqual(xs(d),[1,1,6]);const restored=validateDocument(JSON.parse(JSON.stringify(d)));assert.deepEqual(restored.slices,d.slices);assert.ok(restored.requiredFeatures.includes('slice-keyframes'));assert.equal(deleteSliceKey(d.slices[0],2).keys,undefined);const late=deleteSliceKey(d.slices[0],0);assert.equal(sliceAtFrame(late,1),null);assert.equal(sliceAtFrame(late,2).bounds.x,6);assert.equal(deleteSliceKey(late,2),null);});
+test('重复、逆序及越界关键帧拒绝',()=>{const d=sample(),s=d.slices[0];for(const keys of [[s.keys[0],s.keys[0]],[s.keys[1],s.keys[0]],[{...s.keys[1],frame:3}]])assert.throws(()=>validateSlices([{...s,keys}],12,8,3),/关键帧/);});
+test('帧插入复制删除和反转保留逐帧切片状态，包括尚未生效的帧',()=>{const d=sample();addFrame(d,0);assert.deepEqual(xs(d),[1,1,1,6]);duplicateFrames(d,new Set([3]),1);assert.deepEqual(xs(d),[1,6,1,1,6]);deleteFrames(d,new Set([0,2]));assert.deepEqual(xs(d),[6,1,6]);reverseFrames(d,new Set([0,1]));assert.deepEqual(xs(d),[1,6,6]);const late=deleteSliceKey(sample().slices[0],0),mapped=remapSliceFrames([late],[2,0,1,2])[0];assert.deepEqual([0,1,2,3].map(f=>sliceAtFrame(mapped,f)?.bounds.x??null),[6,null,null,6]);});
+test('所有关键帧同步缩放翻转，裁剪只隐藏越界区间',()=>{const d=sample();spriteSize(d,24,16);assert.deepEqual(xs(d),[2,2,12]);assert.equal(d.slices[0].keys[1].pivot.x,2);flipSprite(d,'x');assert.deepEqual(xs(d),[18,18,8]);reframe(d,{x:0,y:0,w:12,h:16});assert.deepEqual(xs(d),[null,null,8]);validateDocument(d);});
+test('导出所选帧重新映射关键帧并随缩放后的精灵表导入',()=>{const d=sample(),m=atlasMetadata(d,[2,0],{scale:2});const plan=sheetManifestPlan(m);assert.equal(sliceAtFrame(plan.slices[0],0).bounds.x,12);assert.equal(sliceAtFrame(plan.slices[0],1).bounds.x,2);});
+test('ASE 多关键帧和隐藏区间往返保留区域、pivot、九宫格',async()=>{const d=sample(),s=d.slices[0];d.slices=[setSliceKey(s,1,{bounds:{x:0,y:0,w:0,h:0}})];const encoded=await writeAseprite(d),{doc,warnings}=await readAseprite(encoded);assert.deepEqual(warnings,[]);assert.deepEqual(xs(doc),[1,null,6]);assert.deepEqual(sliceAtFrame(doc.slices[0],2),{...sliceAtFrame(s,2),id:doc.slices[0].id});});

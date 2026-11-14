@@ -1,0 +1,51 @@
+[package]
+name = "minepix-tauri"
+version = "2.0.0-alpha.1"
+description = "MinePix pixel editor Rust desktop backend"
+edition = "2024"
+license = "MIT"
+default-run = "minepix-tauri"
+
+[lib]
+name = "minepix_backend"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+base64 = "0.22"
+rfd = "0.15"
+flate2 = "1"
+crc32fast = "1"
+sha2 = "0.10"
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "stream"] }
+gif = "0.13"
+color_quant = "1"
+png = "0.17"
+tokio = { version = "1", features = ["sync", "time", "macros"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-notification = "=2.8.1"
+tauri-plugin-updater = { version = "2", default-features = false, features = ["native-tls"] }
+
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.39"
+windows = { version = "0.62", features = ["Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+
+[dev-dependencies]
+tempfile = "3"
+tauri = { version = "2", features = ["test"] }
+minisign-verify = "0.3"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
