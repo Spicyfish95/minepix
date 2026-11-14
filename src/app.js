@@ -76,7 +76,7 @@ import { clone, colorValue, createDocument, validateDocument, line, composite, a
 import {BOARD_MIN, boardItemPixels, addReference, removeReference, moveReference, resizeReference, reorderReference, resetReferencePosition, boardBounds} from './reference-board.js';
 import { iconMarkup, setButtonIcon, decorateInterface } from './icons.js';
 import { initTheme,setTheme,getTheme,setAppearance,getAppearance } from './theme.js';
-import {menuAvailability} from './menu-availability.js';
+import {menuAvailability,panelAvailable} from './menu-availability.js';
 import { TOOLS, TOOL_GROUPS, shortcut, isTextTarget, pointerMode, cursorStyle, constrainPoint } from './interaction.js';
 import { createWelcomeState } from './welcome.js';
 
@@ -150,6 +150,7 @@ let tilesetPanel=null;
 function syncTilesetPanel(){
   const visible=documentTabs.items.length>0&&doc.layers.some(isTileset);
   window.workspaceLayout?.setPanelVisible('tileset',visible,{auto:true});
+  if(!visible)window.workspaceLayout?.setPanelVisible('terrain-preview',false,{auto:true});
   if(visible)tilesetPanel?.render();
   syncCommandStates();
 }
@@ -163,7 +164,7 @@ async function toTilesetDialog(){
 // 命令可用性：替换颜色需要可编辑的像素层；图像大小在播放时不可用；网格设置始终可用。
 function commandStates(){
   const layer=doc.layers[li],canEdit=!playing&&!busy,canEditPixels=canEdit&&!isGroup(layer)&&!isReference(layer)&&!layerState(doc,li).locked&&layerState(doc,li).visible;
-  return {...menuAvailability({hasDocument:documentTabs.items.length>0,canEdit,canEditPixels,hasSelection:!!selection,hasPreviousSelection:!!previousSelection,hasCelRange:!!celRange,hasCelClipboard:!!celClipboard,hasClipboard:!!clipboard,hasClosed:closedDocuments.length>0,canUndo:history.undoStack.length>0,canRedo:history.redoStack.length>0,frameCount:doc.frames.length,frameIndex:fi,layerCount:doc.layers.length,layerIndex:li,hasTags:!!doc.tags?.length,hasSavedPath:!!filePath}),'delete-active-slice':documentTabs.items.length>0&&canEdit&&visibleSlices().some(slice=>slice.id===activeSliceId),'clear-slices':documentTabs.items.length>0&&canEdit&&doc.slices.length>0};
+  return {...menuAvailability({hasDocument:documentTabs.items.length>0,hasTileset:doc.layers.some(isTileset),canEdit,canEditPixels,hasSelection:!!selection,hasPreviousSelection:!!previousSelection,hasCelRange:!!celRange,hasCelClipboard:!!celClipboard,hasClipboard:!!clipboard,hasClosed:closedDocuments.length>0,canUndo:history.undoStack.length>0,canRedo:history.redoStack.length>0,frameCount:doc.frames.length,frameIndex:fi,layerCount:doc.layers.length,layerIndex:li,hasTags:!!doc.tags?.length,hasSavedPath:!!filePath}),'delete-active-slice':documentTabs.items.length>0&&canEdit&&visibleSlices().some(slice=>slice.id===activeSliceId),'clear-slices':documentTabs.items.length>0&&canEdit&&doc.slices.length>0};
 }
 // 合并按钮按当前图层类型切换文案与行为：像素层转为图集，图集层转回像素。
 function syncTilesetToggle(){
@@ -2681,7 +2682,7 @@ $('layer-continuous').onchange=()=>{const value=$('layer-continuous').checked;mu
 $('group-mode').onchange=()=>{const pass=$('group-mode').value==='pass';mutate(()=>{if(pass){doc.layers[li].passThrough=true;doc.layers[li].opacity=100;delete doc.layers[li].blendMode;}else delete doc.layers[li].passThrough;},'已切换图层组模式');};
 $('layer-blend').replaceChildren(...BLEND_MODES.map(([id,name])=>new Option(name,id)));$('palette-library').onchange=event=>{if(event.target.value)applyPaletteLibrary(event.target.value);else{paletteLibraryId='';syncRemapButton();}syncPaletteLibraryButtons();};
 $('layer-blend').onchange=()=>{const value=$('layer-blend').value;mutate(()=>{if(value==='normal')delete doc.layers[li].blendMode;else{doc.layers[li].blendMode=value;doc.requiredFeatures=[...new Set([...doc.requiredFeatures,'layer-blending'])];}},'已更改图层混合模式');};
-initI18n();initContextUI();renderPaletteLibrary();syncRemapButton();colorAdjustments=initColorAdjustments({onPreview:value=>{const index=paletteTargetIndex();if(index!==null)previewPaletteColor(index,value);else setColor(value);},onCommit:value=>{const index=paletteTargetIndex();if(index!==null)setPaletteColor(index,value);else setColor(value);}});uiAll('input[type=checkbox]').forEach(input=>input.setAttribute('role','switch'));window.chromeReady=initWindowChrome();void help.start();for(const key of ['grid','symmetry'])$(key).checked=!!JSON.parse(localStorage.getItem(APP_SETTINGS_KEY)||'{}')[key];$('selection-kind').addEventListener('change',()=>{syncToolSlots();syncContextUI();syncInteraction();});decorateInterface();initVisualWorkspace();initToolbarControls({getBrush:()=>({size:brush,...clone(brushSettings)}),applyBrush:applyBrushPreset});syncGridLabel();syncGridGuideLabel();initPaletteEditing();initPaletteSizeMenu();refreshKeymapLabels();initTheme();window.workspaceLayout=initWorkspaceLayout();initReferenceBoard();tilesetPanel=initTilesetPanel({panel:$('tileset-panel'),getDocument:()=>doc,mutate,message});updateBrushControls();syncTextControls();renderColors();$('theme-toggle').addEventListener('click',drawOverlay);setTool('pencil');enterEmptyState();fit();initFormLayout();
+initI18n();initContextUI();renderPaletteLibrary();syncRemapButton();colorAdjustments=initColorAdjustments({onPreview:value=>{const index=paletteTargetIndex();if(index!==null)previewPaletteColor(index,value);else setColor(value);},onCommit:value=>{const index=paletteTargetIndex();if(index!==null)setPaletteColor(index,value);else setColor(value);}});uiAll('input[type=checkbox]').forEach(input=>input.setAttribute('role','switch'));window.chromeReady=initWindowChrome();void help.start();for(const key of ['grid','symmetry'])$(key).checked=!!JSON.parse(localStorage.getItem(APP_SETTINGS_KEY)||'{}')[key];$('selection-kind').addEventListener('change',()=>{syncToolSlots();syncContextUI();syncInteraction();});decorateInterface();initVisualWorkspace();initToolbarControls({getBrush:()=>({size:brush,...clone(brushSettings)}),applyBrush:applyBrushPreset});syncGridLabel();syncGridGuideLabel();initPaletteEditing();initPaletteSizeMenu();refreshKeymapLabels();initTheme();window.workspaceLayout=initWorkspaceLayout({canShowPanel:id=>panelAvailable(id,{hasDocument:documentTabs.items.length>0,hasTileset:doc.layers.some(isTileset)})});initReferenceBoard();tilesetPanel=initTilesetPanel({panel:$('tileset-panel'),getDocument:()=>doc,mutate,message});updateBrushControls();syncTextControls();renderColors();$('theme-toggle').addEventListener('click',drawOverlay);setTool('pencil');enterEmptyState();fit();initFormLayout();
 async function recover(){
   if(!filePath)return message('请先打开项目');
   const copy=await window.desktop?.recoveryForPath(filePath);

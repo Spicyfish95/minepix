@@ -6,7 +6,7 @@ A Windows desktop editor for pixel art, frame-by-frame animation and game assets
 
 **Free and open source · Windows x64 · Chinese / English · Stable 2.0.0**
 
-[Download the Windows x64 installer](https://github.com/Spicyfish95/minepix/releases/download/minepix-v2.0.0/MinePix.Tauri_2.0.0_x64-setup.exe)
+[Download the Windows x64 installer](https://github.com/Spicyfish95/minepix/releases/tag/minepix-v2.0.0)
 
 ![MinePix dark workspace with the pixel canvas, palette, preview, layers and a four-frame animation timeline](docs/images/workspace-en.png)
 
@@ -70,7 +70,7 @@ You can also open the [mushroom example](examples/mushroom.pix). See the [user g
 
 Keep copies of important artwork. Automatic checks default to off. Use Help → Check for updates, or enable startup checks in Help → About. After downloading, choose Restart and update and follow the prompts for unsaved projects.
 
-For manual downloads, choose `MinePix.Tauri_<version>_x64-setup.exe` from the matching `minepix-v<version>` release. The `.sig` file is used by the updater. The `tauri-latest` release hosts the update channel manifest.
+For manual downloads, choose `MinePix_<version>_x64-setup.exe` from the matching `minepix-v<version>` release. The `.sig` file is used by the updater. The `tauri-latest` release hosts the update channel manifest.
 
 ## Development
 

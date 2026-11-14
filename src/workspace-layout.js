@@ -19,8 +19,8 @@ export function readLayout(){
   // 核心栏目缺失时补回默认栏位而不是整份丢弃，保留用户其余落位与尺寸。
   let repaired=false;
   for(const id of CORE)if(!ids.includes(id)){ids.push(id);state.slots[homes[id]].push(id);if(!state.active[homes[id]])state.active[homes[id]]=id;repaired=true;}
-  // 补回时间轴时一并展开下方栏位，否则栏目虽然回来仍是折叠状态，看起来像没修好。
-  if(repaired&&state.slots.bottom.length)state.collapsed=false;
+  // 修复缺失栏目不改变用户保存的折叠状态；未保存状态时沿用默认折叠。
+  state.collapsed=typeof state.collapsed==='boolean'?state.collapsed:true;
   // 接受包含参考、图集与独立地形预览的存档；图集与地形栏的显隐由编辑器按需管理。
   // 旧存档只有五个面板：补回参考栏，保留用户原有落位与尺寸。
   if(ids.length===5){state.slots[homes.reference].push('reference');ids.push('reference');repaired=true;}
@@ -29,7 +29,7 @@ export function readLayout(){
   return state;
  }catch{return emptyState();}
 }
-export function initWorkspaceLayout(){
+export function initWorkspaceLayout({canShowPanel=()=>true}={}){
  const root=document.createElement('div');root.id='dock-layout';const center=document.createElement('div');center.className='dock-center';const workspace=document.querySelector('.workspace');center.append(workspace);
  const main=document.querySelector('main'),timeline=document.querySelector('.timeline'),palette=document.querySelector('.palette-panel'),tools=document.getElementById('tools'),right=document.querySelector('.right-panel'),preview=document.createElement('section'),layers=document.createElement('section');
  preview.className='preview-panel';for(let i=0;i<3;i++)preview.append(right.firstElementChild);layers.className='layers-panel';layers.append(...right.children);
@@ -42,6 +42,8 @@ export function initWorkspaceLayout(){
  const save=()=>localStorage.setItem(LAYOUT_KEY,JSON.stringify(state));
  // 用户显式隐藏过的栏目记在这里：图集栏位的自动同步不能把它重新打开。
  const userHidden=new Set();
+ for(const ids of Object.values(state.slots))for(let i=ids.length-1;i>=0;i--)if(!canShowPanel(ids[i]))ids.splice(i,1);
+ for(const id of Object.keys(state.floating))if(!canShowPanel(id))delete state.floating[id];
  const triggerPopupMove=(node,target)=>{for(const trigger of node.querySelectorAll('[popovertarget],[data-popup-target]')){const popup=uiGet(trigger.getAttribute('popovertarget')||trigger.dataset.popupTarget);if(popup){if(popup.matches(':popover-open'))popup.hidePopover();target.body.append(popup);}}};
  const transfer=(id,target)=>{if(panels[id].parentElement===target)return;triggerPopupMove(panels[id],target.ownerDocument);target.append(panels[id]);window.dispatchEvent(new CustomEvent('panel-moved',{detail:{id}}));};
  function applySizes(){
@@ -65,7 +67,7 @@ export function initWorkspaceLayout(){
  }
  window.addEventListener('resize',()=>applySizes());
  function removeFromSlot(id){for(const ids of Object.values(state.slots)){const index=ids.indexOf(id);if(index>=0)ids.splice(index,1);}}
- function dock(id,name,beforeId=null,after=false){const floating=floats.get(id);userHidden.delete(id);removeFromSlot(id);delete state.floating[id];const at=state.slots[name].indexOf(beforeId);state.slots[name].splice(at<0?state.slots[name].length:at+(after?1:0),0,id);state.active[name]=id;if(name==='bottom')state.collapsed=false;panels[id].hidden=false;render();save();if(floating){floating.returning=true;floating.child.close();floats.delete(id);}}
+ function dock(id,name,beforeId=null,after=false){if(!canShowPanel(id))return;const floating=floats.get(id);userHidden.delete(id);removeFromSlot(id);delete state.floating[id];const at=state.slots[name].indexOf(beforeId);state.slots[name].splice(at<0?state.slots[name].length:at+(after?1:0),0,id);state.active[name]=id;if(name==='bottom')state.collapsed=false;panels[id].hidden=false;render();save();if(floating){floating.returning=true;floating.child.close();floats.delete(id);}}
  function clearDrag(){root.classList.remove('dragging-panels');for(const slot of Object.values(slots))slot.classList.remove('drop-ready','drop-hover');for(const tab of root.querySelectorAll('[data-drop]'))delete tab.dataset.drop;applySizes();}
  function startDrag(event,id){
   const pending=drag={id,accepted:false,cancelled:false};event.dataTransfer.setData(dragType,id);event.dataTransfer.setData('text/plain','pixel-panel:'+id);event.dataTransfer.effectAllowed='move';
@@ -75,7 +77,7 @@ export function initWorkspaceLayout(){
  function finishDrag(event,id){const pending=drag;drag=null;clearDrag();if(pending?.id!==id||pending.accepted||pending.cancelled)return;const target=event.target.ownerDocument===document?document.elementFromPoint(event.clientX,event.clientY)?.closest('[data-slot]'):null;if(target){if(!state.slots[target.dataset.slot].includes(id))dock(id,target.dataset.slot);}else void detach(id);}
  function attachDrop(slot,name){slot.ondragover=event=>{if(!event.dataTransfer.types.includes(dragType))return;event.preventDefault();event.stopPropagation();event.dataTransfer.dropEffect='move';for(const other of Object.values(slots))other.classList.toggle('drop-hover',other===slot);for(const tab of root.querySelectorAll('[data-drop]'))delete tab.dataset.drop;const tab=event.target.closest('[data-panel-tab]');if(tab)tab.dataset.drop=event.clientX<tab.getBoundingClientRect().left+tab.offsetWidth/2?'before':'after';};slot.ondragleave=event=>{if(!slot.contains(event.relatedTarget))slot.classList.remove('drop-hover');};slot.ondrop=event=>{const id=event.dataTransfer.getData(dragType);if(!titles[id])return;event.preventDefault();event.stopPropagation();if(drag)drag.accepted=true;const tab=event.target.closest('[data-panel-tab]');if(tab?.dataset.panelTab!==id)dock(id,name,tab?.dataset.panelTab,event.clientX>=(tab?.getBoundingClientRect().left||0)+(tab?.offsetWidth||0)/2);clearDrag();};}
  for(const side of ['left','right']){const container=document.createElement('div');container.className='dock-side dock-'+side;sides[side]=container;root.append(container);}
- for(const name of Object.keys(state.slots)){const slot=document.createElement('section'),bar=document.createElement('div'),content=document.createElement('div');slot.className='dock-slot dock-'+name;slot.dataset.slot=name;bar.className='dock-tabs';bar.setAttribute('role','tablist');bar.setAttribute('aria-label',name+'面板');content.className='dock-content';slot.append(bar,content);slots[name]=slot;bars[name]=bar;contents[name]=content;(name.startsWith('left-')?sides.left:name.startsWith('right-')?sides.right:root).append(slot);attachDrop(slot,name);bar.oncontextmenu=event=>{if(event.target.closest('[data-panel-tab]'))return;event.preventDefault();const missing=Object.keys(titles).filter(id=>!panelPresent(id));panelMenu(event,missing.map(id=>['添加「'+titles[id]+'」',()=>dock(id,name)]));};bar.onkeydown=event=>{if(!['ArrowLeft','ArrowRight'].includes(event.key))return;const tabs=[...bar.querySelectorAll('[role=tab]')],at=tabs.indexOf(event.target);if(at<0)return;event.preventDefault();const tab=tabs[(at+(event.key==='ArrowRight'?1:tabs.length-1))%tabs.length];tab.click();tab.focus();};}
+ for(const name of Object.keys(state.slots)){const slot=document.createElement('section'),bar=document.createElement('div'),content=document.createElement('div');slot.className='dock-slot dock-'+name;slot.dataset.slot=name;bar.className='dock-tabs';bar.setAttribute('role','tablist');bar.setAttribute('aria-label',name+'面板');content.className='dock-content';slot.append(bar,content);slots[name]=slot;bars[name]=bar;contents[name]=content;(name.startsWith('left-')?sides.left:name.startsWith('right-')?sides.right:root).append(slot);attachDrop(slot,name);bar.oncontextmenu=event=>{if(event.target.closest('[data-panel-tab]'))return;event.preventDefault();const missing=Object.keys(titles).filter(id=>canShowPanel(id)&&!panelPresent(id));panelMenu(event,missing.map(id=>['添加「'+titles[id]+'」',()=>dock(id,name)]));};bar.onkeydown=event=>{if(!['ArrowLeft','ArrowRight'].includes(event.key))return;const tabs=[...bar.querySelectorAll('[role=tab]')],at=tabs.indexOf(event.target);if(at<0)return;event.preventDefault();const tab=tabs[(at+(event.key==='ArrowRight'?1:tabs.length-1))%tabs.length];tab.click();tab.focus();};}
  // 顶部栏位最小高度＝标签栏 40 + 工具图标行 38（与上方参数栏 38 同高），否则工具条被压没。
  const minSize=name=>name==='top'?80:name==='left'||name==='right'?260:100;
  const maxSize=name=>name==='top'||name==='bottom'?Math.max(160,Math.min(900,innerHeight-240)):Math.max(240,Math.min(900,innerWidth-320));
@@ -84,11 +86,13 @@ export function initWorkspaceLayout(){
  for(const side of ['left','right']){const handle=resizeHandle(sides[side],side+'Split','y');sides[side].insertBefore(handle,slots[side+'-bottom']);}
  for(const [name,axis]of [['left','x'],['right','x'],['top','y'],['bottom','y']])resizeHandle(root,name,axis);
  async function detach(id){
+  if(!canShowPanel(id))return;
   if(floats.has(id)){floats.get(id).child.focus();return;}
   const home=Object.keys(state.slots).find(name=>state.slots[name].includes(id))||state.floating[id]?.home||homes[id];
   const child=window.open(new URL('./panel.html',location.href).href,'pixel-panel-'+id,'width=420,height=560');if(!child)throw new Error('无法创建面板窗口');
   const floating={child,home,index:state.slots[home].indexOf(id),returning:false};floats.set(id,floating);
   await new Promise(resolve=>{if(child.document.getElementById('floating-root'))resolve();else child.addEventListener('load',resolve,{once:true});});
+   if(!canShowPanel(id)){floating.returning=true;child.close();floats.delete(id);return;}
    child.desktop=window.desktop.panelBridge(child);
    const unregister=registerSurface(child.document);child.document.title='MinePix · '+titles[id];panelWindowChrome(child.document);syncSurfaceThemes(document.documentElement.dataset.theme);
    const unregisterLocale=registerLocaleSurface(child.document);
@@ -102,6 +106,7 @@ export function initWorkspaceLayout(){
  // 栏目显隐：隐藏＝从所有栏位移除（独立窗口一并关掉），显示＝放回默认栏位并激活。
  const panelPresent=id=>Object.values(state.slots).some(list=>list.includes(id))||!!state.floating[id];
  const setPanelVisible=(id,visible,{auto=false}={})=>{
+  if(visible&&!canShowPanel(id))return;
   if(auto){if(visible&&userHidden.has(id))return;}
   else if(visible)userHidden.delete(id);
   else userHidden.add(id);
@@ -134,5 +139,5 @@ export function initWorkspaceLayout(){
   setTimeout(()=>doc.addEventListener('pointerdown',close,true),0);
   return menu;
  };
- const api={dock,detach,reset,dragType,reveal:id=>{const floating=floats.get(id);if(floating){floating.child.focus();return;}const home=Object.keys(state.slots).find(name=>state.slots[name].includes(id));if(!home){setPanelVisible(id,true);return;}state.active[home]=id;if(home==='bottom')state.collapsed=false;render();save();},toggleBottom:()=>{state.collapsed=!state.collapsed;render();save();},state:()=>structuredClone(state),panels,floats,root,setPanelVisible,panelMenu,panelPresent,togglePanel:id=>setPanelVisible(id,!panelPresent(id))};render();for(const id of restoreFloats)void detach(id);return api;
+ const api={dock,detach,reset,dragType,reveal:id=>{if(!canShowPanel(id))return;const floating=floats.get(id);if(floating){floating.child.focus();return;}const home=Object.keys(state.slots).find(name=>state.slots[name].includes(id));if(!home){setPanelVisible(id,true);return;}state.active[home]=id;if(home==='bottom')state.collapsed=false;render();save();},toggleBottom:()=>{state.collapsed=!state.collapsed;render();save();},state:()=>structuredClone(state),panels,floats,root,setPanelVisible,panelMenu,panelPresent,togglePanel:id=>setPanelVisible(id,!panelPresent(id))};render();for(const id of restoreFloats)void detach(id);return api;
 }

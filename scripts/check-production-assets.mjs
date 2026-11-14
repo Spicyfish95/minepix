@@ -19,4 +19,8 @@ for(const name of ['runTilemapSmoke','runSettingsSmoke','runParitySmoke','prepar
 for(const name of ['startInputAudit','documentWindowAudit','documentWindowSave']){
  assert.ok(source.includes(name),'保留必要入口 '+name);
 }
+const appIcon=files.find(file=>/^app-icon-.*\.png$/.test(path.basename(file.name)));
+const inlineIcon='data:image/png;base64,'+(await readFile('src/assets/app-icon.png')).toString('base64');
+assert.ok(appIcon&&(source.includes(path.basename(appIcon.name))||source.includes(inlineIcon)),'关于图标引用构建资源或内联的原始图标');
+assert.ok(!source.includes('src=\"./assets/app-icon.png\"'),'关于窗口不引用构建前资源路径');
 console.log(JSON.stringify({ok:true,appBytes:app.bytes,distBytes:files.reduce((sum,file)=>sum+file.bytes,0)}));

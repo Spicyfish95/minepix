@@ -21,7 +21,7 @@ public static class MinePixInstallerUI {
 [MinePixInstallerUI]::SetProcessDpiAwarenessContext([IntPtr](-4)) | Out-Null
 $taskRepo = Split-Path $PSScriptRoot -Parent
 $taskVersion = (Get-Content -Raw "$taskRepo/package.json" | ConvertFrom-Json).version
-$taskInstaller = Get-Item -LiteralPath "$taskRepo/src-tauri/target/release/bundle/nsis/MinePix Tauri_${taskVersion}_x64-setup.exe"
+$taskInstaller = Get-Item -LiteralPath "$taskRepo/src-tauri/target/release/bundle/nsis/MinePix_${taskVersion}_x64-setup.exe"
 $taskRoot = Join-Path $taskRepo 'artifacts/installer-languages'
 New-Item -ItemType Directory -Path $taskRoot -Force | Out-Null
 $taskResults = [Collections.Generic.List[object]]::new()
@@ -119,9 +119,9 @@ function Capture($Window, [string]$Name) {
 $taskBefore = InstallationState
 try {
     foreach ($taskSpec in @(
-        @{code='english';item='English';title='Welcome to MinePix Tauri Setup';next='Next';cancel='Cancel'},
-        @{code='simplified';item='中文(简体)';title='欢迎使用 MinePix Tauri 安装程序';next='下一步';cancel='取消'},
-        @{code='traditional';item='中文(繁體)';title='歡迎使用 MinePix Tauri 安裝精靈';next='下一步';cancel='取消'}
+        @{code='english';item='English';title='Welcome to MinePix Setup';next='Next';cancel='Cancel'},
+        @{code='simplified';item='中文(简体)';title='欢迎使用 MinePix 安装程序';next='下一步';cancel='取消'},
+        @{code='traditional';item='中文(繁體)';title='歡迎使用 MinePix 安裝精靈';next='下一步';cancel='取消'}
     )) {
         $taskProcess = Start-Process -FilePath $taskInstaller.FullName -WindowStyle Hidden -PassThru
         $taskChooser = WaitPage '1002'

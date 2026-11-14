@@ -129,3 +129,13 @@ test('重新切块按像素内容保住图块规则，尺寸变了的新图块�
   assert.equal(resized.length,2);
   assert.ok(resized.every(item=>item.terrain===-1&&item.peering.every(bit=>bit===-1)));
 });
+
+
+test('同尺寸重新切块保留同像素各位置独立规则且不共享邻居数组',()=>{
+ const source=[tile(0,[0,0,0,0,0,0,0,0],1),tile(1,[1,1,1,1,1,1,1,1],3)];
+ const result=migrateTiles(source,[red,red],2,1,1,1,1,1);
+ assert.deepEqual(result,source);
+ result[1].peering[0]=-1;
+ assert.equal(source[1].peering[0],1);
+ assert.equal(result[0].peering[0],0);
+});

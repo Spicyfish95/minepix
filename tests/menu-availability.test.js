@@ -31,3 +31,11 @@ test('capture brush requires an editable pixel selection',()=>{
  assert.equal(menuAvailability({...state,hasDocument:true,hasSelection:true})['capture-brush'],true);
  assert.equal(menuAvailability({...state,hasDocument:true,hasSelection:true,canEditPixels:false})['capture-brush'],false);
 });
+
+
+test('图集栏目只在当前项目含图集图层时可用',()=>{
+ for(const value of [{hasDocument:false,hasTileset:false},{hasDocument:false,hasTileset:true},{hasDocument:true,hasTileset:false},{hasDocument:true,hasTileset:true}]){
+  const result=menuAvailability({...state,...value});
+  for(const id of ['panel-tileset','panel-terrain-preview'])assert.equal(result[id],value.hasDocument&&value.hasTileset);
+ }
+});

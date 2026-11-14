@@ -5,7 +5,7 @@ import {pathToFileURL} from 'node:url';
 import path from 'node:path';
 import {blockmap} from './update-blockmap.mjs';
 export const repository='Spicyfish95/minepix';
-export const releaseAssetName=version=>`MinePix.Tauri_${version}_x64-setup.exe`;
+export const releaseAssetName=version=>`MinePix_${version}_x64-setup.exe`;
 export const sha256=bytes=>createHash('sha256').update(bytes).digest('hex');
 export const releasePolicy=version=>({prerelease:version.includes('-'),latest:!version.includes('-')});
 export function compareVersions(a,b){
@@ -26,7 +26,7 @@ export function compareVersions(a,b){
  return 0;
 }
 export function verifyManifest(manifest,version,bytes,signature){
- const filename=`MinePix Tauri_${version}_x64-setup.exe`;
+ const filename=`MinePix_${version}_x64-setup.exe`;
  const assetName=releaseAssetName(version);
  const url=`https://github.com/${repository}/releases/download/minepix-v${version}/${assetName}`;
  assert.equal(manifest.version,version);
@@ -50,7 +50,7 @@ export async function verifyRelease(){
  assert.equal(config.plugins.updater.requireSignedVersion,true);
  assert.equal(config.plugins.updater.dangerousInsecureTransportProtocol,undefined);
  assert.deepEqual(config.plugins.updater.endpoints,[`https://github.com/${repository}/releases/download/tauri-latest/latest.json`]);
- const installer=path.resolve('src-tauri/target/release/bundle/nsis',`MinePix Tauri_${pkg.version}_x64-setup.exe`);
+ const installer=path.resolve('src-tauri/target/release/bundle/nsis',`MinePix_${pkg.version}_x64-setup.exe`);
  const bytes=await readFile(installer),signature=await readFile(installer+'.sig','utf8');
  assert.equal(bytes.toString('ascii',0,2),'MZ');
  const pe=bytes.readUInt32LE(0x3c);

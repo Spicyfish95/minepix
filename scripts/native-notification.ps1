@@ -36,7 +36,7 @@ public static class MinePixToastPointer {
         EnumWindows((window,parameter)=>{
             uint owner;GetWindowThreadProcessId(window,out owner);
             var title=new StringBuilder(1024);GetWindowText(window,title,title.Capacity);
-            if(owner==pid && title.ToString()=="MinePix Tauri"){found=window;return false;}return true;
+            if(owner==pid && title.ToString()=="MinePix"){found=window;return false;}return true;
         },IntPtr.Zero);return found;
     }
 }

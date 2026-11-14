@@ -1,9 +1,12 @@
 const projectCommands='image-outline image-hsv image-brightness image-invert save save-as png normal-map sheet-pair gif sequence export-aseprite close-document color-mode swap-colors palette-editor import-palette export-palette extract-palette add-layer group-layer rename-layer layer-up layer-down duplicate-layer delete-layer layer-parent ungroup-layer toggle-background merge-down merge-visible flatten sprite-size canvas-size crop-selection trim-canvas flip-sprite-x flip-sprite-y slices select-color-range expand-selection contract-selection border-selection select-all select-content reselect deselect invert-selection transform-selection add-frame duplicate-frame delete-frame frame-left frame-right reverse-frames frame-fps copy-cels cut-cels paste-cels clear-cels move-cels transform-cels link-cels unlink-cels add-tag edit-tag delete-tag play previous next fit actual-size grid grid-toggle grid-settings onion onion-settings replace-color tileset-toggle copy paste clear'.split(' ');
 const editingCommands='add-layer group-layer rename-layer layer-up layer-down duplicate-layer delete-layer layer-parent ungroup-layer toggle-background merge-down merge-visible flatten sprite-size canvas-size crop-selection trim-canvas flip-sprite-x flip-sprite-y slices transform-selection add-frame duplicate-frame delete-frame frame-left frame-right reverse-frames frame-fps cut-cels paste-cels clear-cels move-cels transform-cels link-cels unlink-cels add-tag edit-tag delete-tag replace-color tileset-toggle paste clear'.split(' ');
 
+export const panelAvailable=(id,{hasDocument,hasTileset})=>!['tileset','terrain-preview'].includes(id)||!!(hasDocument&&hasTileset);
+
 export function menuAvailability(state){
  const {hasDocument,canEdit,canEditPixels,hasSelection,hasPreviousSelection,hasCelRange,hasCelClipboard,hasClipboard,hasClosed,canUndo,canRedo,frameCount,frameIndex,layerCount,layerIndex,hasTags,hasSavedPath}=state;
  const enabled=Object.fromEntries(projectCommands.map(id=>[id,hasDocument]));
+ for(const id of ['tileset','terrain-preview'])enabled['panel-'+id]=panelAvailable(id,state);
  for(const id of editingCommands)enabled[id]=hasDocument&&canEdit;
  enabled['capture-brush']=hasDocument&&canEditPixels&&hasSelection;
  enabled.undo=hasDocument&&canUndo;enabled.redo=hasDocument&&canRedo;

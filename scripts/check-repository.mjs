@@ -5,7 +5,7 @@ import path from 'node:path';
 const files=[...new Set(execFileSync('git',['ls-files','--cached','--others','--exclude-standard'],{encoding:'utf8'}).trim().split('\n'))];
 let checked=0,links=0,imports=0;
 for(const file of files){
- if(!/\.(?:js|mjs|cjs|rs|json|toml|md|yml|yaml|ps1|nsh|html|css|txt)$/.test(file))continue;
+ if(!/\.(?:js|mjs|cjs|rs|json|toml|md|yml|yaml|ps1|nsh|nsi|html|css|txt)$/.test(file))continue;
  let text;try{text=await readFile(file,'utf8');}catch(error){if(error.code==='ENOENT')continue;throw error;}
  assert.ok(!text.includes('\r\n'),`${file}: use LF line endings`);
  if(file!=='scripts/check-repository.mjs'){

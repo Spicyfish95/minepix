@@ -61,41 +61,41 @@ try{
  baseline=await main.evaluate('Object.fromEntries(Object.entries(localStorage))');await main.evaluate("window.workspaceLayout.reset();window.minepixLocale.set('zh')");
  if((await main.evaluate('window.desktop.windowState()')).maximized)await main.evaluate("window.desktop.windowControl('maximize')");
  if(differentDpi){
-  const before=await native('MinePix Tauri'),scale=before.after.dpi/96;
-  const resized=await native('MinePix Tauri','resize',['-DeltaX',String(Math.round(1184*scale)-before.after.client.width),'-DeltaY',String(Math.round(780*scale)-before.after.client.height)]);
+  const before=await native('MinePix'),scale=before.after.dpi/96;
+  const resized=await native('MinePix','resize',['-DeltaX',String(Math.round(1184*scale)-before.after.client.width),'-DeltaY',String(Math.round(780*scale)-before.after.client.height)]);
   geometry.push({label:'main-prepare-resize',...resized});
   check('真实边缘调整主窗至两屏可容纳尺寸',Math.abs(resized.after.client.width/scale-1184)<=1&&Math.abs(resized.after.client.height/scale-780)<=1);
   await wait(async()=>{const v=await dpr(main);return Math.abs(v.width-1184)<=1&&Math.abs(v.height-780)<=1;},'调整后客户区布局');
  }
- const initial=await audit(),initialWindow=await native('MinePix Tauri');await writeFile(path.join(root,'environment.json'),JSON.stringify(initialWindow,null,2)+'\n');
+ const initial=await audit(),initialWindow=await native('MinePix');await writeFile(path.join(root,'environment.json'),JSON.stringify(initialWindow,null,2)+'\n');
  check('主窗处于正常可见可拖动态',initialWindow.after.visible&&!initialWindow.after.minimized&&!initialWindow.after.maximized);
  if(multiMonitor){
   const origin=initialWindow.monitors.find(m=>m.name===initialWindow.after.monitor),other=initialWindow.monitors.find(m=>m.name!==initialWindow.after.monitor);
   assert.ok(origin&&other,'需要两个当前活动显示区域');
-  await crossMonitor(main,'MinePix Tauri','.window-drag-space',other,'main-cross-forward');
+  await crossMonitor(main,'MinePix','.window-drag-space',other,'main-cross-forward');
   check('主窗跨屏不改变作品与历史',same(await audit(),initial));
   await main.screenshot(path.join(root,'main-other-monitor.png'));
-  await crossMonitor(main,'MinePix Tauri','.window-drag-space',origin,'main-cross-back',initialWindow.after.rect);
-  check('主窗跨屏往返恢复原位置',same((await native('MinePix Tauri')).after.rect,initialWindow.after.rect));
+  await crossMonitor(main,'MinePix','.window-drag-space',origin,'main-cross-back',initialWindow.after.rect);
+  check('主窗跨屏往返恢复原位置',same((await native('MinePix')).after.rect,initialWindow.after.rect));
  }
  await main.evaluate("window.nativeDragSamples=[];document.addEventListener('pointerdown',e=>{if(e.target.closest('.window-drag-space'))window.nativeDragSamples.push({trusted:e.isTrusted,type:e.pointerType,button:e.button})},true)");
- await drag(main,'MinePix Tauri','.window-drag-space',120,80,'main-forward');await main.screenshot(path.join(root,'main-moved.png'));
+ await drag(main,'MinePix','.window-drag-space',120,80,'main-forward');await main.screenshot(path.join(root,'main-moved.png'));
  check('主窗拖动未改作品与绘画历史',same(await audit(),initial));const pointerSamples=await main.evaluate('window.nativeDragSamples');geometry.find(entry=>entry.label==='main-forward').pointerSamples=pointerSamples;check('主窗拖动经过原生拖动区域',await main.evaluate("getComputedStyle(document.querySelector('.window-drag-space')).webkitAppRegion==='drag'"));
- await drag(main,'MinePix Tauri','.window-drag-space',-120,-80,'main-back');const returned=await native('MinePix Tauri');check('主窗往返恢复原位置',same(returned.after.rect,initialWindow.after.rect));
+ await drag(main,'MinePix','.window-drag-space',-120,-80,'main-back');const returned=await native('MinePix');check('主窗往返恢复原位置',same(returned.after.rect,initialWindow.after.rect));
  const selector=await main.evaluate("(()=>{const slot=Object.keys(window.workspaceLayout.state().slots).find(name=>window.workspaceLayout.state().slots[name].includes('colors'));return '[data-slot=\"'+slot+'\"] .dock-detach';})()");await click(main,selector);
  await wait(async()=>{for(const target of(await targets()).filter(t=>t.url.endsWith('panel.html'))){const s=await connect(target);if(await s.evaluate("!!document.querySelector('[data-panel=colors]')")){child=s;sessions.push(s);return true;}s.close();}return false;},'颜色浮窗');
- const title=await child.evaluate('document.title'),parentBefore=await native('MinePix Tauri');
+ const title=await child.evaluate('document.title'),parentBefore=await native('MinePix');
  let childOrigin;
  if(multiMonitor){
   childOrigin=await native(title);
   const other=childOrigin.monitors.find(m=>m.name!==childOrigin.after.monitor);
   assert.ok(other,'颜色浮窗需要另一活动显示区域');
   await crossMonitor(child,title,'.window-caption',other,'colors-cross-forward');
-  check('子窗跨屏保持主窗几何和作品历史',same((await native('MinePix Tauri')).after.rect,parentBefore.after.rect)&&same(await audit(),initial));
+  check('子窗跨屏保持主窗几何和作品历史',same((await native('MinePix')).after.rect,parentBefore.after.rect)&&same(await audit(),initial));
   await child.screenshot(path.join(root,'floating-other-monitor.png'));
  }
  await drag(child,title,'.window-caption',64,48,'colors-forward');await child.screenshot(path.join(root,'floating-moved.png'));
- check('拖动原生子窗不会移动主窗',same((await native('MinePix Tauri')).after.rect,parentBefore.after.rect));
+ check('拖动原生子窗不会移动主窗',same((await native('MinePix')).after.rect,parentBefore.after.rect));
  await child.evaluate("(()=>{const el=document.getElementById('hex');el.value='#abcdef';el.dispatchEvent(new Event('change',{bubbles:true}));})()");
  await main.evaluate("(()=>{for(const[id,value]of Object.entries({brush:1,'brush-shape':'square','paint-opacity':100})){const el=document.getElementById(id);el.value=value;el.dispatchEvent(new Event('change',{bubbles:true}));}document.querySelector('[data-tool=\"pencil\"]').click();})()");
  const p=await main.evaluate("(()=>{const r=document.getElementById('canvas').getBoundingClientRect();return{x:r.x+r.width*.5/8,y:r.y+r.height*.5/8};})()");await main.send('Input.dispatchMouseEvent',{type:'mousePressed',...p,button:'left',buttons:1,clickCount:1});await main.send('Input.dispatchMouseEvent',{type:'mouseReleased',...p,button:'left',buttons:0,clickCount:1});

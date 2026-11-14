@@ -44,3 +44,7 @@ Rust差分更新复用既有依赖树中的`reqwest` 0.13.5（MIT，Copyright (c
 | [omggif](https://github.com/deanm/omggif) | 1.0.10，仅测试中的独立 GIF 解码 | MIT，Copyright (c) 2013 Dean McNamee；声明在原包 `omggif.js` 头部 |
 
 Rust / Tauri 与前端构建工具保留原包附带的第三方许可。GIF 测试图由本项目脚本生成，生成工具 Pillow 不属于应用运行依赖。演示项目见 [examples](examples/README.md)，互通样例来源见 [tests/fixtures](tests/fixtures/README.md)。
+
+## NSIS installer template
+
+`src-tauri/windows/installer.nsi` 来自 tauri-apps/tauri 的 `tauri-cli-v2.12.4`，按 MIT 许可使用，Copyright (c) 2017 - Present Tauri Apps Contributors。修改仅固定安装注册键，保证产品显示名变更不改变升级身份。许可文本见 [Tauri MIT](docs/licenses/tauri-plugin-notification-MIT.txt)。后续升级 CLI 时需要同步审查模板。

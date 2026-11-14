@@ -82,9 +82,13 @@ export function clearInactiveBits(tiles, mode) {
   }
 }
 
-// 重新切块时按像素内容把旧图块的规则搬到新图块上：内容完全相同的块保留地形、期望位与权重，
+// 同尺寸重新切块按位置保留独立规则；尺寸改变时按像素内容迁移地形、期望位与权重，
 // 新出现的块（切块尺寸变了）用默认值。不看序号——尺寸一改序号就对不上了。
 export function migrateTiles(oldTiles, atlas, width, height, oldW, oldH, newW, newH) {
+  if(oldW===newW&&oldH===newH)return sliceTileset(atlas,width,height,newW,newH).tiles.map((_,id)=>{
+    const tile=oldTiles[id];
+    return tile?{terrain:tile.terrain,peering:[...tile.peering],weight:tile.weight??1}:{terrain:-1,peering:new Array(8).fill(-1),weight:1};
+  });
   const key = block => block.join(',');
   const byKey = new Map();
   sliceTileset(atlas, width, height, oldW, oldH).tiles.forEach((block, id) => {

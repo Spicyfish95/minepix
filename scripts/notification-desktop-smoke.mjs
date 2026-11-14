@@ -41,7 +41,7 @@ try{
  check('实际Windows横幅被准确定位并可信点击',observed.native.title.includes('MinePix 通知测试')&&observed.native.minimizedBeforeClick&&observed.native.clicked);
  await wait(()=>main.evaluate("window.notificationActions.includes('test')&&document.hasFocus()"),'真实通知返回回调');
  check('通知点击回调实际送达且主窗获得焦点',await main.evaluate("window.notificationActions.length===1&&window.notificationActions[0]==='test'&&document.hasFocus()"));
- const geometry=await exec('powershell.exe',['-NoProfile','-File',path.resolve('scripts/native-window-pointer.ps1'),'-ProcessId',String(pid),'-Title','MinePix Tauri'],{windowsHide:true});observed.geometry=JSON.parse(geometry.stdout);
+ const geometry=await exec('powershell.exe',['-NoProfile','-File',path.resolve('scripts/native-window-pointer.ps1'),'-ProcessId',String(pid),'-Title','MinePix'],{windowsHide:true});observed.geometry=JSON.parse(geometry.stdout);
  check('最小化的原生主窗实际还原可见',!observed.geometry.before.minimized&&observed.geometry.before.visible);
  check('界面显示系统通知返回结果',await main.evaluate("document.body.textContent.includes('系统通知已返回 MinePix')"));
  check('通知不更改作品和绘画历史',same(await audit(),before.audit)&&same(await readDocument(),before.document)&&(await readFile(project)).equals(before.bytes));

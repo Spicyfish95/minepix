@@ -17,7 +17,7 @@ let session,baseline,server,before,after,error,ok=false;
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function wait(test,label,attempts=200){for(let i=0;i<attempts;i++){const value=await test();if(value)return value;await pause(100);}throw new Error('Timeout: '+label);}
 async function stats(){try{const r=await fetch('http://127.0.0.1:19412/stats');return r.ok?await r.json():null;}catch{return null;}}
-async function native(){const r=await exec('powershell.exe',['-NoProfile','-File','scripts/native-window-pointer.ps1','-ProcessId',String(pid),'-Title','MinePix Tauri'],{windowsHide:true});return JSON.parse(r.stdout.replace(/^\uFEFF/,''));}
+async function native(){const r=await exec('powershell.exe',['-NoProfile','-File','scripts/native-window-pointer.ps1','-ProcessId',String(pid),'-Title','MinePix'],{windowsHide:true});return JSON.parse(r.stdout.replace(/^\uFEFF/,''));}
 const audit=()=>session.evaluate('window.documentWindowAudit()');
 async function saved(){await session.evaluate("window.desktop.menuCommand({id:'save'})");await wait(async()=>{const s=await audit();return !s.busy&&!s.dirty;},'save');}
 async function document(){return session.evaluate(`(async()=>{const files=await window.desktop.recentFiles();return JSON.parse((await window.desktop.openRecent(files.findIndex(item=>item.path===${JSON.stringify(project)}))).data);})()`);}

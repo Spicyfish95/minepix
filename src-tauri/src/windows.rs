@@ -219,7 +219,7 @@ impl Windows {
 pub fn build_editor(app: &AppHandle, label: &str) -> tauri::Result<WebviewWindow> {
     let handle = app.clone();
     let window = tauri::WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
-        .title("MinePix Tauri")
+        .title("MinePix")
         .inner_size(1440.0, 960.0)
         .min_inner_size(1000.0, 700.0)
         .decorations(false)

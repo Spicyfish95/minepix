@@ -248,13 +248,13 @@ export function initTilesetPanel({panel,getDocument,mutate,message}){
       for(const item of tileset.terrains)select.append(new Option(item.name,String(item.id)));
     };
     const pick=(select,key)=>{
+      fill(select);
       const found=tileSelectionValue(tiles,selection,key);
       select.selectedIndex=found.mixed?-1:[...select.options].findIndex(option=>+option.value===found.value);
       return select;
     };
     // Godot 的 TileData 先设图块自身的地形，再设各邻居位的期望地形。
     const terrainPick=pick(node('select','tileset-terrain-select',field(inspector,'地形')),'terrain');
-    fill(terrainPick);
     terrainPick.title='图块自身的地形';
     terrainPick.onchange=()=>applyToSelection('terrain',+terrainPick.value);
     const bitsTitle=node('div','tileset-bits-title',inspector);bitsTitle.textContent='Terrain Peering Bits';
@@ -262,7 +262,6 @@ export function initTilesetPanel({panel,getDocument,mutate,message}){
     // 只渲染当前匹配方式使用的位，不可用的位不占位。
     for(const bit of terrainModeBits(tileset.mode)){
       const select=pick(node('select','tileset-bit',field(bits,NEIGHBOR_BITS[bit][1])),bit);
-      fill(select);
       select.title='第 '+bit+' 位：'+NEIGHBOR_BITS[bit][1]+'期望邻居地形';
       select.onchange=()=>applyToSelection(bit,+select.value);
     }

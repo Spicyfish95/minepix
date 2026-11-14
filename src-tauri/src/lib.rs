@@ -668,5 +668,5 @@ pub fn run() {
             recovery_load
         ])
         .run(context)
-        .expect("无法启动 MinePix Tauri");
+        .expect("无法启动 MinePix");
 }

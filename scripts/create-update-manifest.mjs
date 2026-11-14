@@ -8,7 +8,7 @@ import {repository,releaseAssetName} from './verify-release.mjs';
 const config=JSON.parse(await readFile('src-tauri/tauri.conf.json','utf8'));
 const version=process.argv[2]||config.version;
 assert.match(version,/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
-const filename=`MinePix Tauri_${version}_x64-setup.exe`;
+const filename=`MinePix_${version}_x64-setup.exe`;
 const installer=path.resolve('src-tauri/target/release/bundle/nsis',filename);
 const signature=(await readFile(installer+'.sig','utf8')).trim();
 const trusted=Buffer.from(signature,'base64').toString('utf8').split('\n').find(line=>line.startsWith('trusted comment:'));

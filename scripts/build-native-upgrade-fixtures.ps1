@@ -10,7 +10,7 @@ $env:CI='true'
 $taskOverride=Join-Path $taskRoot 'alpha2.json'
 [IO.File]::WriteAllText($taskOverride,'{"version":"2.0.0-alpha.2"}'+"`n",[Text.UTF8Encoding]::new($false))
 function Save-Build([string]$Version,[string]$Label){
- $taskSetup=Join-Path $taskRepo "src-tauri\target\release\bundle\nsis\MinePix Tauri_${Version}_x64-setup.exe"
+ $taskSetup=Join-Path $taskRepo "src-tauri\target\release\bundle\nsis\MinePix_${Version}_x64-setup.exe"
  $taskCopy=Join-Path $taskRoot "$Label-setup.exe"
  $taskRaw=Join-Path $taskRoot "$Label-raw.exe"
  Copy-Item -LiteralPath $taskSetup -Destination $taskCopy -Force

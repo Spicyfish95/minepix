@@ -5,7 +5,7 @@ $taskRepo = Split-Path $PSScriptRoot -Parent
 $taskValidation = Join-Path (Split-Path $taskRepo -Parent) 'minepix-tauri-validation'
 $taskInstall = Join-Path $taskValidation 'installed associations'
 $taskVersion = (Get-Content -Raw "$taskRepo\package.json" | ConvertFrom-Json).version
-$taskInstaller = Get-Item -LiteralPath "$taskRepo\src-tauri\target\release\bundle\nsis\MinePix Tauri_${taskVersion}_x64-setup.exe"
+$taskInstaller = Get-Item -LiteralPath "$taskRepo\src-tauri\target\release\bundle\nsis\MinePix_${taskVersion}_x64-setup.exe"
 $taskRoot = if ($env:MINEPIX_ASSOCIATIONS_ROOT) { [IO.Path]::GetFullPath((Join-Path $taskRepo $env:MINEPIX_ASSOCIATIONS_ROOT)) } else { Join-Path $taskRepo 'artifacts\associations' }
 $taskCache = Join-Path $env:APPDATA 'com.minepix.tauri\update-cache\base.exe'
 New-Item -ItemType Directory -Path $taskRoot -Force | Out-Null
@@ -54,8 +54,8 @@ if ($ManualNotificationReturn) {
 $taskApp = $null
 $taskOk = $false
 $taskInstalled = $false
-$taskExisting = @(Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -eq 'MinePix Tauri' })
-if ($taskExisting.Count -or (Test-Path -LiteralPath (Join-Path $taskInstall 'minepix-tauri.exe')) -or (Test-Path -LiteralPath 'HKCU:\Software\Classes\AppUserModelId\com.minepix.tauri') -or (Test-Path -LiteralPath $taskCache)) { throw 'Association validation requires a clean independent installation; an existing MinePix Tauri installation, notification identity or update cache was found' }
+$taskExisting = @(Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -in @('MinePix','MinePix Tauri') })
+if ($taskExisting.Count -or (Test-Path -LiteralPath (Join-Path $taskInstall 'minepix-tauri.exe')) -or (Test-Path -LiteralPath 'HKCU:\Software\Classes\AppUserModelId\com.minepix.tauri') -or (Test-Path -LiteralPath $taskCache)) { throw 'Association validation requires a clean independent installation; an existing MinePix installation, notification identity or update cache was found' }
 try {
     $taskSetup = Start-Process -FilePath $taskInstaller.FullName -ArgumentList "/S /D=$taskInstall" -WindowStyle Hidden -Wait -PassThru
     Check 'NSIS silent installation succeeds' ($taskSetup.ExitCode -eq 0)
@@ -96,7 +96,10 @@ public static class MinePixAssociationIcon {
     })
     $taskFootprint = [pscustomobject]@{installedDirectory=$taskInstall;bytes=($taskFootprintFiles | Measure-Object -Property bytes -Sum).Sum;files=$taskFootprintFiles;excludesSharedWebView2=$true}
     [IO.File]::WriteAllText("$taskRoot\footprint.json",(($taskFootprint | ConvertTo-Json -Depth 5) -replace "`r`n","`n")+"`n",[Text.UTF8Encoding]::new($false))
-    Check 'Original defaults are unchanged after install' ((OriginalState) -ceq $taskBefore)
+    $taskExpectedDefaults=$taskBefore|ConvertFrom-Json
+    if(-not $taskExpectedDefaults.pix){$taskExpectedDefaults.pix='MinePix.Project'}
+    $taskInstalledDefaults=OriginalState|ConvertFrom-Json
+    Check 'Install initializes unassigned PIX and preserves other defaults' ($taskInstalledDefaults.pix -ceq $taskExpectedDefaults.pix -and $taskInstalledDefaults.ase -ceq $taskExpectedDefaults.ase -and $taskInstalledDefaults.aseprite -ceq $taskExpectedDefaults.aseprite)
     foreach ($taskType in @(@('pix','MinePixTauri.Project'),@('ase','MinePixTauri.Aseprite'),@('aseprite','MinePixTauri.Aseprite'))) {
         $taskExt,$taskProg = $taskType
         $taskKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey("Software\Classes\.$taskExt\OpenWithProgids")
@@ -114,13 +117,13 @@ public static class MinePixAssociationIcon {
     if ($Notifications) {
         $taskPrograms = [Environment]::GetFolderPath('Programs')
         $taskShell = New-Object -ComObject Shell.Application
-        $taskShortcut = $taskShell.NameSpace($taskPrograms).ParseName('MinePix Tauri.lnk')
+        $taskShortcut = $taskShell.NameSpace($taskPrograms).ParseName('MinePix.lnk')
         $taskAppId = if ($null -ne $taskShortcut) { [string]$taskShortcut.ExtendedProperty('System.AppUserModel.ID') } else { '' }
         $taskRegistration=Get-ItemProperty -LiteralPath 'HKCU:\Software\Classes\AppUserModelId\com.minepix.tauri' -ErrorAction SilentlyContinue
-        $taskIdentity = [pscustomobject]@{shortcut=(Join-Path $taskPrograms 'MinePix Tauri.lnk');appId=$taskAppId;displayName=$taskRegistration.DisplayName;icon=$taskRegistration.IconUri;startApps=@(Get-StartApps | Where-Object { $_.Name -eq 'MinePix Tauri' })}
+        $taskIdentity = [pscustomobject]@{shortcut=(Join-Path $taskPrograms 'MinePix.lnk');appId=$taskAppId;displayName=$taskRegistration.DisplayName;icon=$taskRegistration.IconUri;startApps=@(Get-StartApps | Where-Object { $_.Name -eq 'MinePix' })}
         [IO.File]::WriteAllText("$taskRoot\notification-identity.json",(($taskIdentity | ConvertTo-Json -Depth 4) -replace "`r`n","`n")+"`n",[Text.UTF8Encoding]::new($false))
         Check 'Installed start menu shortcut carries the notification AppUserModelID' ($taskAppId -ceq 'com.minepix.tauri')
-        Check 'Own notification display identity and icon are installed' ($taskRegistration.DisplayName -ceq 'MinePix Tauri' -and $taskRegistration.IconUri -ceq "$taskInstall\notification-icon.png" -and (Test-Path -LiteralPath "$taskInstall\notification-icon.png"))
+        Check 'Own notification display identity and icon are installed' ($taskRegistration.DisplayName -ceq 'MinePix' -and $taskRegistration.IconUri -ceq "$taskInstall\notification-icon.png" -and (Test-Path -LiteralPath "$taskInstall\notification-icon.png"))
     }
     $taskSample = if ($ManualNotificationReturn) { Join-Path $taskValidation ('notification-return-'+[Guid]::NewGuid().ToString()+'.pix') } else { Join-Path $taskValidation ([string]::Concat([char]0x4F5C,[char]0x54C1,' sample.pix')) }
     Copy-Item -LiteralPath "$taskRepo\examples\mushroom.pix" -Destination $taskSample -Force
@@ -155,7 +158,7 @@ public static class MinePixAssociationIcon {
     Check 'Uninstall removes application executable' (-not (Test-Path -LiteralPath $taskExe))
     Check 'Uninstall removes its own differential update cache' (-not (Test-Path -LiteralPath $taskCache) -and -not (Test-Path -LiteralPath (Split-Path $taskCache -Parent)))
     Check 'Uninstall removes the dedicated project icon resource' (-not (Test-Path -LiteralPath $taskIconPath))
-    foreach ($taskProg in @('MinePixTauri.Project','MinePixTauri.Aseprite','Applications\minepix-tauri.exe')) {
+    foreach ($taskProg in @('MinePixTauri.Project','MinePixTauri.Aseprite','Applications\minepix-tauri.exe','MinePix.Project','Applications\MinePix.exe')) {
         Check "Uninstall removes own registration: $taskProg" ($null -eq (KeyTree "Software\Classes\$taskProg"))
     }
     Check 'Uninstall removes own notification identity' ($null -eq (KeyTree 'Software\Classes\AppUserModelId\com.minepix.tauri'))

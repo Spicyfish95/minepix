@@ -51,7 +51,7 @@ function OwnAssociations{
  return $taskState|ConvertTo-Json -Depth 30 -Compress
 }
 New-Item -ItemType Directory -Path $taskRoot -Force|Out-Null
-$taskExisting=@(Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue|Where-Object {$_.DisplayName -eq 'MinePix Tauri'})
+$taskExisting=@(Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue|Where-Object {$_.DisplayName -in @('MinePix','MinePix Tauri')})
 if($taskExisting.Count -or (Test-Path -LiteralPath $taskExe) -or (Test-Path -LiteralPath $taskCache) -or (Test-Path -LiteralPath 'HKCU:\Software\Classes\AppUserModelId\com.minepix.tauri') -or (Get-Process minepix-tauri -ErrorAction SilentlyContinue)){throw 'Native upgrade requires a clean independent installation; existing state will not be replaced'}
 $taskBefore=OriginalState
 $taskSourceHash=(Get-FileHash -LiteralPath $taskSource -Algorithm SHA256).Hash.ToLower()

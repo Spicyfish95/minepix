@@ -6,7 +6,7 @@
 
 **免费开源 · Windows x64 · 中文 / English · 正式版 2.0.0**
 
-[下载 Windows x64 安装包](https://github.com/Spicyfish95/minepix/releases/download/minepix-v2.0.0/MinePix.Tauri_2.0.0_x64-setup.exe)
+[下载 Windows x64 安装包](https://github.com/Spicyfish95/minepix/releases/tag/minepix-v2.0.0)
 
 ![MinePix 深色工作区：中央像素画布、左侧色板、右侧预览与图层、底部四帧动画时间轴](docs/images/workspace.png)
 
@@ -70,7 +70,7 @@
 
 重要作品建议保留副本。自动检查更新默认关闭，可通过“帮助 → 检查更新”手动检查，或在“帮助 → 关于”启用启动时自动检查。下载完成后点击“重启并更新”，按提示处理未保存项目，再完成覆盖和重启。
 
-手动下载请进入对应的 `minepix-v<版本>` Release，选择 `MinePix.Tauri_<版本>_x64-setup.exe`；`.sig` 由更新器使用，无需手动打开。`tauri-latest` 保存更新频道清单。
+手动下载请进入对应的 `minepix-v<版本>` Release，选择 `MinePix_<版本>_x64-setup.exe`；`.sig` 由更新器使用，无需手动打开。`tauri-latest` 保存更新频道清单。
 
 ## 开发
 

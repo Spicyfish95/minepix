@@ -1,0 +1,81 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>MinePix panel regression</title>
+<style>body{margin:0}#dock-layout{width:1400px;height:900px}.dock-parking,[hidden]{display:none!important}.about-header img{object-fit:contain}</style>
+<main><section class="workspace"></section><div class="timeline"></div><div class="palette-panel"></div><div id="tools"></div><div class="right-panel"><div></div><div></div><div></div><div></div></div></main>
+<section id="reference-panel"></section><section id="tileset-panel"></section><section id="terrain-preview-panel"></section>
+<pre id="result">pending</pre>
+<script type="module">
+import {initWorkspaceLayout,LAYOUT_KEY,readLayout} from '../src/workspace-layout.js';
+import {panelAvailable,menuAvailability} from '../src/menu-availability.js';
+import {initTilesetPanel} from '../src/tileset-panel.js';
+import {createHelp} from '../src/help.js';
+const checks=[];
+const check=(name,value)=>{checks.push({name,pass:!!value});if(!value)throw new Error(name);};
+try{
+ localStorage.removeItem(LAYOUT_KEY);
+ check('默认布局的下方栏目折叠',readLayout().collapsed===true);
+ const saved=readLayout();saved.collapsed=true;saved.slots.bottom=[];
+ localStorage.setItem(LAYOUT_KEY,JSON.stringify(saved));
+ check('补回缺失时间轴不展开已折叠栏目',readLayout().collapsed===true);
+ const repaired=readLayout();repaired.slots['left-bottom']=[];
+ localStorage.setItem(LAYOUT_KEY,JSON.stringify(repaired));
+ check('补回其他栏目不展开下方栏目',readLayout().collapsed===true);
+ const expanded=readLayout();expanded.collapsed=false;
+ localStorage.setItem(LAYOUT_KEY,JSON.stringify(expanded));
+ check('用户主动展开状态也可正常恢复',readLayout().collapsed===false);
+ const state={hasDocument:false,hasTileset:false};
+ localStorage.setItem(LAYOUT_KEY,JSON.stringify({version:1,slots:{top:['tools'],'left-top':['reference'],'left-bottom':['colors'],'right-top':['preview'],'right-bottom':['layers','tileset'],bottom:['timeline']},active:{},sizes:{left:420,right:420,top:80,bottom:285,leftSplit:.5,rightSplit:.3},collapsed:false,floating:{'terrain-preview':{home:'left-top',index:0}}}));
+ const layout=initWorkspaceLayout({canShowPanel:id=>panelAvailable(id,state)});
+ const absent=()=>!layout.panelPresent('tileset')&&!layout.panelPresent('terrain-preview');
+ const openMenu=()=>{document.querySelector('.dock-tabs').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:10,clientY:10}));return document.querySelector('.panel-menu');};
+ check('无图集时清除存档中的停靠和浮动栏目',absent()&&Object.keys(layout.state().floating).length===0);
+ check('空白栏目右键没有图集入口',!openMenu().textContent.includes('图集')&&!document.querySelector('.panel-menu').textContent.includes('地形预览'));
+ for(const id of ['tileset','terrain-preview']){
+  layout.togglePanel(id);layout.reveal(id);layout.dock(id,'left-top');await layout.detach(id);
+ }
+ check('无项目时切换揭示停靠及独立窗口入口均阻止显示',absent());
+ state.hasDocument=true;
+ check('普通项目禁用两个菜单项',!menuAvailability(state)['panel-tileset']&&!menuAvailability(state)['panel-terrain-preview']);
+ state.hasTileset=true;
+ check('有图集时启用两个菜单项',menuAvailability(state)['panel-tileset']&&menuAvailability(state)['panel-terrain-preview']);
+ check('有图集时右键提供两个入口',openMenu().textContent.includes('图集')&&document.querySelector('.panel-menu').textContent.includes('地形预览'));
+ for(const id of ['tileset','terrain-preview'])layout.setPanelVisible(id,true,{auto:true});
+ check('创建图集后可显示两个栏目',layout.panelPresent('tileset')&&layout.panelPresent('terrain-preview'));
+ layout.setPanelVisible('tileset',false);layout.setPanelVisible('tileset',true,{auto:true});
+ check('自动同步保留用户主动隐藏状态',!layout.panelPresent('tileset'));
+ layout.togglePanel('tileset');check('有图集时可手动恢复栏目',layout.panelPresent('tileset'));
+ state.hasTileset=false;
+ for(const id of ['tileset','terrain-preview'])layout.setPanelVisible(id,false,{auto:true});
+ check('删除最后图集后栏目均移除且节点仍保留',absent()&&document.getElementById('tileset-panel')&&document.getElementById('terrain-preview-panel'));
+ for(const id of ['tileset','terrain-preview'])layout.togglePanel(id);
+ check('删除后不能重新打开空栏目',absent());
+ state.hasTileset=true;
+ for(const id of ['tileset','terrain-preview'])layout.setPanelVisible(id,true,{auto:true});
+ check('撤销删除图集后可恢复显示',!absent());
+ state.hasDocument=false;
+ for(const id of ['tileset','terrain-preview'])layout.setPanelVisible(id,false,{auto:true});
+ check('关闭项目后两个栏目隐藏',absent());
+ state.hasDocument=true;state.hasTileset=true;layout.setPanelVisible('tileset',true);
+ layout.reset();check('恢复默认布局立即折叠下方栏目',layout.state().collapsed&&document.querySelector('.dock-bottom').classList.contains('collapsed'));
+ check('默认折叠状态已保存',readLayout().collapsed===true);
+ layout.setPanelVisible('tileset',true);
+ const tiles=[{terrain:0,peering:new Array(8).fill(0),weight:1},{terrain:1,peering:new Array(8).fill(1),weight:3}];
+ const doc={width:2,height:1,layers:[{id:1,name:'图集',type:'tileset',tileset:{w:1,h:1,mode:'corners',terrains:[{id:0,name:'草',color:'#00ff00'},{id:1,name:'土',color:'#885522'}],tiles}}],frames:[{cels:[[0x885522ff,0x885522ff]]}]};
+ let panel;panel=initTilesetPanel({panel:document.getElementById('tileset-panel'),getDocument:()=>doc,mutate:fn=>{fn();panel.render();},message:()=>{}});
+ panel.selectTile(0);
+ const terrain=()=>document.querySelector('.tileset-terrain-select');
+ check('检视器单选显示已保存地形',terrain().value==='0');
+ check('检视器邻居位显示已保存值',[...document.querySelectorAll('.tileset-bit')].every(select=>select.value==='0'));
+ panel.selectTile(1);check('另一图块显示独立地形',terrain().value==='1');
+ terrain().value='-1';terrain().dispatchEvent(new Event('change'));
+ check('修改检视器只更新选中图块',tiles[0].terrain===0&&doc.layers[0].tileset.tiles[1].terrain===-1);
+ const canvas=document.querySelector('.tileset-atlas-canvas'),rect=canvas.getBoundingClientRect();
+ canvas.dispatchEvent(new PointerEvent('pointerdown',{button:0,shiftKey:true,clientX:rect.left+rect.width*.05,clientY:rect.top+rect.height*.05,bubbles:true}));
+ check('多选不同地形时下拉留空',panel.selection.length===2&&terrain().selectedIndex===-1);
+ const help=createHelp({desktop:{appInfo:async()=>({version:'2.0.0',autoUpdate:false}),onUpdateState:()=>{},updateState:async()=>({status:'idle'}),onNotificationAction:()=>{}},modal:async(_,html)=>{const host=document.createElement('div');host.innerHTML=html;document.body.append(host);},message:()=>{},report:error=>{throw error;}});
+ await help.about();const icon=document.querySelector('.about-header img');await icon.decode();
+ check('关于窗口图标可实际加载且不变形',icon.naturalWidth===256&&icon.naturalHeight===256&&icon.width===64&&icon.height===64);
+ document.getElementById('result').textContent=JSON.stringify({ok:true,checks});
+}catch(error){document.getElementById('result').textContent=JSON.stringify({ok:false,error:error.stack,checks});}
+</script>
