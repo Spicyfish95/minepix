@@ -25,7 +25,7 @@ npm run package
 
 安装器和 .sig 归属对应版本 Release。latest.json 指向版本资产，更新频道标签为 tauri-latest；它不匹配 `minepix-v*`，不会再次触发构建。先上传并验证版本资产，最后提升频道。已发布版本资产不覆盖；频道拒绝被较低版本回退。正式版在公开资产与频道验证通过后标为 Latest，预发布版保持 Prerelease 且不占用正式版 Latest 入口。
 
-版本标签统一使用 `minepix-v<版本号>`，例如 `minepix-v2.0.0`。已有预览版使用的 `tauri-latest` 频道地址继续保留，它与版本标签前缀分开管理。
+版本标签统一使用 `minepix-v<版本号>`，例如 `minepix-v2.0.1`。已有预览版使用的 `tauri-latest` 频道地址继续保留，它与版本标签前缀分开管理。
 
 安装包统一命名为 `MinePix_<版本>_x64-setup.exe`，签名附加 `.sig`。本地构建、公开资产、更新 URL 和差分块图使用同一名称。已发布资产不改名；名称规则在下个新版本生效。
 

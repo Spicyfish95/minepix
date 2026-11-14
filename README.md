@@ -4,9 +4,9 @@
 
 [English](README_EN.md) · [使用指南](docs/USER_GUIDE.md)
 
-**免费开源 · Windows x64 · 中文 / English · 正式版 2.0.0**
+**免费开源 · Windows x64 · 中文 / English · 正式版 2.0.1**
 
-[下载 Windows x64 安装包](https://github.com/Spicyfish95/minepix/releases/tag/minepix-v2.0.0)
+[下载 Windows x64 安装包](https://github.com/Spicyfish95/minepix/releases/tag/minepix-v2.0.1)
 
 ![MinePix 深色工作区：中央像素画布、左侧色板、右侧预览与图层、底部四帧动画时间轴](docs/images/workspace.png)
 
@@ -16,7 +16,7 @@
 
 ### 约 1.99 MiB 的安装包
 
-使用 Tauri 2、Rust 和系统 WebView2；文件操作、项目存储及格式编解码由 Rust 处理。2.0.0 正式版 Windows x64 安装包为 **2,083,311 字节（约 1.99 MiB）**，不含共享 WebView2 Runtime，也不等于安装后占用；安装器另有更新缓存。
+使用 Tauri 2、Rust 和系统 WebView2；文件操作、项目存储及格式编解码由 Rust 处理。安装包复用系统 WebView2，不捆绑独立浏览器运行时；具体大小以对应版本的 Release 附件为准，安装器另有更新缓存。
 
 ### 画图块时就检查地形拼接
 

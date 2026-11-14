@@ -4,9 +4,9 @@ A Windows desktop editor for pixel art, frame-by-frame animation and game assets
 
 [简体中文](README.md) · [User guide (Chinese)](docs/USER_GUIDE.md)
 
-**Free and open source · Windows x64 · Chinese / English · Stable 2.0.0**
+**Free and open source · Windows x64 · Chinese / English · Stable 2.0.1**
 
-[Download the Windows x64 installer](https://github.com/Spicyfish95/minepix/releases/tag/minepix-v2.0.0)
+[Download the Windows x64 installer](https://github.com/Spicyfish95/minepix/releases/tag/minepix-v2.0.1)
 
 ![MinePix dark workspace with the pixel canvas, palette, preview, layers and a four-frame animation timeline](docs/images/workspace-en.png)
 
@@ -16,7 +16,7 @@ A Windows desktop editor for pixel art, frame-by-frame animation and game assets
 
 ### An installer of about 1.99 MiB
 
-Built with Tauri 2, Rust and system WebView2, with Rust handling file operations, project storage and format codecs. The stable 2.0.0 Windows x64 installer is **2,083,311 bytes (about 1.99 MiB)**. This excludes the shared WebView2 Runtime and is not the installed footprint; the installer is also cached for updates.
+Built with Tauri 2, Rust and system WebView2, with Rust handling file operations, project storage and format codecs. The installer reuses system WebView2 instead of bundling a separate browser runtime. See the matching release assets for its size; the installer is also cached for updates.
 
 ### Check terrain connections as you draw tiles
 
