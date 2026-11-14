@@ -1,0 +1,17 @@
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="../src/style.css"><pre id="result">pending</pre>
+<script type="module">
+import {panelWindowChrome} from '../src/window-chrome.js';
+const results=[],check=(name,pass)=>{results.push({name,pass:!!pass});if(!pass)throw new Error(name);};
+try{
+ let pinned=false,changes=0;
+ window.desktop={windowState:async()=>({maximized:false,alwaysOnTop:pinned}),onWindowState:()=>{},windowControl:()=>{},setAlwaysOnTop:async value=>{pinned=value;changes++;return{maximized:false,alwaysOnTop:pinned};}};
+ panelWindowChrome(document,{pinnable:true});await Promise.resolve();
+ const pin=document.querySelector('[data-window-control=pin]');
+ check('独立窗口具有 Pin 图标且默认不置顶',pin.querySelector('svg')&&pin.getAttribute('aria-pressed')==='false');
+ await pin.onclick();check('点击置顶同步原生状态与提示',pinned&&pin.getAttribute('aria-pressed')==='true'&&pin.title==='取消窗口置顶');
+ document.documentElement.style.setProperty('--accent','#123456');check('置顶状态使用主题色',getComputedStyle(pin).color==='rgb(18, 52, 86)');
+ await pin.onclick();check('再次点击取消置顶',!pinned&&changes===2&&pin.getAttribute('aria-pressed')==='false'&&!pin.disabled);
+ document.querySelector('.utility-toolbar').remove();panelWindowChrome(document);check('其他面板默认不显示 Pin',!document.querySelector('[data-window-control=pin]'));
+ document.getElementById('result').textContent=JSON.stringify({ok:true,results});
+}catch(error){document.getElementById('result').textContent=JSON.stringify({ok:false,results,error:error.stack});}
+</script>

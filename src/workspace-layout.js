@@ -94,7 +94,7 @@ export function initWorkspaceLayout({canShowPanel=()=>true}={}){
   await new Promise(resolve=>{if(child.document.getElementById('floating-root'))resolve();else child.addEventListener('load',resolve,{once:true});});
    if(!canShowPanel(id)){floating.returning=true;child.close();floats.delete(id);return;}
    child.desktop=window.desktop.panelBridge(child);
-   const unregister=registerSurface(child.document);child.document.title='MinePix · '+titles[id];panelWindowChrome(child.document);syncSurfaceThemes(document.documentElement.dataset.theme);
+   const unregister=registerSurface(child.document);child.document.title='MinePix · '+titles[id];panelWindowChrome(child.document,{pinnable:['reference','terrain-preview','preview'].includes(id)});syncSurfaceThemes(document.documentElement.dataset.theme);
    const unregisterLocale=registerLocaleSurface(child.document);
    child.document.addEventListener('pointerdown',event=>{if(event.button===0&&event.target.closest('.window-caption'))void child.desktop.startDragging();});
   const host=child.document.getElementById('floating-root'),bar=child.document.createElement('div');bar.className='floating-header';bar.draggable=true;bar.innerHTML=iconMarkup(panelIcons[id]);bar.title=titles[id];bar.setAttribute('aria-label',titles[id]);bar.ondragstart=event=>startDrag(event,id);bar.ondragend=event=>finishDrag(event,id);bar.oncontextmenu=event=>{event.preventDefault();panelMenu(event,[['删除该栏目',()=>setPanelVisible(id,false)]]);};host.append(bar);removeFromSlot(id);state.floating[id]={home,index:floating.index};transfer(id,host);panels[id].hidden=false;render();save();

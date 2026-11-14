@@ -759,3 +759,5 @@ body :is(#dock-layout,#floating-root) [data-panel=tileset] .tileset-head .form-f
 .tileset-dimensions input{width:100%;min-width:0;max-width:none}
 .tileset-notice{margin:0;padding:8px;border:1px solid var(--accent-line);border-radius:4px;color:var(--text);background:var(--accent-bg);line-height:1.6}
 .tileset-notice[hidden]{display:none}
+
+.window-controls [data-window-control=pin][aria-pressed=true]{background:var(--accent-bg);color:var(--accent)}

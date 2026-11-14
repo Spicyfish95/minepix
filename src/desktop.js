@@ -52,7 +52,8 @@ function updateMenu(values,field){
 }
 function windowBridge(target){
  const bridge={};
- bridge.windowState=async()=>({maximized:await target.isMaximized()});
+ bridge.windowState=async()=>({maximized:await target.isMaximized(),alwaysOnTop:await target.isAlwaysOnTop()});
+ bridge.setAlwaysOnTop=async value=>{await target.setAlwaysOnTop(value);return bridge.windowState();};
  bridge.onWindowState=callback=>target.onResized(async()=>callback(await bridge.windowState()));
  bridge.windowControl=async action=>{if(action==='minimize')await target.minimize();else if(action==='maximize')await target.toggleMaximize();else if(action==='close'){await target.close();return;}return bridge.windowState();};
  bridge.startDragging=()=>target.startDragging();

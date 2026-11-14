@@ -5,7 +5,7 @@ import {promisify} from 'node:util';
 import path from 'node:path';
 const root=process.cwd();
 const suite=process.argv[2]||'panels';
-if(!['panels','updates'].includes(suite))throw new Error('Unknown browser test suite');
+if(!['panels','updates','pin'].includes(suite))throw new Error('Unknown browser test suite');
 const server=createServer(async(request,response)=>{
  try{
   const file=path.resolve(root,'.'+decodeURIComponent(new URL(request.url,'http://localhost').pathname));
