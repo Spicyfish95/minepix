@@ -47,7 +47,7 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node scripts/check-repository.mjs
       - name: Build signed Windows installer
-        if: github.event_name != 'pull_request'
+        if: startsWith(github.ref, 'refs/tags/tauri-v')
         env:
           CI: 'true'
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -64,7 +64,7 @@ jobs:
           $installer=Join-Path 'src-tauri/target/release/bundle/nsis' ('MinePix Tauri_'+$version+'_x64-setup.exe')
           cargo run --locked --release --manifest-path src-tauri/Cargo.toml --example update-tool -- $installer $version
       - name: Retain verified build outputs
-        if: github.event_name != 'pull_request'
+        if: startsWith(github.ref, 'refs/tags/tauri-v')
         uses: actions/upload-artifact@v4
         with:
           name: minepix-windows-x64-${{ github.sha }}
