@@ -84,7 +84,7 @@ try{
  Check 'Installed registry version is alpha.2' ($taskUninstallKey.DisplayVersion -eq '2.0.0-alpha.2')
  Check 'Updated Open With, commands and notification identity are unchanged' ((OwnAssociations) -ceq $taskOwnBefore)
  Check 'Project icon is unchanged through upgrade' ((Get-FileHash -LiteralPath (Join-Path $taskInstall 'project-icon.ico')).Hash -ceq $taskIconBefore)
- Check 'Target installer remains the verified differential cache' ((Get-FileHash -LiteralPath $taskCache).Hash.ToLower() -eq $taskTargetHash)
+ Check 'Successful target restart removes downloaded installer files' (-not (Test-Path -LiteralPath $taskCache) -and -not (Test-Path -LiteralPath (Join-Path $taskData 'update-cache\pending.exe')) -and -not (Test-Path -LiteralPath (Join-Path $taskData 'update-cache\pending.json')))
  Check 'Overlay preserves existing defaults and UserChoice' ((OriginalState) -ceq $taskBefore)
  $taskOk=$true
 }catch{

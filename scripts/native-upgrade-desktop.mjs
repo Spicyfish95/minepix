@@ -80,16 +80,21 @@ try{
  snapshots.saved={projectSha256:sha(projectBytes),modelSha256:sha(JSON.stringify(model)),canvasSha256:paintHash,preferences};
  check('Source edit is saved as binary PIX',projectBytes.subarray(0,1).toString()!=='{'&&(await audit()).undo===1);
  await command('check-updates');
- await wait(()=>session.evaluate('window.desktop.updateState().then(s=>s.status==="available")'),'available target',600);
+ await wait(()=>session.evaluate('window.desktop.updateState().then(s=>["available","downloading","downloaded"].includes(s.status))'),'available target',600);
  check('Native UI offers the expected signed target',await session.evaluate(`window.desktop.updateState().then(s=>s.version===${JSON.stringify(targetVersion)})`));
- await click('#update-primary');await wait(async()=>{
+ if(await session.evaluate('window.desktop.updateState().then(s=>s.status==="available")'))await click('#update-primary');
+ await wait(async()=>{
   const state=await session.evaluate('window.desktop.updateState()');
   snapshots.download=state;
   if(state.status==='error')throw new Error('Installer download failed: '+JSON.stringify(state.error));
   return state.status==='downloaded';
  },'verified real installer',publicUpdate?6000:1200);
  snapshots.download=await session.evaluate('window.desktop.updateState()');
- check('Real target installer downloaded through production verifier',(publicUpdate||(downloadRequests===1&&downloadBytes===bytes.length))&&sha(await readFile(path.join(process.env.APPDATA,'com.minepix.tauri/update-cache/base.exe')))===sha(bytes));
+ const cached=await readFile(path.join(process.env.APPDATA,'com.minepix.tauri/update-cache/pending.exe')).catch(error=>{
+  if(error.code==='ENOENT')return readFile(path.join(process.env.APPDATA,'com.minepix.tauri/update-cache/base.exe')); // Released source builds used the baseline file.
+  throw error;
+ });
+ check('Real target installer downloaded through production verifier',(publicUpdate||(downloadRequests===1&&downloadBytes===bytes.length))&&sha(cached)===sha(bytes));
  await session.screenshot(path.join(root,'before-install.png'));
  const previousTarget=session.target.id;
  // Actual UI installation; the official plugin exits the old process after starting NSIS.

@@ -22,10 +22,57 @@ fn nsis_restart_tail(arguments: &[String]) -> Option<&'static str> {
     (arguments.last().map(String::as_str) != Some(RESTART_TAIL)).then_some(RESTART_TAIL)
 }
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Settings {
     auto_update: bool,
+}
+impl Default for Settings {
+    fn default() -> Self { Self { auto_update: true } }
+}
+
+fn remove_file(path: &std::path::Path) -> io::Result<()> {
+    match std::fs::remove_file(path) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        result => result,
+    }
+}
+
+// Only touch the official updater's exact installer name in its versioned temp directories.
+fn cleanup_installers(temp: &std::path::Path, name: &str, version: &str) -> io::Result<()> {
+    let prefix = format!("{name}-{version}-updater-");
+    for entry in std::fs::read_dir(temp)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() || !entry.file_name().to_string_lossy().starts_with(&prefix) {
+            continue;
+        }
+        remove_file(&entry.path().join(format!("{name}-{version}-installer.exe")))?;
+        match std::fs::remove_dir(entry.path()) {
+            Err(error) if error.kind() == io::ErrorKind::DirectoryNotEmpty => {},
+            result => result?,
+        }
+    }
+    Ok(())
+}
+
+pub fn cleanup_installed<R: tauri::Runtime>(app: &AppHandle<R>, previous: Option<String>) {
+    let name = app.package_info().name.clone();
+    let current = app.package_info().version.to_string();
+    tauri::async_runtime::spawn(async move {
+        let temp = std::env::temp_dir();
+        // The new editor can start while NSIS still holds its executable open.
+        for attempt in 0..30 {
+            let result = cleanup_installers(&temp, &name, &current).and_then(|()| {
+                if let Some(version) = &previous { cleanup_installers(&temp, &name, version) }
+                else { Ok(()) }
+            });
+            match result {
+                Ok(()) => return,
+                Err(error) if attempt == 29 => eprintln!("无法清理更新安装临时文件：{error}"),
+                Err(_) => tokio::time::sleep(Duration::from_secs(2)).await,
+            }
+        }
+    });
 }
 
 pub fn validation_endpoint(arguments: &[String]) -> io::Result<Option<Url>> {
@@ -95,6 +142,75 @@ impl Updates {
     pub fn state(&self) -> Value {
         self.snapshot.lock().unwrap().clone()
     }
+    fn cache_dir(&self) -> PathBuf {
+        self.settings_path.parent().unwrap().join("update-cache")
+    }
+    fn save_pending(&self, update: &Update, bytes: &[u8]) -> io::Result<()> {
+        let root = self.cache_dir();
+        std::fs::create_dir_all(&root)?;
+        // Metadata is the commit marker; an interrupted write never restores unverified bytes.
+        remove_file(&root.join("pending.json"))?;
+        crate::storage::write_atomic(&root.join("pending.exe"), bytes)?;
+        crate::storage::write_json(&root.join("pending.json"), &update.raw_json)
+    }
+    fn clear_pending(&self) -> io::Result<()> {
+        let root = self.cache_dir();
+        remove_file(&root.join("pending.json"))?;
+        remove_file(&root.join("pending.exe"))?;
+        if root.is_dir() {
+            for entry in std::fs::read_dir(&root)? {
+                let entry = entry?;
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                if ["pending.json.", "pending.exe."].iter().any(|prefix| {
+                    name.strip_prefix(prefix).and_then(|s| s.strip_suffix(".tmp"))
+                        .is_some_and(|id| uuid::Uuid::parse_str(id).is_ok())
+                }) { remove_file(&entry.path())?; }
+            }
+        }
+        Ok(())
+    }
+    fn updater<R: tauri::Runtime>(&self, app: &AppHandle<R>) -> tauri_plugin_updater::Result<tauri_plugin_updater::Updater> {
+        let mut builder = app.updater_builder().timeout(Duration::from_secs(120));
+        if let Some(tail) = nsis_restart_tail(&std::env::args().collect::<Vec<_>>()) {
+            builder = builder.installer_arg(tail);
+        }
+        builder.build()
+    }
+    // Runs before editor creation. Restoring metadata never contacts the update endpoint.
+    pub fn restore<R: tauri::Runtime>(&self, app: &AppHandle<R>) -> Result<Option<String>, String> {
+        let root = self.cache_dir();
+        let metadata = root.join("pending.json");
+        if !metadata.exists() {
+            self.clear_pending().map_err(|e| e.to_string())?;
+            return Ok(None);
+        }
+        let result = (|| -> Result<Option<String>, String> {
+            let raw: Value = serde_json::from_slice(&crate::storage::read_file(&metadata).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+            let version = raw["version"].as_str().map(str::to_owned);
+            let update = self.updater(app).map_err(|e| e.to_string())?.restore_update(raw).map_err(|e| e.to_string())?;
+            let Some(update) = update else {
+                self.clear_pending().map_err(|e| e.to_string())?;
+                remove_file(&root.join("base.exe")).map_err(|e| e.to_string())?;
+                match std::fs::remove_dir(&root) {
+                    Err(error) if error.kind() == io::ErrorKind::DirectoryNotEmpty => {},
+                    result => result.map_err(|e| e.to_string())?,
+                }
+                return Ok(version);
+            };
+            let bytes = crate::storage::read_file(&root.join("pending.exe")).map_err(|e| e.to_string())?;
+            update.verify(&bytes).map_err(|e| e.to_string())?;
+            let mut state = self.snapshot.lock().unwrap();
+            state["status"] = json!("downloaded");
+            state["version"] = json!(update.version);
+            state["notes"] = json!(update.body.clone().unwrap_or_default());
+            *self.available.lock().unwrap() = Some(update);
+            *self.downloaded.lock().unwrap() = Some(bytes);
+            Ok(None)
+        })();
+        if result.is_err() { self.clear_pending().map_err(|e| e.to_string())?; }
+        result
+    }
     fn publish<R: tauri::Runtime>(&self, app: &AppHandle<R>, patch: Value) -> Value {
         let (state, completed) = {
             let mut state = self.snapshot.lock().unwrap();
@@ -140,11 +256,7 @@ impl Updates {
             app,
             json!({"status":"checking","error":null,"notice":null,"progress":null,"transfer":null}),
         );
-        let mut builder = app.updater_builder().timeout(Duration::from_secs(120));
-        if let Some(tail) = nsis_restart_tail(&std::env::args().collect::<Vec<_>>()) {
-            builder = builder.installer_arg(tail);
-        }
-        let updater = match builder.build() {
+        let updater = match self.updater(app) {
             Ok(updater) => updater,
             Err(error) => return self.fail(app, "check", error),
         };
@@ -202,9 +314,10 @@ impl Updates {
             None => self.publish(app, json!({"status":"cancelled","progress":null})),
             Some(Err(error)) => self.fail(app, "download", error),
             Some(Ok((bytes,mut transfer))) => {
-                if let Err(error) = crate::differential::cache_verified(self.settings_path.parent().unwrap(),&bytes) {
-                    eprintln!("无法保存已验证更新缓存：{error}");
-                    transfer.cache_error=Some(error.to_string());
+                if let Err(error) = self.save_pending(&update, &bytes) {
+                    transfer.cache_error = Some(error.to_string());
+                    self.publish(app, json!({"transfer":transfer}));
+                    return self.fail(app, "download", format!("无法保存更新包，请检查磁盘空间和权限：{error}"));
                 }
                 *self.downloaded.lock().unwrap() = Some(bytes);
                 self.publish(
@@ -352,8 +465,13 @@ mod tests {
     }
 
     fn mock_updater_app(endpoint: &str) -> tauri::App<tauri::test::MockRuntime> {
+        mock_updater_version(endpoint, "0.1.0")
+    }
+
+    fn mock_updater_version(endpoint: &str, version: &str) -> tauri::App<tauri::test::MockRuntime> {
         let production: Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
         let mut context = tauri::test::mock_context(tauri::test::noop_assets());
+        context.package_info_mut().version = version.parse().unwrap();
         context.config_mut().plugins.0.insert(
             "updater".into(),
             json!({
@@ -454,7 +572,9 @@ mod tests {
             let state=updates.download(app.handle()).await;
             assert_eq!(state["status"],"downloaded");assert_eq!(state["transfer"]["mode"],"differential");assert!(state["transfer"]["reusedBytes"].as_u64().unwrap()>0);
             assert_eq!(updates.downloaded.lock().unwrap().as_deref(),Some(TARGET));
-            assert_eq!(crate::storage::read_file(&differential::cache_path(root.path())).unwrap(),TARGET);
+            assert_eq!(crate::storage::read_file(&differential::cache_path(root.path())).unwrap(),base());
+            assert_eq!(crate::storage::read_file(&updates.cache_dir().join("pending.exe")).unwrap(),TARGET);
+            assert!(updates.cache_dir().join("pending.json").is_file());
         });
     }
 
@@ -469,18 +589,131 @@ mod tests {
             tauri::async_runtime::block_on(async{
                 assert_eq!(updates.check(app.handle()).await["status"],"available");
                 let state=updates.download(app.handle()).await;
-                if ["bad-signature","version"].contains(&mode) {
+                if ["bad-signature","version","cache-failure"].contains(&mode) {
                     assert_eq!(state["status"],"error","{mode}");assert!(updates.downloaded.lock().unwrap().is_none());
-                    assert_eq!(crate::storage::read_file(&differential::cache_path(root.path())).unwrap(),base());
+                    if mode=="cache-failure" {assert!(state["transfer"]["cacheError"].is_string());}
+                    else {assert_eq!(crate::storage::read_file(&differential::cache_path(root.path())).unwrap(),base());}
                 } else {
                     assert_eq!(state["status"],"downloaded","{mode}");
-                    if mode!="cache-failure" {assert_eq!(state["transfer"]["mode"],"full-fallback");assert!(state["transfer"]["fallbackReason"].is_string());}
+                    assert_eq!(state["transfer"]["mode"],"full-fallback");assert!(state["transfer"]["fallbackReason"].is_string());
                     assert_eq!(updates.downloaded.lock().unwrap().as_deref(),Some(TARGET));
-                    if mode=="cache-failure" {assert!(state["transfer"]["cacheError"].is_string());}
-                    else {assert_eq!(crate::storage::read_file(&differential::cache_path(root.path())).unwrap(),TARGET);}
+                    assert_eq!(crate::storage::read_file(&updates.cache_dir().join("pending.exe")).unwrap(),TARGET);
                 }
             });
         }
+    }
+
+    #[test]
+    fn verified_download_restores_offline_and_successful_upgrade_cleans_it() {
+        let (endpoint, server) = signed_feed("valid");
+        let app = mock_updater_app(&endpoint);
+        let root = tempfile::tempdir().unwrap();
+        let updates = Updates::new(root.path().into(), "0.1.0").unwrap();
+        tauri::async_runtime::block_on(async {
+            assert_eq!(updates.check(app.handle()).await["status"], "available");
+            assert_eq!(updates.download(app.handle()).await["status"], "downloaded");
+        });
+        server.join().unwrap(); // No live server for the entire restore/retry path.
+        drop(updates);
+        let restored = Updates::new(root.path().into(), "0.1.0").unwrap();
+        restored.set_automatic(false).unwrap();
+        assert_eq!(restored.restore(app.handle()).unwrap(), None);
+        assert_eq!(restored.state()["status"], "downloaded");
+        assert_eq!(restored.state()["version"], "2.0.0-alpha.2");
+        assert_eq!(restored.downloaded.lock().unwrap().as_deref(), Some(include_bytes!("../../tests/fixtures/updater-protocol.bin").as_slice()));
+        tauri::async_runtime::block_on(async {
+            assert_eq!(restored.check(app.handle()).await["status"], "downloaded");
+            assert_eq!(restored.download(app.handle()).await["status"], "downloaded");
+        });
+        // The old version running again represents a failed/cancelled install; keep the package.
+        let retry = Updates::new(root.path().into(), "0.1.0").unwrap();
+        retry.restore(app.handle()).unwrap();
+        assert!(retry.cache_dir().join("pending.exe").exists());
+        crate::differential::cache_verified(root.path(), b"old baseline").unwrap();
+        let interrupted = retry.cache_dir().join(format!("pending.exe.{}.tmp", uuid::Uuid::new_v4()));
+        std::fs::write(&interrupted, b"interrupted write").unwrap();
+        let upgraded_app = mock_updater_version(&endpoint, "2.0.0-alpha.2");
+        let upgraded = Updates::new(root.path().into(), "2.0.0-alpha.2").unwrap();
+        assert_eq!(upgraded.restore(upgraded_app.handle()).unwrap().as_deref(), Some("2.0.0-alpha.2"));
+        assert_eq!(upgraded.state()["status"], "idle");
+        assert!(!upgraded.cache_dir().exists());
+        assert!(!upgraded.automatic());
+    }
+
+    #[test]
+    fn damaged_or_relabelled_pending_download_is_rejected_and_orphans_removed() {
+        for mode in ["payload", "version", "signature", "metadata", "missing-payload", "orphan"] {
+            let (endpoint, server) = signed_feed("valid");
+            let app = mock_updater_app(&endpoint);
+            let root = tempfile::tempdir().unwrap();
+            let updates = Updates::new(root.path().into(), "0.1.0").unwrap();
+            tauri::async_runtime::block_on(async {
+                updates.check(app.handle()).await;
+                assert_eq!(updates.download(app.handle()).await["status"], "downloaded");
+            });
+            server.join().unwrap();
+            let metadata = updates.cache_dir().join("pending.json");
+            let payload = updates.cache_dir().join("pending.exe");
+            let interrupted = updates.cache_dir().join(format!("pending.json.{}.tmp", uuid::Uuid::new_v4()));
+            std::fs::write(&interrupted, b"interrupted metadata").unwrap();
+            match mode {
+                "payload" => std::fs::write(&payload, b"changed").unwrap(),
+                "metadata" => std::fs::write(&metadata, b"{").unwrap(),
+                "missing-payload" => std::fs::remove_file(&payload).unwrap(),
+                "orphan" => std::fs::remove_file(&metadata).unwrap(),
+                _ => {
+                    let mut raw: Value = serde_json::from_slice(&std::fs::read(&metadata).unwrap()).unwrap();
+                    if mode == "version" { raw["version"] = json!("9.0.0"); }
+                    else { raw["platforms"]["windows-x86_64"]["signature"] = json!("bad signature"); }
+                    crate::storage::write_json(&metadata, &raw).unwrap();
+                }
+            }
+            let restored = Updates::new(root.path().into(), "0.1.0").unwrap();
+            assert_eq!(restored.restore(app.handle()).is_err(), mode != "orphan", "{mode}");
+            assert_eq!(restored.state()["status"], "idle", "{mode}");
+            assert!(restored.downloaded.lock().unwrap().is_none(), "{mode}");
+            assert!(!metadata.exists() && !payload.exists(), "{mode}");
+            assert!(!interrupted.exists(), "{mode}");
+        }
+    }
+
+    #[test]
+    fn installer_cleanup_removes_only_matching_version_and_exact_file() {
+        let root = tempfile::tempdir().unwrap();
+        let matching = root.path().join("MinePix-2.0.1-updater-123");
+        let other = root.path().join("MinePix-2.0.2-updater-123");
+        let unrelated = root.path().join("Other-2.0.1-updater-123");
+        for folder in [&matching, &other, &unrelated] {
+            std::fs::create_dir(folder).unwrap();
+            std::fs::write(folder.join("MinePix-2.0.1-installer.exe"), b"installer").unwrap();
+        }
+        std::fs::write(matching.join("keep.txt"), b"unrelated").unwrap();
+        cleanup_installers(root.path(), "MinePix", "2.0.1").unwrap();
+        assert!(!matching.join("MinePix-2.0.1-installer.exe").exists());
+        assert!(matching.join("keep.txt").exists());
+        assert!(other.join("MinePix-2.0.1-installer.exe").exists());
+        assert!(unrelated.join("MinePix-2.0.1-installer.exe").exists());
+        std::fs::remove_file(matching.join("keep.txt")).unwrap();
+        cleanup_installers(root.path(), "MinePix", "2.0.1").unwrap();
+        assert!(!matching.exists());
+        cleanup_installers(root.path(), "MinePix", "2.0.1").unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn installer_cleanup_can_retry_after_nsis_releases_its_executable() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let root = tempfile::tempdir().unwrap();
+        let folder = root.path().join("MinePix-2.0.1-updater-locked");
+        std::fs::create_dir(&folder).unwrap();
+        let file = folder.join("MinePix-2.0.1-installer.exe");
+        std::fs::write(&file, b"installer").unwrap();
+        let running = std::fs::OpenOptions::new().read(true).share_mode(1).open(&file).unwrap();
+        assert!(cleanup_installers(root.path(), "MinePix", "2.0.1").is_err());
+        assert!(file.exists());
+        drop(running);
+        cleanup_installers(root.path(), "MinePix", "2.0.1").unwrap();
+        assert!(!folder.exists());
     }
 
     #[test]
@@ -539,7 +772,7 @@ mod tests {
     fn settings_persist_and_channels_are_independent() {
         let root = tempfile::tempdir().unwrap();
         let updater = Updates::new(root.path().into(), "2.0.0-alpha.1").unwrap();
-        assert!(!updater.automatic());
+        assert!(updater.automatic());
         updater.set_automatic(true).unwrap();
         assert!(
             Updates::new(root.path().into(), "2.0.0-alpha.1")

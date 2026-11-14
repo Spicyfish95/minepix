@@ -1,0 +1,64 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>MinePix update interface regression</title>
+<dialog id="modal"></dialog>
+<pre id="result">pending</pre>
+<script type="module">
+import {createHelp} from '../src/help.js';
+const checks=[];
+const check=(name,value)=>{checks.push({name,pass:!!value});if(!value)throw new Error(name);};
+const settle=async()=>{for(let i=0;i<25;i++)await Promise.resolve();};
+const timers=[],originalTimeout=window.setTimeout;
+window.setTimeout=(callback,delay,...args)=>delay===3000?timers.push(callback):originalTimeout(callback,delay,...args);
+function fixture({automatic=true,status='idle',secondary=false,packaged=true}={}){
+ document.querySelectorAll('#update-panel,#update-status,#about-fixture').forEach(element=>element.remove());timers.length=0;
+ let state={status,current:'2.0.1',version:status==='downloaded'?'2.0.2':null},listener;
+ const calls={check:0,download:0,install:0,settings:[]};
+ const send=patch=>{state={...state,...patch};listener?.(state);return state;};
+ const desktop={secondary,onUpdateState:callback=>{listener=callback;},onNotificationAction:()=>{},updateState:async()=>state,
+  appInfo:async()=>({version:'2.0.1',autoUpdate:automatic,packaged}),
+  setAutoUpdate:async value=>{automatic=value;calls.settings.push(value);},
+  checkUpdates:async()=>{calls.check++;return send({status:'available',version:'2.0.2'});},
+  downloadUpdate:async()=>{calls.download++;send({status:'downloading',progress:{percent:50,transferred:1024,total:2048,bytesPerSecond:512}});await Promise.resolve();return send({status:'downloaded',progress:null});},
+  installUpdate:async()=>{calls.install++;send({status:'preparing'});await Promise.resolve();return send({status:'downloaded',notice:'install-cancelled'});},
+  openRepository:async()=>{},openUpdateRelease:async()=>{}
+ };
+ const help=createHelp({desktop,modal:async(_,html,setup)=>{const host=document.createElement('form');host.id='about-fixture';host.innerHTML=html;document.body.append(host);setup(host);},message:()=>{},report:error=>{throw error;}});
+ return{help,calls,send};
+}
+try{
+ let f=fixture();await settle();await f.help.about();
+ check('关于页没有测试按钮或相关说明',!document.querySelector('#about-notification-test')&&!document.getElementById('about-fixture').textContent.includes('测试')&&!document.getElementById('about-fixture').textContent.includes('下载进度'));
+ const checkbox=document.querySelector('[name="auto-update"]');
+ check('默认自动更新开关按后端默认值选中',checkbox.checked);
+ checkbox.checked=false;checkbox.dispatchEvent(new Event('change'));await settle();
+ check('关闭开关仍写入偏好',f.calls.settings.length===1&&f.calls.settings[0]===false);
+ await f.help.start();check('关闭后不安排启动自动检查',timers.length===0);
+ f=fixture();await f.help.start();check('主窗口安排一次启动检查',timers.length===1);
+ timers.shift()();await settle();
+ check('启动检查发现更新后自动下载',f.calls.check===1&&f.calls.download===1);
+ const badge=document.getElementById('update-status');
+ check('下载完成显示右下角重启更新文字',!badge.hidden&&badge.textContent==='有可用更新，点击重启并更新');
+ check('更新完成前不会自动安装',f.calls.install===0);
+ document.getElementById('update-hide').click();badge.click();badge.click();await settle();
+ check('点击右下角直接安装且重复点击不重复发起',f.calls.install===1);
+ check('未保存作品取消后仍可重试',!badge.hidden&&badge.textContent.includes('点击重启并更新')&&document.getElementById('update-hint').textContent.includes('已取消安装'));
+ badge.click();await settle();check('取消后再次点击重启更新仍走同一安装入口',f.calls.install===2);
+ f=fixture({status:'downloaded'});await f.help.start();await settle();
+ check('再次启动立即显示已就绪更新',!document.getElementById('update-status').hidden&&document.getElementById('update-status').textContent.includes('点击重启并更新'));
+ check('再次启动不检查也不重复下载',timers.length===0&&f.calls.check===0&&f.calls.download===0);
+ document.getElementById('update-status').click();await settle();check('恢复的更新也可直接重启更新',f.calls.install===1);
+ f=fixture({automatic:false,status:'downloaded'});await f.help.start();
+ check('关闭自动检查不隐藏已下载更新',!document.getElementById('update-status').hidden&&timers.length===0);
+ f=fixture({automatic:false});await f.help.check();
+ check('手动模式检查后等待用户下载',f.calls.check===1&&f.calls.download===0&&!document.getElementById('update-panel').hidden);
+ document.getElementById('update-primary').click();await settle();check('手动模式仍可主动下载',f.calls.download===1);
+ f=fixture();await f.help.check();check('自动选中时手动检查也会自动下载',f.calls.check===1&&f.calls.download===1);
+ f=fixture({secondary:true});await f.help.start();check('副窗口不重复安排自动检查',timers.length===0);
+ f=fixture({packaged:false});await f.help.start();check('开发模式不启动自动联网',timers.length===0);
+ f=fixture();await f.help.start();await f.help.about();const delayed=document.querySelector('[name="auto-update"]');delayed.checked=false;delayed.dispatchEvent(new Event('change'));await settle();timers.shift()();await settle();check('延迟启动检查前关闭开关会取消自动检查',f.calls.check===0&&f.calls.download===0);
+ f=fixture();await f.help.about();const input=document.querySelector('[name="auto-update"]');input.checked=false;input.dispatchEvent(new Event('change'));await settle();await f.help.check();check('运行时关闭自动开关后检查不再自动下载',f.calls.download===0);
+ document.getElementById('result').textContent=JSON.stringify({ok:true,checks});
+}catch(error){document.getElementById('result').textContent=JSON.stringify({ok:false,error:error.stack,checks});}
+finally{window.setTimeout=originalTimeout;}
+</script>

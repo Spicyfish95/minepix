@@ -633,6 +633,11 @@ pub fn run() {
             let files = files::Files::new(root.clone())?;
             let updates =
                 updater::Updates::new(root.clone(), &app.package_info().version.to_string())?;
+            let completed = match updates.restore(app.handle()) {
+                Ok(version) => version,
+                Err(error) => { eprintln!("无法恢复待安装更新：{error}"); None }
+            };
+            updater::cleanup_installed(app.handle(), completed);
             app.manage(Backend {
                 recovery: Mutex::new(RecoveryStore::new(root.join("recovery"))),
                 files: Mutex::new(files),

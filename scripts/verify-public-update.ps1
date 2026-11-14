@@ -72,7 +72,7 @@ try{
  Check 'Updated installed version matches target release' ((Get-Item -LiteralPath $taskExe).VersionInfo.ProductVersion -eq $TargetVersion)
  Check 'Project registration survives update' ((KeyTree 'Software\Classes\MinePixTauri.Project'|ConvertTo-Json -Depth 30 -Compress) -ceq $identity)
  Check 'Update preserves existing defaults' ((Defaults) -ceq $taskDefaults)
- Check 'Cached target equals the downloaded public installer' ((Get-FileHash -LiteralPath $taskCache).Hash -eq (Get-FileHash -LiteralPath $taskTarget).Hash)
+ Check 'Successful target restart removes downloaded installer files' (-not (Test-Path -LiteralPath $taskCache) -and -not (Test-Path -LiteralPath (Join-Path $taskData 'update-cache/pending.exe')) -and -not (Test-Path -LiteralPath (Join-Path $taskData 'update-cache/pending.json')))
  $taskOk=$true
 }catch{
  $taskResults.Add([pscustomobject]@{name='Public update verification error';pass=$false;error=$_.Exception.Message})

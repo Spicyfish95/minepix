@@ -8,7 +8,7 @@ const root=path.resolve('artifacts/updater-native-protocol');
 const executable=path.resolve('src-tauri/target/release/minepix-tauri.exe');
 const project=path.join(root,'first.pix');
 const appdata=path.join(process.env.APPDATA,'com.minepix.tauri');
-const preserved=['updater-settings.json','recent-files.json','update-cache/base.exe'];
+const preserved=['updater-settings.json','recent-files.json','update-cache/base.exe','update-cache/pending.exe','update-cache/pending.json'];
 const before=new Map(),children=[];
 let ok=false;
 const cleanup={appExited:false,serverExited:false,cdpReleased:false,serverReleased:false,filesRestored:false};
@@ -26,6 +26,9 @@ try{
  assert.ok(!await occupied('http://127.0.0.1:19412/stats'),'Test server occupied');
  await mkdir(root,{recursive:true});
  for(const name of preserved)before.set(name,await readFile(path.join(appdata,name)).catch(error=>{if(error.code==='ENOENT')return null;throw error;}));
+ assert.equal(before.get('update-cache/pending.json'),null,'Existing pending update must not be replaced by a protocol test');
+ await mkdir(appdata,{recursive:true});
+ await writeFile(path.join(appdata,'updater-settings.json'),JSON.stringify({autoUpdate:false}));
  await copyFile('examples/mushroom.pix',project);
  const server=launch(process.execPath,['scripts/update-test-server.mjs']);
  await wait(async()=>{if(server.error)throw server.error;return occupied('http://127.0.0.1:19412/stats');},'local fixture server');

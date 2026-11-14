@@ -28,8 +28,10 @@ test('三种格式提供打开方式且不批量覆盖扩展名默认值',()=>{
  assert.doesNotMatch(script,/WriteRegStr[^\n]*"Software\\Classes\\\.\$\{EXT\}"/);
  assert.doesNotMatch(script,/UserChoice|assoc |ftype /i);
 });
-test('安装器基准只缓存并删除自身文件且卸载不递归删除用户数据',()=>{
- assert.ok(script.includes('CopyFiles /SILENT "$EXEPATH" "$APPDATA\\${BUNDLEID}\\update-cache\\base.exe"'));
+test('安装器不再留存安装器副本且仅清理自身更新缓存',()=>{
+ assert.doesNotMatch(script,/CopyFiles[^\n]*update-cache/);
+ assert.ok(script.includes('${If} $UpdateMode <> 1\n    Delete "$APPDATA\\${BUNDLEID}\\update-cache\\pending.json"'));
+ assert.ok(script.includes('Delete "$APPDATA\\${BUNDLEID}\\update-cache\\pending.exe"'));
  assert.ok(script.includes('Delete "$APPDATA\\${BUNDLEID}\\update-cache\\base.exe"'));
  assert.ok(script.includes('RMDir "$APPDATA\\${BUNDLEID}\\update-cache"'));
  assert.doesNotMatch(script,/RMDir\s+\/r|Delete\s+"[^"\n]*\*|MinePix_is1/);

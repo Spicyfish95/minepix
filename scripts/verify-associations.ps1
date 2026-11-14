@@ -62,8 +62,8 @@ try {
     $taskInstalled = $true
     $taskExe = Join-Path $taskInstall 'minepix-tauri.exe'
     Check 'Installed executable exists in path with spaces' (Test-Path -LiteralPath $taskExe)
-    Check 'Installed differential base is exactly the current NSIS installer' ((Test-Path -LiteralPath $taskCache) -and (Get-FileHash -LiteralPath $taskCache).Hash -ceq (Get-FileHash -LiteralPath $taskInstaller.FullName).Hash)
-    $taskCacheBytes = (Get-Item -LiteralPath $taskCache).Length
+    Check 'Fresh installation retains no installer cache' (-not (Test-Path -LiteralPath $taskCache))
+    $taskCacheBytes = 0
     $taskIconPath = Join-Path $taskInstall 'project-icon.ico'
     Check 'Installed project icon matches the dedicated document asset' ((Test-Path -LiteralPath $taskIconPath) -and (Get-FileHash -LiteralPath $taskIconPath).Hash -ceq (Get-FileHash -LiteralPath "$taskRepo\src\assets\project-icon.ico").Hash)
     Add-Type -AssemblyName System.Drawing

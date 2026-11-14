@@ -4,6 +4,8 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import path from 'node:path';
 const root=process.cwd();
+const suite=process.argv[2]||'panels';
+if(!['panels','updates'].includes(suite))throw new Error('Unknown browser test suite');
 const server=createServer(async(request,response)=>{
  try{
   const file=path.resolve(root,'.'+decodeURIComponent(new URL(request.url,'http://localhost').pathname));
@@ -15,10 +17,10 @@ const server=createServer(async(request,response)=>{
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 await mkdir('artifacts',{recursive:true});
-const profile=await mkdtemp(path.join(root,'artifacts/panels-browser-'));
+const profile=await mkdtemp(path.join(root,`artifacts/${suite}-browser-`));
 try{
  const browser=process.env.MINEPIX_TEST_BROWSER||'C:/Program Files/Google/Chrome/Application/chrome.exe';
- const {stdout}=await promisify(execFile)(browser,['--headless=new','--disable-gpu','--no-first-run','--disable-extensions',`--user-data-dir=${profile}`,'--dump-dom','--virtual-time-budget=10000',`http://127.0.0.1:${server.address().port}/tests/panels.browser.html`],{timeout:30000,maxBuffer:4*1024*1024,windowsHide:true});
+ const {stdout}=await promisify(execFile)(browser,['--headless=new','--disable-gpu','--no-first-run','--disable-extensions',`--user-data-dir=${profile}`,'--dump-dom','--virtual-time-budget=10000',`http://127.0.0.1:${server.address().port}/tests/${suite}.browser.html`],{timeout:30000,maxBuffer:4*1024*1024,windowsHide:true});
  const text=stdout.match(/<pre id="result">(.*?)<\/pre>/s)?.[1];
  if(!text||text==='pending')throw new Error('Browser checks did not finish');
  const result=JSON.parse(text.replaceAll('&quot;','"').replaceAll('&gt;','>').replaceAll('&lt;','<').replaceAll('&amp;','&'));

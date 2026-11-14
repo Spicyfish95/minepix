@@ -47,13 +47,19 @@
   WriteRegStr SHCTX "Software\Classes\Applications\${MAINBINARYNAME}.exe\shell\open\command" "" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\" $\"%1$\""
   WriteRegStr SHCTX "Software\Classes\AppUserModelId\com.minepix.tauri" "DisplayName" "${PRODUCTNAME}"
   WriteRegStr SHCTX "Software\Classes\AppUserModelId\com.minepix.tauri" "IconUri" "$INSTDIR\notification-icon.png"
-  CreateDirectory "$APPDATA\${BUNDLEID}\update-cache"
-  CopyFiles /SILENT "$EXEPATH" "$APPDATA\${BUNDLEID}\update-cache\base.exe"
+  ; Do not retain a full installer as a differential baseline after installation.
+  Delete "$APPDATA\${BUNDLEID}\update-cache\base.exe"
+  RMDir "$APPDATA\${BUNDLEID}\update-cache"
   ClearErrors
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
 !macroend
 
 !macro NSIS_HOOK_POSTUNINSTALL
+  ; An update may uninstall the old version first; preserve its verified pending package.
+  ${If} $UpdateMode <> 1
+    Delete "$APPDATA\${BUNDLEID}\update-cache\pending.json"
+    Delete "$APPDATA\${BUNDLEID}\update-cache\pending.exe"
+  ${EndIf}
   Delete "$APPDATA\${BUNDLEID}\update-cache\base.exe"
   RMDir "$APPDATA\${BUNDLEID}\update-cache"
   !insertmacro MinePixRemoveType "pix" "MinePixTauri.Project"

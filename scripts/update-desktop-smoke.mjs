@@ -52,7 +52,7 @@ try{
  baseline=await main.evaluate('Object.fromEntries(Object.entries(localStorage))');
  await main.evaluate("window.minepixLocale.set('zh')");
  const info=await main.evaluate('window.desktop.appInfo()');
- check('初始自动检查关闭且状态可读取',!info.autoUpdate&&(await snapshot()).status==='idle');
+ check('协议测试显式关闭自动检查且状态可读取',!info.autoUpdate&&(await snapshot()).status==='idle');
  await main.evaluate("window.desktop.menuCommand({id:'about'})");
  await wait(main,"document.getElementById('modal').open");
  await click(main,'input[name="auto-update"]');
