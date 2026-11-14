@@ -10,7 +10,7 @@ async function release(tag){
  try{return JSON.parse(await gh('release','view',tag,'--json','isDraft,isPrerelease,targetCommitish,url'));}
  catch(error){if(/release not found|HTTP 404/.test(error.stderr))return null;throw error;}
 }
-const local=await verifyRelease(),tag=`tauri-v${local.version}`;
+const local=await verifyRelease(),tag=`minepix-v${local.version}`;
 const policy=releasePolicy(local.version);
 assert.equal(process.env.GITHUB_REF,`refs/tags/${tag}`,'Publication requires the matching version tag');
 const manifestBytes=await readFile('artifacts/release/latest.json');

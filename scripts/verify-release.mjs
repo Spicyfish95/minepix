@@ -28,7 +28,7 @@ export function compareVersions(a,b){
 export function verifyManifest(manifest,version,bytes,signature){
  const filename=`MinePix Tauri_${version}_x64-setup.exe`;
  const assetName=releaseAssetName(version);
- const url=`https://github.com/${repository}/releases/download/tauri-v${version}/${assetName}`;
+ const url=`https://github.com/${repository}/releases/download/minepix-v${version}/${assetName}`;
  assert.equal(manifest.version,version);
  assert.ok(Number.isFinite(Date.parse(manifest.pub_date)));
  assert.equal(typeof manifest.notes,'string');
@@ -46,7 +46,7 @@ export async function verifyRelease(){
  assert.equal(lock.packages[''].version,pkg.version);
  const cargo=await readFile('src-tauri/Cargo.toml','utf8');
  assert.ok(cargo.includes('version = '+String.fromCharCode(34)+pkg.version+String.fromCharCode(34)));
- if(process.env.GITHUB_REF?.startsWith('refs/tags/'))assert.equal(process.env.GITHUB_REF,`refs/tags/tauri-v${pkg.version}`);
+ if(process.env.GITHUB_REF?.startsWith('refs/tags/'))assert.equal(process.env.GITHUB_REF,`refs/tags/minepix-v${pkg.version}`);
  assert.equal(config.plugins.updater.requireSignedVersion,true);
  assert.equal(config.plugins.updater.dangerousInsecureTransportProtocol,undefined);
  assert.deepEqual(config.plugins.updater.endpoints,[`https://github.com/${repository}/releases/download/tauri-latest/latest.json`]);

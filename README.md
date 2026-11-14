@@ -6,7 +6,7 @@
 
 **免费开源 · Windows x64 · 中文 / English · 正式版 2.0.0**
 
-[下载 Windows x64 安装包](https://github.com/Spicyfish95/minepix/releases/download/tauri-v2.0.0/MinePix.Tauri_2.0.0_x64-setup.exe)
+[下载 Windows x64 安装包](https://github.com/Spicyfish95/minepix/releases/download/minepix-v2.0.0/MinePix.Tauri_2.0.0_x64-setup.exe)
 
 ![MinePix 深色工作区：中央像素画布、左侧色板、右侧预览与图层、底部四帧动画时间轴](docs/images/workspace.png)
 
@@ -70,7 +70,7 @@
 
 重要作品建议保留副本。自动检查更新默认关闭，可通过“帮助 → 检查更新”手动检查，或在“帮助 → 关于”启用启动时自动检查。下载完成后点击“重启并更新”，按提示处理未保存项目，再完成覆盖和重启。
 
-此前 alpha.4 已在测试机完成独立安装及 alpha.3 → alpha.4 的软件内更新验证；2.0.0 本次仅核验构建与发布，不新增本机安装更新测试。手动下载请进入对应的 `tauri-v<版本>` Release，选择 `MinePix.Tauri_<版本>_x64-setup.exe`；`.sig` 由更新器使用，无需手动打开。`tauri-latest` 保存更新频道清单。
+此前 alpha.4 已在测试机完成独立安装及 alpha.3 → alpha.4 的软件内更新验证；2.0.0 本次仅核验构建与发布，不新增本机安装更新测试。手动下载请进入对应的 `minepix-v<版本>` Release，选择 `MinePix.Tauri_<版本>_x64-setup.exe`；`.sig` 由更新器使用，无需手动打开。`tauri-latest` 保存更新频道清单。
 
 ## 开发
 
@@ -81,7 +81,7 @@ npm ci
 npm run desktop
 ```
 
-普通 main 推送和 PR 不触发 Actions。仅推送 `tauri-v*` 标签时，工作流执行完整测试、构建签名安装包并发布更新；日常开发在本地运行相关测试。
+普通 main 推送和 PR 不触发 Actions。仅推送 `minepix-v*` 标签时，工作流执行完整测试、构建签名安装包并发布更新；日常开发在本地运行相关测试。
 
 - [使用指南](docs/USER_GUIDE.md)
 - [开发与验证](docs/DEVELOPMENT.md)

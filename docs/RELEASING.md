@@ -21,9 +21,11 @@ npm run package
 
 构建使用 Windows runner、Node 24、Rust stable 和锁文件。仓库 Actions Secret `TAURI_SIGNING_PRIVATE_KEY` 保存私钥内容；只有私钥设置了密码时才需额外配置 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`。不将本机 `.ssh` 路径作为远程 Secret 值。
 
-工作流仅由推送 `tauri-v*` 标签触发。普通 main 推送、PR 和手动操作均不触发工作流。标签运行依次执行前后端完整回归、前端构建、资源及仓库检查、签名安装包构建、签名验证、版本发布和更新频道提升；任一步失败都会停止后续步骤。
+工作流仅由推送 `minepix-v*` 标签触发。普通 main 推送、PR 和手动操作均不触发工作流。标签运行依次执行前后端完整回归、前端构建、资源及仓库检查、签名安装包构建、签名验证、版本发布和更新频道提升；任一步失败都会停止后续步骤。
 
-安装器和 .sig 归属对应版本 Release。latest.json 指向版本资产，更新频道标签为 tauri-latest；它不匹配 `tauri-v*`，不会再次触发构建。先上传并验证版本资产，最后提升频道。已发布版本资产不覆盖；频道拒绝被较低版本回退。正式版在公开资产与频道验证通过后标为 Latest，预发布版保持 Prerelease 且不占用正式版 Latest 入口。
+安装器和 .sig 归属对应版本 Release。latest.json 指向版本资产，更新频道标签为 tauri-latest；它不匹配 `minepix-v*`，不会再次触发构建。先上传并验证版本资产，最后提升频道。已发布版本资产不覆盖；频道拒绝被较低版本回退。正式版在公开资产与频道验证通过后标为 Latest，预发布版保持 Prerelease 且不占用正式版 Latest 入口。
+
+版本标签统一使用 `minepix-v<版本号>`，例如 `minepix-v2.0.0`。已有预览版使用的 `tauri-latest` 频道地址继续保留，它与版本标签前缀分开管理。
 
 本地 NSIS 文件名包含空格；发布时将相同字节暂存为不含空格的 `MinePix.Tauri_<版本>_x64-setup.exe` 及 `.sig`。更新 URL 与差分块图均绑定此公开名称，避免 GitHub 自动将空格转为点号后出现 404。
 
@@ -31,8 +33,8 @@ npm run package
 
 ```powershell
 # 将 <新版本号> 替换为已写入版本文件、且从未发布的版本号
-git tag tauri-v<新版本号>
-git push origin tauri-v<新版本号>
+git tag minepix-v<新版本号>
+git push origin minepix-v<新版本号>
 ```
 
 标签工作流通过后，用户从对应 Release 下载安装包，已安装版本从 tauri-latest 读取更新。不要移动已发布标签；同版本重新构建不能替换已发布安装包，也不能使客户端识别为新版本。main 的普通提交不会发布软件，也不会改变用户收到的更新。

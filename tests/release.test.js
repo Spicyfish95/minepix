@@ -16,10 +16,16 @@ test('update channel ordering compares numeric prereleases and stable versions',
  assert.equal(compareVersions(version,version),0);
  assert.equal(compareVersions('2.0.0','2.0.0'),0);
 });
-function fixture(){
- const url=`https://github.com/${repository}/releases/download/tauri-v${version}/MinePix.Tauri_${version}_x64-setup.exe`;
- return {version,pub_date:new Date(0).toISOString(),notes:'test',platforms:Object.fromEntries(['windows-x86_64-nsis','windows-x86_64'].map(p=>[p,{url,signature}])),minepixBlockmap:blockmap(bytes,version,url)};
+function fixture(releaseVersion=version){
+ const url=`https://github.com/${repository}/releases/download/minepix-v${releaseVersion}/MinePix.Tauri_${releaseVersion}_x64-setup.exe`;
+ return {version:releaseVersion,pub_date:new Date(0).toISOString(),notes:'test',platforms:Object.fromEntries(['windows-x86_64-nsis','windows-x86_64'].map(p=>[p,{url,signature}])),minepixBlockmap:blockmap(bytes,releaseVersion,url)};
 }
+test('stable manifests bind minepix version tags and reject the superseded tag prefix',()=>{
+ const stable=fixture('2.0.0');
+ assert.equal(verifyManifest(stable,'2.0.0',bytes,signature).url,`https://github.com/${repository}/releases/download/minepix-v2.0.0/MinePix.Tauri_2.0.0_x64-setup.exe`);
+ stable.platforms['windows-x86_64-nsis'].url=stable.platforms['windows-x86_64-nsis'].url.replace('minepix-v','tauri-v');
+ assert.throws(()=>verifyManifest(stable,'2.0.0',bytes,signature));
+});
 test('both updater target identifiers bind the version asset and exact blockmap',()=>assert.equal(verifyManifest(fixture(),version,bytes,signature).bytes,bytes.length));
 test('public installer names match GitHub assets without space normalization',()=>{
  const result=verifyManifest(fixture(),version,bytes,signature);

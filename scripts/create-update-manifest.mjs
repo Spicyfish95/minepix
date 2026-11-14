@@ -15,7 +15,7 @@ const trusted=Buffer.from(signature,'base64').toString('utf8').split('\n').find(
 assert.ok(trusted?.split('\t').includes('version:'+version),'签名必须绑定对应应用版本');
 assert.ok(config.plugins.updater.requireSignedVersion,'运行时必须校验签名版本');
 assert.ok(!config.plugins.updater.dangerousInsecureTransportProtocol,'普通发行配置必须使用 HTTPS');
-const url=`https://github.com/${repository}/releases/download/tauri-v${version}/${releaseAssetName(version)}`;
+const url=`https://github.com/${repository}/releases/download/minepix-v${version}/${releaseAssetName(version)}`;
 const target={signature,url};
 const notes=await readFile(process.env.MINEPIX_RELEASE_NOTES||'CHANGELOG.md','utf8');
 const bytes=await readFile(installer);

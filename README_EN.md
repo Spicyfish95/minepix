@@ -6,7 +6,7 @@ A Windows desktop editor for pixel art, frame-by-frame animation and game assets
 
 **Free and open source · Windows x64 · Chinese / English · Stable 2.0.0**
 
-[Download the Windows x64 installer](https://github.com/Spicyfish95/minepix/releases/download/tauri-v2.0.0/MinePix.Tauri_2.0.0_x64-setup.exe)
+[Download the Windows x64 installer](https://github.com/Spicyfish95/minepix/releases/download/minepix-v2.0.0/MinePix.Tauri_2.0.0_x64-setup.exe)
 
 ![MinePix dark workspace with the pixel canvas, palette, preview, layers and a four-frame animation timeline](docs/images/workspace-en.png)
 
@@ -70,7 +70,7 @@ You can also open the [mushroom example](examples/mushroom.pix). See the [user g
 
 Keep copies of important artwork. Automatic checks default to off. Use Help → Check for updates, or enable startup checks in Help → About. After downloading, choose Restart and update and follow the prompts for unsaved projects.
 
-Independent installation and the alpha.3 → alpha.4 in-app update previously passed verification on the test machine. The 2.0.0 release checks cover build and publication; local installation and update tests are not repeated. For manual downloads, choose `MinePix.Tauri_<version>_x64-setup.exe` from the matching `tauri-v<version>` release. The `.sig` file is used by the updater. The `tauri-latest` release hosts the update channel manifest.
+Independent installation and the alpha.3 → alpha.4 in-app update previously passed verification on the test machine. The 2.0.0 release checks cover build and publication; local installation and update tests are not repeated. For manual downloads, choose `MinePix.Tauri_<version>_x64-setup.exe` from the matching `minepix-v<version>` release. The `.sig` file is used by the updater. The `tauri-latest` release hosts the update channel manifest.
 
 ## Development
 
@@ -81,7 +81,7 @@ npm ci
 npm run desktop
 ```
 
-Ordinary main pushes and pull requests do not trigger Actions. Only `tauri-v*` tag pushes run the full tests, build signed installers and publish updates. Run relevant tests locally during development.
+Ordinary main pushes and pull requests do not trigger Actions. Only `minepix-v*` tag pushes run the full tests, build signed installers and publish updates. Run relevant tests locally during development.
 
 - [User guide](docs/USER_GUIDE.md)
 - [Development and verification](docs/DEVELOPMENT.md)

@@ -1,7 +1,7 @@
 name: Windows build and signed release
 on:
   push:
-    tags: ['tauri-v*']
+    tags: ['minepix-v*']
 permissions:
   contents: read
 concurrency:
@@ -43,7 +43,7 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node scripts/check-repository.mjs
       - name: Build signed Windows installer
-        if: startsWith(github.ref, 'refs/tags/tauri-v')
+        if: startsWith(github.ref, 'refs/tags/minepix-v')
         env:
           CI: 'true'
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -60,7 +60,7 @@ jobs:
           $installer=Join-Path 'src-tauri/target/release/bundle/nsis' ('MinePix Tauri_'+$version+'_x64-setup.exe')
           cargo run --locked --release --manifest-path src-tauri/Cargo.toml --example update-tool -- $installer $version
       - name: Retain verified build outputs
-        if: startsWith(github.ref, 'refs/tags/tauri-v')
+        if: startsWith(github.ref, 'refs/tags/minepix-v')
         uses: actions/upload-artifact@v4
         with:
           name: minepix-windows-x64-${{ github.sha }}
@@ -71,7 +71,7 @@ jobs:
             src-tauri/target/release/bundle/nsis/*.sig
             artifacts/release/*.json
       - name: Publish version and promote verified update channel
-        if: startsWith(github.ref, 'refs/tags/tauri-v')
+        if: startsWith(github.ref, 'refs/tags/minepix-v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/publish-release.mjs
