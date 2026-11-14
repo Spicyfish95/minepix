@@ -652,6 +652,9 @@ body :is(#dock-layout,#floating-root) .timeline-timing-actions .timeline-duratio
 .software-update #update-error{color:var(--danger);overflow-wrap:anywhere}.software-update #update-hint{color:var(--muted)}
 .software-update .update-notes{max-height:150px}.update-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}.update-actions button{font-size:11px}
 .update-status-button{position:fixed;z-index:999;right:16px;bottom:30px;max-width:calc(100vw - 32px);border:1px solid var(--accent-line);background:var(--surface);color:var(--accent);box-shadow:0 2px 10px #0002;font-size:11px}
+.update-status-button.update-ready{display:flex;align-items:center;justify-content:center;width:28px;height:28px;padding:5px;border:0;border-radius:50%;background:var(--accent);color:var(--accent-text);cursor:pointer}
+.update-status-button.update-ready .icon{width:18px;height:18px;flex:0 0 18px}
+.update-status-button.update-ready:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .update-status-button.update-failed{color:var(--danger)}.software-update[hidden],.software-update [hidden],.update-status-button[hidden]{display:none!important}
 
 #repair-palette{margin:8px 0;}

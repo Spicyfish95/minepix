@@ -68,7 +68,7 @@ You can also open the [mushroom example](examples/mushroom.pix). See the [user g
 
 ## Updates
 
-Keep copies of important artwork. Startup checks are enabled by default for new settings and automatically download new versions. Change this in Help → About; existing choices are preserved. Help → Check for updates also offers manual checks. Verified packages survive application restarts without another download. Click the update text at the bottom right to restart and update, following the prompts for unsaved projects. Successful updates remove downloaded packages and temporary installer files.
+Keep copies of important artwork. Startup checks are enabled by default for new settings and automatically download new versions. Change this in Help → About; existing choices are preserved. Help → Check for updates also offers manual checks. Verified packages survive application restarts without another download. Click the theme-colored update icon at the bottom right (tooltip: “Update available”) to restart and update, following the prompts for unsaved projects. Successful updates remove downloaded packages and temporary installer files.
 
 For manual downloads, choose `MinePix_<version>_x64-setup.exe` from the matching `minepix-v<version>` release. The `.sig` file is used by the updater. The `tauri-latest` release hosts the update channel manifest.
 

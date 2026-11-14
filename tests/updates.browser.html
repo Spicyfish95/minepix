@@ -1,6 +1,7 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>MinePix update interface regression</title>
+<link rel="stylesheet" href="../src/style.css">
 <dialog id="modal"></dialog>
 <pre id="result">pending</pre>
 <script type="module">
@@ -38,14 +39,27 @@ try{
  timers.shift()();await settle();
  check('启动检查发现更新后自动下载',f.calls.check===1&&f.calls.download===1);
  const badge=document.getElementById('update-status');
- check('下载完成显示右下角重启更新文字',!badge.hidden&&badge.textContent==='有可用更新，点击重启并更新');
+ check('下载完成在原状态按钮显示纯图标',!badge.hidden&&badge.classList.contains('update-ready')&&!!badge.querySelector('svg[data-icon="update-ready"]')&&badge.textContent==='');
+ check('悬停提示与无障碍名称正确',badge.title==='有可用更新'&&badge.getAttribute('aria-label')==='有可用更新，点击重启并更新');
+ check('后台下载完成不自动展开面板',document.getElementById('update-panel').hidden);
+ const position=badge.getBoundingClientRect();
+ check('图标保持右下角原位置且为圆形',getComputedStyle(badge).right==='16px'&&getComputedStyle(badge).bottom==='30px'&&position.width===28&&position.height===28&&getComputedStyle(badge).borderRadius==='50%');
+ document.documentElement.style.setProperty('--accent','#a23bc4');
+ check('主题强调色即时应用于图标',getComputedStyle(badge).backgroundColor==='rgb(162, 59, 196)');
+ document.documentElement.style.setProperty('--accent','#23a17c');
+ check('切换主题色不需要重建图标',getComputedStyle(badge).backgroundColor==='rgb(35, 161, 124)');
+ document.documentElement.style.removeProperty('--accent');
+ f.send({status:'downloading',progress:{percent:75,transferred:1536,total:2048,bytesPerSecond:512}});
+ check('下载进度仍在同一按钮内显示',document.getElementById('update-status')===badge&&!badge.classList.contains('update-ready')&&badge.textContent.includes('75%'));
+ f.send({status:'downloaded',progress:null});
+ check('完成后原位替换为就绪图标',document.getElementById('update-status')===badge&&badge.classList.contains('update-ready')&&!!badge.querySelector('svg'));
  check('更新完成前不会自动安装',f.calls.install===0);
  document.getElementById('update-hide').click();badge.click();badge.click();await settle();
  check('点击右下角直接安装且重复点击不重复发起',f.calls.install===1);
- check('未保存作品取消后仍可重试',!badge.hidden&&badge.textContent.includes('点击重启并更新')&&document.getElementById('update-hint').textContent.includes('已取消安装'));
+ check('未保存作品取消后仍可重试',!badge.hidden&&badge.classList.contains('update-ready')&&badge.title==='有可用更新'&&document.getElementById('update-hint').textContent.includes('已取消安装'));
  badge.click();await settle();check('取消后再次点击重启更新仍走同一安装入口',f.calls.install===2);
  f=fixture({status:'downloaded'});await f.help.start();await settle();
- check('再次启动立即显示已就绪更新',!document.getElementById('update-status').hidden&&document.getElementById('update-status').textContent.includes('点击重启并更新'));
+ check('再次启动立即显示已就绪图标',!document.getElementById('update-status').hidden&&document.getElementById('update-status').classList.contains('update-ready')&&document.getElementById('update-status').title==='有可用更新');
  check('再次启动不检查也不重复下载',timers.length===0&&f.calls.check===0&&f.calls.download===0);
  document.getElementById('update-status').click();await settle();check('恢复的更新也可直接重启更新',f.calls.install===1);
  f=fixture({automatic:false,status:'downloaded'});await f.help.start();

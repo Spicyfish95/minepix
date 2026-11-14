@@ -1,4 +1,5 @@
 import {locale} from './i18n.js';
+import {iconMarkup} from './icons.js';
 const appIcon=new URL('./assets/app-icon.png',import.meta.url).href;
 function releaseNotesText(notes){
  if(!/<\/?[a-z][^>]*>/i.test(notes))return notes;
@@ -43,9 +44,7 @@ export function createHelp({desktop,modal,message,report}){
   new MutationObserver(()=>render(state)).observe(document.documentElement,{attributes:true,attributeFilter:['lang']});
  }
  function render(next){
-  const completed=next.status==='downloaded'&&state.status==='downloading';
   state=next;if(!desktop||state.status==='idle'&&!panel)return;ensurePanel();
-  if(completed)panel.hidden=false;
   const find=id=>panel.querySelector('#update-'+id),title=titles()[state.status],progress=state.progress;
   find('heading').textContent=text('软件更新','Software update');find('hide').setAttribute('aria-label',text('收起更新面板','Hide update panel'));
   find('version').textContent='MinePix '+state.current+(state.version?' → '+state.version:'');
@@ -60,7 +59,12 @@ export function createHelp({desktop,modal,message,report}){
   const primary=find('primary');primary.hidden=['checking','downloading','cancelling','preparing','installing'].includes(state.status);
   primary.textContent=state.status==='error'?state.error.operation==='install'?text('重试安装','Retry installation'):text('重试','Retry'):state.status==='downloaded'?text('重启并更新','Restart and update'):state.status==='current'||state.status==='idle'?text('重新检查','Check again'):text('下载更新','Download update');
   find('cancel').hidden=!transferring;find('cancel').disabled=state.status==='cancelling';find('cancel').textContent=text('取消下载','Cancel download');
-  badge.hidden=['idle','current'].includes(state.status);badge.textContent=state.status==='downloaded'?text('有可用更新，点击重启并更新','Update available — click to restart and update'):title+(state.status==='downloading'&&progress?' '+Math.floor(progress.percent)+'%':'');badge.classList.toggle('update-failed',state.status==='error');
+  const ready=state.status==='downloaded';
+  const label=ready?text('有可用更新','Update available'):title+(state.status==='downloading'&&progress?' '+Math.floor(progress.percent)+'%':'');
+  badge.hidden=['idle','current'].includes(state.status);
+  badge.classList.toggle('update-ready',ready);badge.classList.toggle('update-failed',state.status==='error');
+  if(ready)badge.innerHTML=iconMarkup('update-ready');else badge.textContent=label;
+  badge.title=label;badge.setAttribute('aria-label',ready?text('有可用更新，点击重启并更新','Update available, click to restart and update'):label);
  }
  if(desktop){
   desktop.onUpdateState(render);void desktop.updateState().then(render).catch(report);
@@ -74,7 +78,7 @@ export function createHelp({desktop,modal,message,report}){
  ['Indexed palettes','Colors → Color mode converts to indexed color. Foreground adjustments do not edit the palette unless palette editing is enabled and a slot is selected. After reordering, deleting or adding colors, Remap restores the closest available original colors.'],
  ['Animation and export','Add frames and set their durations in the timeline. File → Export offers single images, normal maps, sprite sheets, GIF, PNG sequences and Aseprite files.'],
  ['Reference images and layout','Import reference images in the Reference panel. They do not appear in exports. Drag panel tabs to rearrange the workspace; View → Layout restores defaults.'],
- ['Updates','Startup checks are enabled by default and download new versions automatically. Help → About controls this option. Verified downloads survive restarts; click the update text at the bottom right to restart and update, after handling unsaved projects in every window. Successful updates remove downloaded packages and temporary installer files. Help → Check for updates also offers manual checks.']
+ ['Updates','Startup checks are enabled by default and download new versions automatically. Help → About controls this option. Verified downloads survive restarts; click the update icon at the bottom right to restart and update, after handling unsaved projects in every window. Successful updates remove downloaded packages and temporary installer files. Help → Check for updates also offers manual checks.']
  ]:[
  ['开始使用','Ctrl+N 新建项目，Ctrl+O 打开 .pix 项目。Ctrl+S 保存图层、帧和色板；Ctrl+Z 撤销，Ctrl+Shift+Z 重做。'],
  ['绘画','B 铅笔、E 橡皮、G 填充、I 吸管。再次点击已激活的组合工具打开同组列表。空格拖动平移，滚轮缩放，Alt 临时吸色。'],
@@ -82,7 +86,7 @@ export function createHelp({desktop,modal,message,report}){
  ['索引色与色板','在“颜色 → 颜色模式与量化”切换索引模式。前景色可自由修改；只有开启色板编辑并选中色槽才修改色板。排序、删除、新增颜色后可点“重映射”，按当前色板恢复最接近的原色。'],
  ['动画与导出','在时间轴新增帧并设置时长。“文件 → 导出”支持单一图像、法线贴图、精灵表、GIF、PNG 序列和 Aseprite 文件。'],
  ['参考图与布局','参考栏目可导入图片，参考图不会出现在导出结果中。拖动栏目标签调整布局；“视图 → 布局”可恢复默认。'],
- ['软件更新','默认启动时自动检查并下载新版本，可在“帮助 → 关于”关闭。已验证的下载在下次启动时直接复用，点击右下角更新文字即可重启并更新，安装前处理所有窗口中的未保存项目。更新成功后清理下载包及安装临时文件。“帮助 → 检查更新”也可手动检查。']
+ ['软件更新','默认启动时自动检查并下载新版本，可在“帮助 → 关于”关闭。已验证的下载在下次启动时直接复用，点击右下角更新图标即可重启并更新，安装前处理所有窗口中的未保存项目。更新成功后清理下载包及安装临时文件。“帮助 → 检查更新”也可手动检查。']
  ];await modal(text('MinePix 使用指南','MinePix Guide'),'<article class="help-guide">'+sections.map(([title,body])=>`<h3>${title}</h3><p>${body}</p>`).join('')+'</article>');}
  async function check(automatic=false){
   if(checking){if(!automatic){ensurePanel();panel.hidden=false;}return state;}
