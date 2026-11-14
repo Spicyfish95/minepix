@@ -13,11 +13,11 @@ $env:TAURI_SIGNING_PRIVATE_KEY=Join-Path $env:USERPROFILE '.ssh\minepix-tauri.ke
 npm run package
 ```
 
-密钥位置调整不改变已发布应用的信任关系。应用配置中保留用于验证更新的固定公钥。此本地迁移不会配置 GitHub Actions Secret。
+密钥位置调整不改变已发布应用的信任关系。应用配置中保留用于验证更新的固定公钥。本机文件移动不等于远程 Secret 配置，二者独立管理。
 
 ## GitHub Actions
 
-构建使用 Windows runner、Node 24、Rust stable 和锁文件。仓库 Actions secrets 保存 TAURI_SIGNING_PRIVATE_KEY 和 TAURI_SIGNING_PRIVATE_KEY_PASSWORD。
+构建使用 Windows runner、Node 24、Rust stable 和锁文件。仓库 Actions Secret `TAURI_SIGNING_PRIVATE_KEY` 保存私钥内容；只有私钥设置了密码时才需额外配置 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`。不将本机 `.ssh` 路径作为远程 Secret 值。
 
 main 和 PR 执行回归及前端构建，不生成签名安装包。tauri-v<版本> 标签才构建签名安装包并触发版本发布，安装器和 .sig 归属对应版本 Release。latest.json 指向版本资产，更新频道标签为 tauri-latest。先上传并验证版本资产，最后提升频道。已发布版本资产不覆盖；频道拒绝被较低版本回退。
 
@@ -33,10 +33,10 @@ main 和 PR 执行回归及前端构建，不生成签名安装包。tauri-v<版
 
 ## 执行记录
 
-- 已将 Tauri 源码正常推送到现有 main，保留提交历史。
+- Tauri 源码通过正常 Git 推送维护 main 和版本标签，不强制改写历史。
 - 经用户明确授权，已从用户 `.ssh` 配置当前仓库 Actions 签名 Secret；私钥不在工作区。本地签名安装器、固定公钥验证、版本绑定、篡改拒绝均通过。
-- 首轮远程运行 43571995460 在回归步骤失败，安装与发布步骤未执行。
-- 读取失败日志的命令和页面导航均遇到自动审批超时；尚未查明远程失败原因，不能宣称远程构建或公开更新已通过。
+- Windows 临时目录短路径断言已修复，main 运行 43576345651、43576875220、43577816663 均通过。
+- alpha.1/alpha.2 的远程构建、回归和签名验证通过，但发布后的清单文件名不匹配导致 404，未提升更新频道。alpha.3 已统一公开资产名称，正在执行标签发布验收。
 - 公开更新原生验证入口已准备：scripts/verify-public-update.ps1，参数 SourceInstaller、TargetInstaller、SourceVersion、TargetVersion。它直接使用生产 HTTPS 频道，不添加本地更新地址覆盖；本次尚未运行。
 
-源码提交不是发布完成。修复 CI 并验证版本发布及公开下载后，才能执行实际安装更新验收。
+源码提交不是发布完成。必须同时确认标签工作流、公开资产与更新频道，再执行实际安装更新验收。

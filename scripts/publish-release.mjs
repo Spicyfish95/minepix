@@ -3,19 +3,12 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {readFile,copyFile} from 'node:fs/promises';
 import {verifyRelease,repository,sha256,compareVersions} from './verify-release.mjs';
+import {publicBytes} from './public-release-download.mjs';
 const exec=promisify(execFile);
 const gh=async(...args)=>(await exec('gh',[...args,'--repo',repository],{windowsHide:true})).stdout;
 async function release(tag){
  try{return JSON.parse(await gh('release','view',tag,'--json','isDraft,targetCommitish,url'));}
  catch(error){if(/release not found|HTTP 404/.test(error.stderr))return null;throw error;}
-}
-async function publicBytes(url){
- for(let attempt=0;attempt<5;attempt++){
-  const response=await fetch(url,{headers:{'Cache-Control':'no-cache'}});
-  if(response.ok)return Buffer.from(await response.arrayBuffer());
-  if(response.status!==404||attempt===4)throw new Error(`Public asset ${response.status}: ${url}`);
-  await new Promise(resolve=>setTimeout(resolve,5000));
- }
 }
 const local=await verifyRelease(),tag=`tauri-v${local.version}`;
 assert.equal(process.env.GITHUB_REF,`refs/tags/${tag}`,'Publication requires the matching version tag');
