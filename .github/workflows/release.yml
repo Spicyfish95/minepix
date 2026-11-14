@@ -1,11 +1,7 @@
 name: Windows build and signed release
 on:
   push:
-    branches: [main]
     tags: ['tauri-v*']
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
 permissions:
   contents: read
 concurrency:

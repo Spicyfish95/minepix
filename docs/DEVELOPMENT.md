@@ -57,7 +57,7 @@ ASE Node 测试调用真实 Rust 编解码工具，单独运行前需先构建�
 powershell -NoProfile -File scripts/cargo.ps1 build --locked --manifest-path src-tauri/Cargo.toml --example project-tool
 ```
 
-完整回归入口为 `npm test` 与 `npm run test:backend`。`npm test` 的前置步骤会构建上述工具；main 和 PR 的 CI 执行完整回归与前端构建。
+完整回归入口为 `npm test` 与 `npm run test:backend`。`npm test` 的前置步骤会构建上述工具。CI 仅在推送 `tauri-v*` 标签时执行完整回归、前端构建及签名发布；普通 main 推送和 PR 不运行 Actions。日常提交需在本地完成相关定向验证。
 
 ## 安装与更新验证
 
@@ -67,7 +67,7 @@ powershell -NoProfile -File scripts/cargo.ps1 build --locked --manifest-path src
 
 | 验证项 | 结果 |
 | --- | --- |
-| main 回归 | Actions 43580585728 成功；Node 451/451、Rust 49/49 |
+| 调整触发规则前的 main 回归记录 | Actions 43580585728 成功；Node 451/451、Rust 49/49；此记录不代表 main 仍会自动运行 CI |
 | alpha.4 标签构建与发布 | Actions 43579750199 第 2 次运行成功；签名安装包、公开下载和频道提升通过 |
 | alpha.4 独立安装、正常启动及卸载 | 13/13 通过，不使用调试启动参数 |
 | 生产频道 alpha.3 → alpha.4 | 桌面 15/15，安装及清理 17/17，全部清理标记为 true |
@@ -80,6 +80,10 @@ powershell -NoProfile -File scripts/cargo.ps1 build --locked --manifest-path src
 
 README 面向下载和入门，使用指南对应实际界面，开发与发布指南说明可复用的操作。原始执行日志保存在 artifacts，不在指南中累积过时的阶段状态。每项功能验证后同步相关说明并创建本地提交，源码与文档统一 LF。
 
-本次文档范围：更新已验证的发布状态，修正自动检查入口，移除相互矛盾的执行记录；按实际菜单、脚本和工作流核对命令、路径、链接与 LF。未改动编辑器或安装更新实现。
+本次范围：发布工作流仅接受 `tauri-v*` 标签推送，移除 main、PR 和手动触发；标签内保留完整回归、签名构建和发布顺序。更新中英文 README、使用指南及发布操作，突出小体积分发、图集地形预览、参考板和游戏素材交付。
 
-结果：仓库检查通过，339 个文本文件、33 个本地文档链接和 584 个模块引用有效；Git diff 空白检查通过。README 的下载地址对应已核验的公开 alpha.4 安装包，自动检查入口与 `src/help.js` 一致。
+定向验证：核对工作流唯一触发入口及发布步骤条件，运行发布相关 Node 测试；按源码核对菜单、快捷键和导出能力，执行仓库链接、模块引用、LF 与 Git diff 检查。普通 main 推送应不产生新的工作流运行，本次不创建发布标签，不重跑安装更新或编辑器回归。
+
+文档组织参考 [Aseprite 官方指南](https://aseprite.org/docs/)的基础操作、动画、文件与工作区分类，以及 [Pixelorama 官网](https://pixelorama.org/)按创作场景展示功能的方式。特色描述以本项目源码为准：菜单与快捷键对应 application-menu.js、keymap-manager.js；地形规则及预览对应 tileset-panel.js、terrain-preview.js；法线与引擎导出对应 normal-map-export.js、formats/engine-export.js。不将常见编辑能力标为行业独有，也不作未经测量的性能比较。
+
+本次本地结果：发布相关 Node 测试 7/7 通过；工作流检查确认只有标签推送入口，触发段以外的回归、签名及发布配置与调整前一致。仓库检查通过，339 个文本文件、48 个本地文档链接、584 个模块引用有效，LF 与 Git diff 空白检查通过。main 推送后的远程结果另行核对。
