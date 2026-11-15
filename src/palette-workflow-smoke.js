@@ -67,8 +67,17 @@ export async function paletteWorkflowSmoke(samples,api){
   host.querySelector('button').click();await nextFrame();
   const save=document.querySelector('[data-action="save-pattern-brush"]'),remove=document.querySelector('[data-action="delete-pattern-brush"]');
   check('气泡内保存与删除同一行',$('pattern-menu').matches(':popover-open')&&Math.abs(save.getBoundingClientRect().top-remove.getBoundingClientRect().top)<1&&remove.getBoundingClientRect().left>=save.getBoundingClientRect().right);
+  const alignedPatternText=()=>{
+   const captions=[...$('pattern-menu').querySelectorAll('.field-caption')],controls=[...$('pattern-menu').querySelectorAll('.field-control')];
+   const textLeft=element=>{const range=document.createRange();range.selectNodeContents(element);return range.getBoundingClientRect().left;};
+   const controlTextLeft=element=>{const style=getComputedStyle(element);return element.getBoundingClientRect().left+parseFloat(style.borderLeftWidth)+parseFloat(style.paddingLeft);};
+   return captions.every(caption=>Math.abs(textLeft(caption)-textLeft(save))<1)&&controls.every(control=>Math.abs(controlTextLeft(control)-textLeft(remove))<1);
+  };
+  check('图案弹窗标签与保存文字左对齐、选择框与删除文字左对齐',alignedPatternText());
+  applyLocale('en');await nextFrame();check('英文图案弹窗两列文字保持对齐',alignedPatternText());applyLocale('zh');await nextFrame();
   $('pattern-menu').hidePopover();$('brush-shape').value='square';$('brush-shape').dispatchEvent(new Event('change',{bubbles:true}));await nextFrame();
   check('离开图案笔形隐藏图案按钮',host.hidden);
+  if(samples.inspectPattern){pattern();host.querySelector('button').click();await nextFrame();}
   return {ok:true,results};
  }catch(error){return {ok:false,results,error:error.stack};}
  finally{

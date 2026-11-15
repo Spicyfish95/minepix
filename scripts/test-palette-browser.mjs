@@ -35,7 +35,7 @@ try{
   await new Promise(resolve=>setTimeout(resolve,100));
  }
  if(!session||!await session.evaluate('window.paletteTestReady===true'))throw new Error('Editor did not initialize: '+JSON.stringify(session?.events.filter(event=>event.method==='Runtime.exceptionThrown')));
- const samples={png:(await readFile('tests/fixtures/palettes/bright24.png')).toString('base64'),ase:(await readFile('tests/fixtures/palettes/lost-century.ase')).toString('base64')};
+ const samples={inspectPattern:true,png:(await readFile('tests/fixtures/palettes/bright24.png')).toString('base64'),ase:(await readFile('tests/fixtures/palettes/lost-century.ase')).toString('base64')};
  const result=await session.evaluate(`window.runPaletteWorkflowSmoke(${JSON.stringify(samples)})`);
  if(!result.ok)result.dom=await session.evaluate("document.getElementById('color-adjustments')?.outerHTML");
  await session.screenshot(path.resolve('artifacts/palette-browser.png'));

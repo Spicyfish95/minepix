@@ -762,7 +762,8 @@ body :is(#dock-layout,#floating-root) [data-panel=tileset] .tileset-head .form-f
 
 .window-controls [data-window-control=pin][aria-pressed=true]{background:var(--accent-bg);color:var(--accent)}
 
-.pattern-brush-actions{display:flex;gap:6px;grid-column:1/-1}
+.pattern-brush-actions{display:grid;grid-template-columns:minmax(0,1fr) 52%;gap:16px;grid-column:1/-1}
 .pattern-brush-actions button{flex:1;white-space:nowrap}
+body #pattern-menu>.form-field>.field-caption{padding-inline:8px}
 .palette-library-row{flex-wrap:wrap}
 .palette-library-row select{flex-basis:100%}
