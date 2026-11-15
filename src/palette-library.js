@@ -1,3 +1,7 @@
+import {normalizeColor} from './colors.js';
+import {BRIGHT24} from './builtin-palette.js';
+import {encodePalette,decodePalette,paletteBase64,paletteBytes} from './palette-file.js';
+export const PALETTE_PRESET_KEY='pixpix-palette-preset-v1';
 export const PALETTE_LIBRARY_KEY='pixpix-palette-library-v1';
 export const PALETTE_LIBRARY_LIMIT=256;
 
@@ -14,6 +18,7 @@ const rgbOf=color=>{const hex=paletteColor(color);return [parseInt(hex.slice(1,3
 const newId=()=>'palette-'+Date.now().toString(36)+'-'+Math.floor(Math.random()*10000).toString(36);
 
 export const BUILTIN_PALETTES=[
+  {id:'bright24',name:'bright24',colors:BRIGHT24},
   {id:'pico8',name:'PICO-8',colors:['#000000','#1D2B53','#7E2553','#008751','#AB5236','#5F574F','#C2C3C7','#FFF1E8','#FF004D','#FFA300','#FFEC27','#00E436','#29ADFF','#83769C','#FF77A8','#FFCCAA']},
   {id:'db32',name:'DawnBringer 32',colors:['#000000','#222034','#45283C','#663931','#8F563B','#DF7126','#D9A066','#EEC39A','#FBF236','#99E550','#6ABE30','#37946E','#4B692F','#524B24','#323C39','#3F3F74','#306082','#5B6EE1','#639BFF','#5FCDE4','#CBDBFC','#FFFFFF','#9BADB7','#847E87','#696A6A','#595652','#76428A','#AC3232','#D95763','#D77BBA','#8F974A','#8A6F30']},
   {id:'gray16',name:'灰阶 16',colors:['#000000','#111111','#222222','#333333','#444444','#555555','#666666','#777777','#888888','#999999','#AAAAAA','#BBBBBB','#CCCCCC','#DDDDDD','#EEEEEE','#FFFFFF']},
@@ -22,11 +27,40 @@ export const BUILTIN_PALETTES=[
 
 function readUserPalettes(){
   try{
-    const raw=JSON.parse(localStorage.getItem(PALETTE_LIBRARY_KEY)||'[]');
-    return Array.isArray(raw)?raw.filter(entry=>entry&&entry.id&&entry.name&&Array.isArray(entry.colors)).map(entry=>({id:String(entry.id),name:String(entry.name),colors:entry.colors.map(paletteColor),user:true})):[];
+    const saved=localStorage.getItem(PALETTE_LIBRARY_KEY)||'[]';
+    const raw=saved.startsWith('[')?JSON.parse(saved):decodeLibrary(paletteBytes(saved));
+    if(saved.startsWith('[')&&raw.length)writeUserPalettes(raw);
+    return Array.isArray(raw)?raw.filter(entry=>entry&&entry.id&&entry.name&&Array.isArray(entry.colors)).map(entry=>({id:String(entry.id),name:String(entry.name),colors:entry.colors.map(value=>value.toUpperCase()),user:true})):[];
   }catch{return [];}
 }
-function writeUserPalettes(list){localStorage.setItem(PALETTE_LIBRARY_KEY,JSON.stringify(list));}
+function decodeLibrary(bytes){
+ const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),decoder=new TextDecoder();
+ if(decoder.decode(bytes.subarray(0,8))!=='MPIXLIB1')throw new Error('无效的色板库');
+ const list=[];let at=10;
+ for(let i=0;i<view.getUint16(8,true);i++){
+  const entry={user:true};
+  for(const key of ['id','name']){const size=view.getUint16(at,true);at+=2;entry[key]=decoder.decode(bytes.subarray(at,at+size));at+=size;}
+  const size=view.getUint16(at,true);at+=2;entry.colors=decodePalette(bytes.subarray(at,at+size));at+=size;list.push(entry);
+ }
+ if(at!==bytes.length)throw new Error('色板库长度无效');
+ return list;
+}
+function writeUserPalettes(list){
+ const encoder=new TextEncoder(),entries=list.map(entry=>[encoder.encode(entry.id),encoder.encode(entry.name),encodePalette(entry.colors)]);
+ const bytes=new Uint8Array(10+entries.flat().reduce((sum,part)=>sum+2+part.length,0)),view=new DataView(bytes.buffer);
+ bytes.set(encoder.encode('MPIXLIB1'));view.setUint16(8,list.length,true);let at=10;
+ for(const parts of entries)for(const part of parts){view.setUint16(at,part.length,true);at+=2;bytes.set(part,at);at+=part.length;}
+ localStorage.setItem(PALETTE_LIBRARY_KEY,paletteBase64(bytes));
+}
+export function palettePreset(){
+ const saved=localStorage.getItem(PALETTE_PRESET_KEY);
+ if(saved){try{const value=JSON.parse(saved);return {...value,colors:decodePalette(paletteBytes(value.data))};}catch{}}
+ return {id:'bright24',name:'bright24',colors:[...BRIGHT24]};
+}
+export function setPalettePreset(colors,id='',name='自定义预设'){
+ localStorage.setItem(PALETTE_PRESET_KEY,JSON.stringify({id,name,data:paletteBase64(encodePalette(colors))}));
+}
+
 
 export function listPaletteLibrary(){return [...BUILTIN_PALETTES,...readUserPalettes()];}
 
@@ -37,9 +71,9 @@ export function savePaletteToLibrary(name,colors){
   if(!Array.isArray(colors)||!colors.length)throw new Error('色板至少需要一个颜色');
   const normalized=[];
   for(const color of colors){
-    const value=toHex(color);
+    let value;try{value=normalizeColor(color).toUpperCase();}catch{value=null;}
     if(!value)throw new Error('色板颜色需为 #RRGGBB：'+color);
-    if(!normalized.includes(value))normalized.push(value);
+    normalized.push(value);
   }
   if(normalized.length>PALETTE_LIBRARY_LIMIT)throw new Error('色板最多 '+PALETTE_LIBRARY_LIMIT+' 色');
   const list=readUserPalettes(),label=String(name==null?'':name).trim()||('色板 '+(list.length+1));

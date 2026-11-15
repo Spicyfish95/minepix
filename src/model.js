@@ -1,3 +1,4 @@
+import {BRIGHT24} from './builtin-palette.js';
 import {validateCelProperties,celViewLocation} from './cel-properties.js';
 import {validateSymmetryAxes} from './symmetry.js';
 import {validateColorMode,celIndices,createMapper,rgbaValue,grayPixel,modeOf} from './color-modes.js';
@@ -13,7 +14,7 @@ import {validatePreviewTerrain} from './terrain-preview.js';
 import {validateCanvasBackground} from './canvas-background.js';
 import {assertCapacity,assertProjectCapacity,celPixelCount,sourcePixelCount} from './project-capacity.js';
 export {LIMIT,assertCapacity} from './project-capacity.js';
-export const PALETTE = ['#171b2b','#29334c','#3e5068','#657b8b','#9aabb1','#e5e4d5','#fff4d2','#edb75b','#d88745','#b85740','#843c42','#542d40','#462c68','#72518b','#9c79b4','#cbb1d5','#354b58','#44766d','#69a27b','#a4c98a','#4d689b','#668fb7','#8cb5c7','#b9d9df','#9b4962','#cf6a78','#e89995','#f2c1ad','#6d5546','#99815c','#beb18a','#f8f7ee'];
+export const PALETTE = BRIGHT24;
 export const clone = value => structuredClone(value);
 export function colorValue(hex) { return parseInt(hex.slice(1).padEnd(8,'f'),16)>>>0; }
 export function colorHex(value) { return '#' + (value >>> 8).toString(16).padStart(6,'0'); }

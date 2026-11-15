@@ -1,25 +1,25 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {PALETTE_LIBRARY_KEY,BUILTIN_PALETTES,listPaletteLibrary,paletteById,savePaletteToLibrary,deletePaletteFromLibrary,nearestIndex,remapIndices} from '../src/palette-library.js';
+import {PALETTE_LIBRARY_KEY,BUILTIN_PALETTES,listPaletteLibrary,paletteById,savePaletteToLibrary,deletePaletteFromLibrary,nearestIndex,remapIndices,palettePreset,setPalettePreset} from '../src/palette-library.js';
 
 // node 里没有 localStorage：用内存实现顶替，写读走同一份数据。
 const store=new Map();
 globalThis.localStorage={getItem:key=>store.has(key)?store.get(key):null,setItem:(key,value)=>store.set(key,String(value)),removeItem:key=>store.delete(key)};
 const reset=()=>store.clear();
 
-test('色板库内置四份色板且颜色按 #RRGGBB 记录',()=>{
+test('色板库内置 bright24 和原有四份色板',()=>{
   reset();
   const list=listPaletteLibrary();
   assert.equal(list.length,BUILTIN_PALETTES.length);
-  assert.deepEqual(list.map(entry=>entry.id),['pico8','db32','gray16','gameboy']);
+  assert.deepEqual(list.map(entry=>entry.id),['bright24','pico8','db32','gray16','gameboy']);
   assert.ok(list.every(entry=>!entry.user&&entry.colors.length>=4&&entry.colors.every(color=>/^#[0-9A-F]{6}$/.test(color))));
 });
 
-test('保存色板会规范化颜色并去重',()=>{
+test('保存色板会规范化颜色并保留重复槽和 Alpha',()=>{
   reset();
   const entry=savePaletteToLibrary('验收色板',['#ff0000','#FF0000','f00','#00ff0080','#00000000']);
   assert.equal(entry.name,'验收色板');
-  assert.deepEqual(entry.colors,['#FF0000','#00FF00','#000000']);
+  assert.deepEqual(entry.colors,['#FF0000','#FF0000','#FF0000','#00FF0080','#00000000']);
   assert.deepEqual(paletteById(entry.id).colors,entry.colors);
 });
 
@@ -45,7 +45,22 @@ test('只删除用户色板，内置色板删不掉',()=>{
   assert.ok(paletteById('pico8'));
   deletePaletteFromLibrary(saved.id);
   assert.equal(paletteById(saved.id),null);
-  assert.equal(JSON.parse(store.get(PALETTE_LIBRARY_KEY)||'[]').length,0);
+  assert.equal(listPaletteLibrary().filter(entry=>entry.user).length,0);
+});
+
+test('旧 JSON 色板库迁移到二进制且保留名称和标识',()=>{
+ reset();store.set(PALETTE_LIBRARY_KEY,JSON.stringify([{id:'old',name:'旧色板',colors:['#112233']}]));
+ assert.deepEqual(paletteById('old').colors,['#112233']);
+ assert.equal(atob(store.get(PALETTE_LIBRARY_KEY)).slice(0,8),'MPIXLIB1');
+ assert.equal(paletteById('old').name,'旧色板');
+});
+
+test('默认预设是 bright24，自定义预设保存内容且不依赖库条目',()=>{
+ reset();assert.equal(palettePreset().id,'bright24');assert.equal(palettePreset().colors.length,24);
+ const entry=savePaletteToLibrary('预设',['#12345678','#12345678']);
+ setPalettePreset(entry.colors,entry.id,entry.name);deletePaletteFromLibrary(entry.id);
+ assert.deepEqual(palettePreset().colors,['#12345678','#12345678']);
+ assert.equal(palettePreset().name,'预设');
 });
 
 test('最近色按 RGB 距离选取，空色板返回 -1',()=>{

@@ -22,7 +22,8 @@ import {initI18n,persistLocale,applyLocale,locale,t,LOCALE_KEY} from './i18n.js'
 import {initVisualWorkspace,syncVisualTimeline,syncVisualControls} from './visual-workspace.js';
 import {initColorAdjustments} from './color-adjustments.js';
 import {listPatternBrushes,patternBrushById,savePatternBrush,deletePatternBrush,MAX_BRUSH_PATTERN} from './brush-library.js';
-import {listPaletteLibrary,paletteById,savePaletteToLibrary,deletePaletteFromLibrary,remapIndices} from './palette-library.js';
+import {listPaletteLibrary,paletteById,savePaletteToLibrary,deletePaletteFromLibrary,remapIndices,palettePreset,setPalettePreset} from './palette-library.js';
+import {encodePalette,importPaletteFile,paletteBase64,paletteBytes,isPaletteFile} from './palette-file.js';
 import {initWindowChrome} from './window-chrome.js';
 import {uiGet,uiAll,uiQuery,uiActive,onUI,onUIWindow} from './ui-surfaces.js';
 import {initWorkspaceLayout} from './workspace-layout.js';
@@ -103,7 +104,8 @@ const onionCache=new Map();
 let penPreferences=loadPen(localStorage);
 const frameCache=new FrameCache(),referenceCache=new FrameCache(32*1024*1024,{includeReference:true});
 const invalidateFrame=(index,rect)=>{frameCache.invalidate(index,rect);referenceCache.invalidate(index,rect);};let filledCache=new WeakMap(),thumbCache=new WeakMap(),layerDomKey='',timelineDomKey='',timelineSelectionKey='',paletteDomKey='';let timelineDirtyCells=new Set(),timelineDocument=null;
-let paletteEditing=false,paletteSelection=new Set(),paletteActive=null,paletteDrag=null,paletteColorInput=null,paletteColorTarget=null,contextMenu=null,paletteRemap=null,paletteLibraryId='';
+doc.palette=palettePreset().colors;
+let paletteEditing=false,paletteSelection=new Set(),paletteActive=null,paletteDrag=null,paletteColorInput=null,paletteColorTarget=null,contextMenu=null,paletteRemap=null,paletteLibraryId=palettePreset().id;
 // Aseprite 对齐：可配置网格独立于像素网格，设置保存在本机。
 let gridSettings=loadGrid(localStorage),menuEnabledKey='',menuCheckedKey='';
 let documentId=crypto.randomUUID(),filePath=null,closePending=false;
@@ -397,7 +399,7 @@ function capturePaletteUI(){return{id:paletteLibraryId,remap:paletteRemap?clone(
 function restorePaletteUI(state){paletteLibraryId=state.id;paletteRemap=state.remap?clone(state.remap):null;$('palette-library').value=paletteLibraryId;syncPaletteLibraryButtons();syncRemapButton();}
 function renderPaletteLibrary(){
  const select=$('palette-library');if(!select)return;
- const previous=select.value,entries=listPaletteLibrary();
+ const previous=paletteLibraryId,entries=listPaletteLibrary();
  select.replaceChildren();
  const head=document.createElement('option');head.value='';head.textContent='（未选择色板）';select.append(head);
  for(const [label,user] of [['内置色板',false],['我的色板',true]]){
@@ -800,11 +802,20 @@ function initPaletteSizeMenu(){
  applyPaletteSize();
 }
 async function colorModeDialog(){const values=await modal('颜色模式与量化','<label>模式<select name="mode"><option value="rgba">RGBA</option><option value="indexed">8位索引色</option><option value="grayscale">灰度 + Alpha</option></select></label><label>索引色板<select name="palette"><option value="adaptive">从全部帧自适应生成</option><option value="current">使用当前色板</option></select></label><label>最多色数（含透明槽）<input name="colors" type="number" min="2" max="256" value="256" required></label><label>4×4有序抖动<input name="dither" type="checkbox"></label><p>影响全部帧和像素图层，参考图保持原色。索引模式使用真实调色板索引，绘画 / 合并按色板映射；透明槽保留。重复颜色槽可独立改色。模式转换可撤销；灰度使用亮度加权并保留Alpha。</p>',form=>{form.elements.mode.value=modeOf(doc);const update=()=>{for(const key of ['palette','colors','dither'])form.elements[key].disabled=form.elements.mode.value!=='indexed';};form.elements.mode.onchange=update;update();});if(!values)return;mutate(()=>{convertColorMode(doc,values.mode,{palette:values.palette,colors:+values.colors||256,dither:$('modal-form').elements.dither.checked});if(values.mode==='indexed')colorIndex=createMapper(doc,doc.layers[li])(colorValue(color)).index;},'已转换颜色模式',{colorsReady:true});renderColors();}
-async function importPalette(){
-  if(!window.desktop)return message('请在桌面应用中导入色板');
-  try{const text=await window.desktop.openPalette();if(text!==null){const palette=parsePalette(text);mutate(()=>editIndexedPalette(doc,palette),modeOf(doc)==='indexed'?'已导入色板并重新映射索引像素':'已导入色板',{colorsReady:true});}}catch(error){showError('色板导入失败：'+error.message);}
+function loadPaletteColors(colors){
+ if(!documentTabs.items.length){const next=createDocument();next.palette=colors;replaceDocument(next,false,null,crypto.randomUUID(),true);return;}
+ mutate(()=>{paletteLibraryId='';$('palette-library').value='';editIndexedPalette(doc,colors);syncPaletteLibraryButtons();},'已导入色板',{colorsReady:true});
 }
-async function exportPalette(){try{if(await saveData(JSON.stringify({format:'pixel-studio-palette',version:1,colors:doc.palette},null,2),'json',doc.name+'-palette'))message('色板已导出');}catch(error){showError('色板导出失败：'+error.message);}}
+async function importPalette(){
+ if(!window.desktop)return message('请在桌面应用中导入色板');
+ try{
+  const target=documentId,file=await window.desktop.openPalette();if(file===null)return;
+  const colors=typeof file==='string'?parsePalette(file):await importPaletteFile(file.name,paletteBytes(file.data));
+  if(documentId!==target){message('当前项目已切换，请重新导入色板');return;}
+  loadPaletteColors(colors);
+ }catch(error){showError('色板导入失败：'+error.message);}
+}
+async function exportPalette(){try{if(await saveData(paletteBase64(encodePalette(doc.palette)),'pix',doc.name+'-palette',true))message('色板已导出');}catch(error){showError('色板导出失败：'+error.message);}}
 function imageCanvas(data,w=doc.width,h=doc.height){const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(data),w,h),0,0);return c;}
 function frameCanvas(index,includeReference=false){const hasReferences=doc.layers.some(isReference);frameCache.budget=(hasReferences?32:64)*1024*1024;const cache=includeReference&&hasReferences?referenceCache:frameCache,entry=cache.get(doc,index);if(!entry.canvas){entry.canvas=document.createElement('canvas');entry.canvas.width=doc.width;entry.canvas.height=doc.height;}if(entry.canvasRevision!==entry.revision){const ctx=entry.canvas.getContext('2d'),image=new ImageData(entry.rgba,doc.width,doc.height),r=entry.canvasRevision&&entry.updated;ctx.putImageData(image,0,0,...(r?[r.x,r.y,r.w,r.h]:[]));entry.canvasRevision=entry.revision;}return entry.canvas;}
 function pixelsCanvas(data){const rgba=new Uint8ClampedArray(doc.width*doc.height*4);data.forEach((p,i)=>{rgba[i*4]=p>>>24;rgba[i*4+1]=p>>>16&255;rgba[i*4+2]=p>>>8&255;rgba[i*4+3]=p&255;});return imageCanvas(rgba);}
@@ -1708,13 +1719,13 @@ async function recentDialog(){
  });
  if(values&&entries.length){const file=await window.desktop.openRecent(entries[+values.index].path);await importFile(file,true);}
 }
-async function newDocument(){const defaults={...DEFAULT_APPLICATION,...JSON.parse(localStorage.getItem(APP_SETTINGS_KEY)||'{}')};const values=await modal('新建像素项目','<label>项目名称 <input type="text" name="name" value="未命名" maxlength="100" required></label><label>宽度 <input type="number" name="width" value="'+defaults.width+'" min="1" required></label><label>高度 <input type="number" name="height" value="'+defaults.height+'" min="1" required></label><p>宽高不设固定上限；所有图层与帧的总像素最多 32M。</p>');if(values){const next=createDocument(+values.width,+values.height,values.name);next.frames[0].duration=defaults.duration;next.canvasBackground=validateCanvasBackground(defaults.canvasBackground||DEFAULT_CANVAS_BACKGROUND);replaceDocument(next,false,null,crypto.randomUUID(),true);}}
+async function newDocument(){const defaults={...DEFAULT_APPLICATION,...JSON.parse(localStorage.getItem(APP_SETTINGS_KEY)||'{}')};const values=await modal('新建像素项目','<label>项目名称 <input type="text" name="name" value="未命名" maxlength="100" required></label><label>宽度 <input type="number" name="width" value="'+defaults.width+'" min="1" required></label><label>高度 <input type="number" name="height" value="'+defaults.height+'" min="1" required></label><p>宽高不设固定上限；所有图层与帧的总像素最多 32M。</p>');if(values){const next=createDocument(+values.width,+values.height,values.name);next.palette=palettePreset().colors;next.frames[0].duration=defaults.duration;next.canvasBackground=validateCanvasBackground(defaults.canvasBackground||DEFAULT_CANVAS_BACKGROUND);replaceDocument(next,false,null,crypto.randomUUID(),true);}}
 function replaceDocument(value,isSaved=true,nextPath=null,id=crypto.randomUUID(),newTab=false){
   activeSliceId=null;
   if(textSession)cancelTextSession();
   if(newTab)documentTabs.save(captureDocumentState());
   if(dirty)void flushRecovery();
-  stopPreview();stop();onionCache.clear();frameCache.clear();referenceCache.clear();restorePaletteUI({id:'',remap:null});doc=value;documentId=id;filePath=nextPath;window.desktop?.activateDocument(filePath);fi=0;li=doc.layers.length-1;selection=null;previousSelection=null;frameSelection=new Set([0]);frameAnchor=0;celRange=null;celAnchor={frame:0,layer:li};$('timeline-mode').value='frames';$('play-range').value='all';$('play-direction').value='tag';$('play-once').checked=false;history.reset();boardRevision=0;savedBoardRevision=0;saved=isSaved?history.revision:-1;setDirty(!isSaved);if(newTab)documentTabs.add(captureDocumentState());else documentTabs.replace(captureDocumentState());render();fit();scheduleRecovery();
+  stopPreview();stop();onionCache.clear();frameCache.clear();referenceCache.clear();restorePaletteUI({id:listPaletteLibrary().find(entry=>entry.colors.length===value.palette.length&&entry.colors.every((color,index)=>normalizeColor(color)===normalizeColor(value.palette[index])))?.id||'',remap:null});doc=value;documentId=id;filePath=nextPath;window.desktop?.activateDocument(filePath);fi=0;li=doc.layers.length-1;selection=null;previousSelection=null;frameSelection=new Set([0]);frameAnchor=0;celRange=null;celAnchor={frame:0,layer:li};$('timeline-mode').value='frames';$('play-range').value='all';$('play-direction').value='tag';$('play-once').checked=false;history.reset();boardRevision=0;savedBoardRevision=0;saved=isSaved?history.revision:-1;setDirty(!isSaved);if(newTab)documentTabs.add(captureDocumentState());else documentTabs.replace(captureDocumentState());render();fit();scheduleRecovery();
 }
 async function requestClose(closeWindow=true){
   if(closePending)return;
@@ -1749,6 +1760,7 @@ async function importSheetManifest(file,newTab=false){
   }finally{setBusy(false);}
 }
 async function importFile(file,newTab=false){
+  if(file.type==='palette'){const target=documentId,colors=await importPaletteFile(file.name,paletteBytes(file.data));if(documentId===target)loadPaletteColors(colors);return;}
   if(file.type==='aseprite'){const next=validateDocument(file.doc);const answer=await modal('导入 Aseprite · '+(next.colorMode||'rgba').toUpperCase(),'<p>保留已支持的颜色模式、图层、完整帧、时长、标签和静态切片。</p><p id="ase-warnings"></p>',()=>{$('ase-warnings').textContent=file.warnings.length?file.warnings.join('；'):'未发现未保留的扩展元数据';});if(answer){replaceDocument(next,false,null,crypto.randomUUID(),newTab);message('已导入 Aseprite '+(next.colorMode||'rgba').toUpperCase()+' 子集');}return;}
   if(file.type==='sheet-manifest')return importSheetManifest(file,newTab);
   if(file.type==='sequence')return importPngSequence(file,newTab);
@@ -2497,7 +2509,7 @@ const actions={
   reselect:()=>{if(previousSelection){const last=previousSelection;previousSelection=selection;selection=selectionFrom(doc,(x,y)=>selectionContains(last,x,y));drawOverlay();}},
   'select-content':()=>{previousSelection=selection;const visible=composite(doc,fi);selection=selectionFrom(doc,(x,y)=>visible[(y*doc.width+x)*4+3]>0);drawOverlay();},
   'capture-brush':captureBrush,'brush-presets':brushPresets,'save-pattern-brush':savePatternBrushToLibrary,'delete-pattern-brush':deletePatternBrushFromLibrary,
-  'palette-editor':togglePaletteEditor,'import-palette':importPalette,'export-palette':exportPalette,
+  'set-palette-preset':()=>{const entry=paletteById(paletteLibraryId);setPalettePreset(doc.palette,paletteLibraryId,entry?.name||'自定义预设');message('已设为预设色板');},'palette-editor':togglePaletteEditor,'import-palette':importPalette,'export-palette':exportPalette,
   'save-palette':savePaletteLibraryEntry,'delete-palette':deletePaletteLibraryEntry,'remap-indices':remapPaletteIndices,
   'extract-palette':()=>{const palette=extractPalette(composite(doc,fi));if(!palette.length)return message('当前帧没有可提取的颜色');mutate(()=>editIndexedPalette(doc,palette),'已按使用频率提取当前帧颜色',{colorsReady:true});},
   'swap-colors':()=>{[color,background]=[background,color];saveColorPreferences();renderColors();},
@@ -2602,7 +2614,7 @@ $('play-range').onchange=()=>{stop();const tag=doc.tags.find(tag=>tag.id===$('pl
 $('play-direction').onchange=$('play-once').onchange=()=>{stop();draw();};
 $('duration').onchange=e=>{const duration=Math.max(20,Math.min(10000,Math.round(+e.target.value)||100));mutate(()=>{for(const i of frameSelection)doc.frames[i].duration=duration;},'已调整选中帧时长');};
 $('opacity').oninput=e=>{$('opacity-label').textContent=e.target.value+'%';};$('opacity').onchange=e=>{const index=li,value=+e.target.value;mutate(()=>doc.layers[index].opacity=value,'已调整图层透明度');};
-$('file-input').onchange=async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{if(file.size>512*1024*1024)throw new Error('文件超过512 MiB');if(/\.(png|jpg|jpeg|webp|bmp|gif)$/i.test(file.name)){const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result.split(',')[1]);r.onerror=reject;r.readAsDataURL(file);});await importFile({type:/\.gif$/i.test(file.name)?'gif':'image',data,name:file.name,mime:imageMime(file.name)},true);}else await importFile({type:'project',data:await file.text(),name:file.name},true);}catch(error){showError('打开失败：'+error.message);}};
+$('file-input').onchange=async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{if(file.size>512*1024*1024)throw new Error('文件超过512 MiB');if(/\.(png|jpg|jpeg|webp|bmp|gif)$/i.test(file.name)){const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result.split(',')[1]);r.onerror=reject;r.readAsDataURL(file);});await importFile({type:/\.gif$/i.test(file.name)?'gif':'image',data,name:file.name,mime:imageMime(file.name)},true);}else{const bytes=new Uint8Array(await file.arrayBuffer());await importFile(isPaletteFile(bytes)?{type:'palette',data:paletteBase64(bytes),name:file.name}:{type:'project',data:new TextDecoder().decode(bytes),name:file.name},true);}}catch(error){showError('打开失败：'+error.message);}};
 window.desktop?.onCommand(action=>{
   if(action==='request-close'){void requestClose();return;}
   if(isTextTarget(uiActive())&&['undo','redo','copy','cut','paste','select-all'].includes(action)){
@@ -4561,3 +4573,8 @@ window.runWorkspaceRefreshSmoke=async()=>{
 };
 }
 if(window.desktop?.inputAudit&&!editorHost.detached)window.startInputAudit();
+
+window.runPaletteWorkflowSmoke=async samples=>{
+ const {paletteWorkflowSmoke}=await import('./palette-workflow-smoke.js');
+ return paletteWorkflowSmoke(samples,{$,actions,newDocument,replaceDocument,createDocument,importFile,importPalette,exportPalette,setTool,updateBrushControls,state:()=>({doc,documentId,paletteLibraryId,dirty,history:history.undoStack.length}),pattern:()=>{brushSettings.shape='pattern';brushSettings.pattern={width:1,height:1,data:[0xff0000ff]};updateBrushControls();},library:renderPaletteLibrary});
+};

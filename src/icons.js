@@ -148,7 +148,7 @@ export const ACTION_ICONS = {input:'settings',keymap:'settings',slices:'select',
   'zoom-in':'zoom-in','zoom-out':'zoom-out','add-layer':'plus','layer-up':'layer-up','layer-down':'layer-down',
   'duplicate-layer':'copy','delete-layer':'clear',previous:'previous',next:'next',play:'play',
   'add-frame':'frame-add','duplicate-frame':'frame-copy','delete-frame':'frame-delete',shortcuts:'keyboard',
-  'save-palette':'copy','delete-palette':'clear','remap-indices':'repeat','save-pattern-brush':'save','delete-pattern-brush':'clear'
+  'set-palette-preset':'save','save-palette':'copy','delete-palette':'clear','remap-indices':'repeat','save-pattern-brush':'save','delete-pattern-brush':'clear'
 };
 
 export function iconMarkup(name){

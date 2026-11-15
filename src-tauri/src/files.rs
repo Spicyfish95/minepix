@@ -94,6 +94,9 @@ pub fn decode_bytes(name: &str, bytes: &[u8], file_path: Option<&str>) -> io::Re
     if extension != "pix" {
         return Err(error("不支持此文件格式"));
     }
+    if bytes.starts_with(b"MPIXPAL\0") {
+        return Ok(json!({"name":name,"type":"palette","filePath":null,"data":STANDARD.encode(bytes)}));
+    }
     let document = crate::project::decode(bytes)?;
     Ok(
         json!({"name": name, "filePath": file_path, "type": "project", "data": serde_json::to_string(&document)?}),
@@ -195,6 +198,12 @@ impl Files {
         if !path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("pix")) {
             return self.open(path);
         }
+        let mut header = [0u8; 8];
+        use std::io::Read;
+        let mut file = fs::File::open(path)?;
+        if file.read(&mut header)? == 8 && &header == b"MPIXPAL\0" {
+            return self.open(path);
+        }
         let path = fs::canonicalize(path)?;
         let text = path.to_string_lossy().trim_start_matches("\\\\?\\").to_owned();
         Ok(json!({"type":"project","name":basename(&path),"filePath":text,"rawProject":true}))
@@ -290,6 +299,22 @@ mod tests {
         assert_eq!(files.recent().unwrap().len(), 1);
         files.clear_recent().unwrap();
         assert!(files.open_recent(&path_b).is_err());
+    }
+
+    #[test]
+    fn palette_pix_opens_without_project_transfer_or_recent_entry() {
+        let root = tempfile::tempdir().unwrap();
+        let mut files = Files::new(root.path().join("settings")).unwrap();
+        let path = root.path().join("palette.pix");
+        let bytes = b"MPIXPAL\0\x01\0\x01\0\x12\x34\x56\x78";
+        fs::write(&path, bytes).unwrap();
+        let opened = files.open_for_transfer(&path).unwrap();
+        assert_eq!(opened["type"], "palette");
+        assert_eq!(opened["data"], STANDARD.encode(bytes));
+        assert!(opened["filePath"].is_null());
+        assert!(files.recent().unwrap().is_empty());
+        assert!(files.selected.is_empty());
+        assert_eq!(decode_bytes("palette.pix", bytes, None).unwrap()["type"], "palette");
     }
 
     #[test]

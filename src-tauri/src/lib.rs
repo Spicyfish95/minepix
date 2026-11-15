@@ -330,7 +330,7 @@ async fn desktop_call(
             }
             let picker = match method.as_str() {
                 "openKeymap" => dialog(&state).add_filter("Shortcut configuration", &["json"]),
-                "openPalette" => dialog(&state).add_filter("Palette", &["json", "gpl", "palette"]),
+                "openPalette" => dialog(&state).add_filter("Palette", &["pix", "aseprite", "ase", "gpl", "pal", "png", "json", "palette"]),
                 _ if mode == "reference" => dialog(&state)
                     .add_filter("Reference images", &["png", "jpg", "jpeg", "webp", "gif"]),
                 _ if mode == "sequence-manifest" || mode == "sheet-manifest" => {
@@ -357,6 +357,11 @@ async fn desktop_call(
             }
             if method == "open" && mode == "sheet-manifest" {
                 return formats::read_sheet_manifest(chosen[0].path()).map_err(io_error);
+            }
+            if method == "openPalette" {
+                use base64::Engine;
+                let data = storage::read_file(chosen[0].path()).map_err(io_error)?;
+                return Ok(json!({"name": files::basename(chosen[0].path()), "data": base64::engine::general_purpose::STANDARD.encode(data)}));
             }
             if method != "open" {
                 let data = storage::read_file(chosen[0].path()).map_err(io_error)?;
@@ -429,7 +434,7 @@ async fn desktop_call(
             let kind = text(&args, 1);
             let extension = match kind {
                 "project" => "pix",
-                "palette" => "json",
+                "palette" => "pix",
                 value => value,
             };
             let name = std::path::Path::new(text(&args, 2))

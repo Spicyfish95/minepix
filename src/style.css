@@ -761,3 +761,6 @@ body :is(#dock-layout,#floating-root) [data-panel=tileset] .tileset-head .form-f
 .tileset-notice[hidden]{display:none}
 
 .window-controls [data-window-control=pin][aria-pressed=true]{background:var(--accent-bg);color:var(--accent)}
+
+.palette-library-row{flex-wrap:wrap}
+.palette-library-row select{flex-basis:100%}

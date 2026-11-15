@@ -15,6 +15,8 @@
 | `update-blockmap.json` | `node scripts/create-blockmap-fixture.mjs`按固定seed生成65,536-byte内容的块图；Node / Rust逐块一致与插入重同步验证，无需私钥 |
 | `updater-differential.bin` / `.sig` | `node scripts/create-differential-fixture.mjs`生成确定性65,536-byte协议样例并用仓库外密钥签名绑定alpha.2；开头明确标注非安装器，常规Rust测试读取已提交内容，不需要密钥或执行任何EXE |
 
+色板专项使用用户提供的 `palettes/lost-century.ase`（Adobe ASEF，16 色）与 `palettes/bright24.png`（原 `vinik24-1x.png`，24×1 像素）。测试直接读取固定样本，不依赖仓库外文件。
+
 ## 使用
 
 常规测试直接读取已提交样例，不需要重新签名。ASE Node 测试调用实际 Rust project-tool。详见 [开发指南](../../docs/DEVELOPMENT.md)。

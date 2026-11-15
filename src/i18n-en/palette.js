@@ -1,5 +1,10 @@
 // 色板库、色板编辑图标与索引模式重映射的英文词条。
 export default {
+  "设为预设": "Set as preset",
+  "将当前色板设为后续新建项目的默认色板": "Use the current palette for new projects",
+  "已设为预设色板": "Default palette updated",
+  "导入 PIX / ASE / GPL / PAL / PNG 色板": "Import PIX / ASE / GPL / PAL / PNG palette",
+  "导出二进制 PIX 色板": "Export binary PIX palette",
   "色板库": "Palette library",
   "存为色板": "Save palette",
   "删色板": "Delete palette",
