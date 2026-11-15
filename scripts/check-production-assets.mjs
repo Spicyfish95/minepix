@@ -13,7 +13,7 @@ const files=await inventory('dist');
 assert.ok(!files.some(file=>file.name.includes('-smoke-')),'发行资源不含历史 smoke chunk');
 const app=files.find(file=>/^app-.*\.js$/.test(path.basename(file.name)));
 const source=await readFile(app.name,'utf8');
-for(const name of ['runTilemapSmoke','runSettingsSmoke','runParitySmoke','prepareUpdateSmoke']){
+for(const name of ['runTilemapSmoke','runSettingsSmoke','runParitySmoke','prepareUpdateSmoke','runPaletteWorkflowSmoke']){
  assert.ok(!source.includes(name),'发行主包不含 '+name);
 }
 for(const name of ['startInputAudit','documentWindowAudit','documentWindowSave']){

@@ -4588,7 +4588,9 @@ window.runWorkspaceRefreshSmoke=async()=>{
 }
 if(window.desktop?.inputAudit&&!editorHost.detached)window.startInputAudit();
 
+if(import.meta.env.DEV){
 window.runPaletteWorkflowSmoke=async samples=>{
  const {paletteWorkflowSmoke}=await import('./palette-workflow-smoke.js');
  return paletteWorkflowSmoke(samples,{$,actions,newDocument,replaceDocument,createDocument,importFile,importPalette,exportPalette,setTool,updateBrushControls,switchDocument,empty:enterEmptyState,state:()=>({doc,documentId,paletteLibraryId,dirty,history:history.undoStack.length}),pattern:()=>{brushSettings.shape='pattern';brushSettings.pattern={width:1,height:1,data:[0xff0000ff]};updateBrushControls();},library:renderPaletteLibrary});
 };
+}
