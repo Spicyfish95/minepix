@@ -108,6 +108,40 @@ test('最近文件对话框提交列表快照中的路径',async()=>{
  vm.createContext(context);vm.runInContext(section('async function recentDialog(','async function newDocument('),context);
  await context.recentDialog();
 });
+function tabEditor(){
+ const documentTabs=new DocumentStore();
+ documentTabs.add({documentId:'b',doc:{name:'B'},dirty:true});
+ documentTabs.add({documentId:'a',doc:{name:'A'},dirty:false});
+ const confirmations=[],context={...documentTabs.get('a'),documentTabs,filePath:null,busy:false,gesture:null,shapeSession:null,celGesture:null,closedDocuments:[],
+  $:()=>({open:false}),message:()=>{},flushRecovery:async()=>{},captureDocumentState:()=>({documentId:context.documentId,doc:context.doc,dirty:context.dirty}),
+  restoreDocumentState:state=>{Object.assign(context,state);documentTabs.active=state.documentId;},enterEmptyState:()=>{throw new Error('不应关闭全部标签');},
+  modal:async()=>{confirmations.push(context.documentId);return context.answer;},setDirty:value=>{context.dirty=value;}};
+ context.window={desktop:{discardRecovery:async()=>{}}};
+ vm.createContext(context);
+ vm.runInContext(section('async function confirmDiscard(','function captureDocumentState(')+'\n'+section('function switchDocument(','function reopenDocument('),context);
+ return{context,confirmations};
+}
+test('cel 范围拖选期间不能关闭其他未保存标签，也不写入关闭历史',async()=>{
+ const {context,confirmations}=tabEditor();context.celGesture={pointerId:1};
+ await context.closeDocumentTab('b');
+ assert.deepEqual(context.documentTabs.items.map(item=>item.id),['b','a']);
+ assert.equal(context.documentTabs.get('b').dirty,true);assert.equal(context.documentId,'a');
+ assert.equal(context.closedDocuments.length,0);assert.deepEqual(confirmations,[]);
+});
+test('关闭其他未保存标签时向目标文档确认，取消保留标签与关闭历史',async()=>{
+ const {context,confirmations}=tabEditor();context.answer=null;
+ await context.closeDocumentTab('b');
+ assert.deepEqual(confirmations,['b']);assert.equal(context.documentId,'b');
+ assert.equal(context.documentTabs.get('b').dirty,true);assert.equal(context.documentTabs.items.length,2);
+ assert.equal(context.closedDocuments.length,0);
+});
+test('确认不保存后仅关闭目标标签，关闭历史保留目标文档',async()=>{
+ const {context,confirmations}=tabEditor();context.answer={discard:true};
+ await context.closeDocumentTab('b');
+ assert.deepEqual(confirmations,['b']);assert.deepEqual(context.documentTabs.items.map(item=>item.id),['a']);
+ assert.equal(context.documentId,'a');assert.equal(context.closedDocuments.length,1);
+ assert.equal(context.closedDocuments[0].documentId,'b');assert.equal(context.closedDocuments[0].doc.name,'B');
+});
 test('桌面桥接按路径打开时直接传递路径，不重新查询列表序号',async()=>{
  const desktop=readFileSync(new URL('../src/desktop.js',import.meta.url),'utf8'),calls=[];
  const context={bridge:{},call:async(method,...args)=>{calls.push([method,...args]);return{filePath:args[0]};}};

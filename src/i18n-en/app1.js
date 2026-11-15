@@ -72,6 +72,7 @@ export default {
 "请先选择要粘贴位置的色块": "Select the swatch to paste in front of first",
 "剪贴板没有可用的 HEX 颜色": "The clipboard has no usable HEX color",
 "粘贴失败：": "Paste failed: ",
+"当前项目已切换，请重新粘贴色板颜色": "The current project has changed. Paste the palette colors again.",
 "已粘贴颜色": "Pasted colors",
 "，跳过": ", skipped ",
 "行无法解析的内容": " lines that could not be parsed",

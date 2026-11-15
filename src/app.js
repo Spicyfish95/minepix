@@ -621,9 +621,15 @@ async function copySelectedPaletteColor(){
   try{await navigator.clipboard.writeText(formatPaletteClipboard(colors));message(colors.length>1?`已复制 ${colors.length} 个颜色`:'已复制颜色值');}catch(error){showError('复制失败：'+error.message);}
 }
 async function pastePaletteColorAfterSelection(){
-  const index=paletteActive;
+  const index=paletteActive,target=documentId;
   if(index===null||!paletteSelection.has(index)||!doc.palette[index])return message('请先选择要粘贴位置的色块');
-  try{const {colors,skipped}=parsePaletteClipboard(await navigator.clipboard.readText());if(!colors.length)return message('剪贴板没有可用的 HEX 颜色');insertPaletteColorsAfter(index,colors,skipped);}catch(error){showError('粘贴失败：'+error.message);}
+  try{
+    const text=await navigator.clipboard.readText();
+    if(documentId!==target)return message('当前项目已切换，请重新粘贴色板颜色');
+    const {colors,skipped}=parsePaletteClipboard(text);
+    if(!colors.length)return message('剪贴板没有可用的 HEX 颜色');
+    insertPaletteColorsAfter(index,colors,skipped);
+  }catch(error){showError('粘贴失败：'+error.message);}
 }
 function insertPaletteColorsAfter(index,colors,skipped=0){
   const normalized=modeOf(doc)==='grayscale'?colors.map(value=>'#'+grayPixel(colorValue(value)).toString(16).padStart(8,'0')):colors;
@@ -640,7 +646,12 @@ async function copyPaletteValue(index){
   try{await navigator.clipboard.writeText(doc.palette[index].toUpperCase());message('已复制颜色值');}catch(error){showError('复制失败：'+error.message);}
 }
 async function pastePaletteValue(index){
-  try{const text=(await navigator.clipboard.readText()).trim();setPaletteColor(index,text);message('已粘贴颜色值');}catch(error){showError('粘贴失败：'+error.message);}
+  const target=documentId;
+  try{
+    const text=await navigator.clipboard.readText();
+    if(documentId!==target)return message('当前项目已切换，请重新粘贴色板颜色');
+    setPaletteColor(index,text.trim());message('已粘贴颜色值');
+  }catch(error){showError('粘贴失败：'+error.message);}
 }
 function closeContextMenu(){
   const menu=contextMenu;if(!menu)return;
@@ -1710,7 +1721,7 @@ function enterEmptyState(){
 }
 function restoreDocumentState(state){activeSliceId=null;stopPreview();stop();onionCache.clear();frameCache.clear();referenceCache.clear();({documentId,doc,fi,li,selection,previousSelection,zoom,pan,dirty,saved,boardRevision,savedBoardRevision,filePath,frameSelection,frameAnchor,celRange,celAnchor}=state);if(state.view.viewport)pan={x:pan.x+(viewport.clientWidth-state.view.viewport.w)/2,y:pan.y+(viewport.clientHeight-state.view.viewport.h)/2};history.restore(state.historyState);restorePaletteUI(state.paletteUI);documentTabs.active=documentId;window.desktop?.activateDocument(filePath);$('grid').checked=state.view.grid;$('onion').checked=state.view.onion;$('timeline-mode').value=state.view.timeline;setDirty(dirty);render();$('play-range').value=state.view.range;$('play-direction').value=state.view.direction;$('play-once').checked=state.view.once;place();draw();}
 function switchDocument(id){if(id===documentId)return;if(busy||gesture||shapeSession||celGesture||$('modal').open){message('请先完成当前操作');return;}documentTabs.save(captureDocumentState());if(dirty)void flushRecovery();restoreDocumentState(documentTabs.get(id));}
-async function closeDocumentTab(id=documentId){if(busy||gesture||shapeSession||$('modal').open)return;switchDocument(id);if(!await confirmDiscard(true))return;await flushRecovery();closedDocuments.push(captureDocumentState());if(closedDocuments.length>10)closedDocuments.shift();const next=documentTabs.remove(id);if(next)restoreDocumentState(next);else enterEmptyState();}
+async function closeDocumentTab(id=documentId){if(busy||gesture||shapeSession||celGesture||$('modal').open)return;switchDocument(id);if(documentId!==id||!await confirmDiscard(true))return;await flushRecovery();closedDocuments.push(captureDocumentState());if(closedDocuments.length>10)closedDocuments.shift();const next=documentTabs.remove(id);if(next)restoreDocumentState(next);else enterEmptyState();}
 function reopenDocument(){const state=closedDocuments.pop();if(!state)return message('没有可重开的文档');documentTabs.save(captureDocumentState());documentTabs.add(state);restoreDocumentState(state);message('已重开关闭文档');}
 async function recentDialog(){
  if(!window.desktop)return message('最近文件请使用桌面版');
