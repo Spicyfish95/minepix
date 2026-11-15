@@ -105,7 +105,7 @@ let penPreferences=loadPen(localStorage);
 const frameCache=new FrameCache(),referenceCache=new FrameCache(32*1024*1024,{includeReference:true});
 const invalidateFrame=(index,rect)=>{frameCache.invalidate(index,rect);referenceCache.invalidate(index,rect);};let filledCache=new WeakMap(),thumbCache=new WeakMap(),layerDomKey='',timelineDomKey='',timelineSelectionKey='',paletteDomKey='';let timelineDirtyCells=new Set(),timelineDocument=null;
 doc.palette=palettePreset().colors;
-let paletteEditing=false,paletteSelection=new Set(),paletteActive=null,paletteDrag=null,paletteColorInput=null,paletteColorTarget=null,contextMenu=null,paletteRemap=null,paletteLibraryId=palettePreset().id;
+let paletteEditing=false,paletteSelection=new Set(),paletteActive=null,paletteDrag=null,paletteColorInput=null,paletteColorTarget=null,contextMenu=null,paletteRemap=null,paletteLibraryId=palettePreset().id,paletteImportName='';
 // Aseprite 对齐：可配置网格独立于像素网格，设置保存在本机。
 let gridSettings=loadGrid(localStorage),menuEnabledKey='',menuCheckedKey='';
 let documentId=crypto.randomUUID(),filePath=null,closePending=false;
@@ -396,13 +396,13 @@ function paletteSelectionEdgePoints(el){
  return {firstRight:first.right,firstTop:first.top,lastRight:last.right,lastBottom:last.bottom};
 }
 // 色板库：内置色板与用户保存在本机的命名色板不是项目数据，切换项目不受影响。
-function capturePaletteUI(){return{id:paletteLibraryId,remap:paletteRemap?clone(paletteRemap):null};}
-function restorePaletteUI(state){paletteLibraryId=state.id;paletteRemap=state.remap?clone(state.remap):null;$('palette-library').value=paletteLibraryId;syncPaletteLibraryButtons();syncRemapButton();}
+function capturePaletteUI(){return{id:paletteLibraryId,importName:paletteImportName,remap:paletteRemap?clone(paletteRemap):null};}
+function restorePaletteUI(state){paletteLibraryId=state.id;paletteImportName=state.importName||'';paletteRemap=state.remap?clone(state.remap):null;renderPaletteLibrary();syncRemapButton();}
 function renderPaletteLibrary(){
  const select=$('palette-library');if(!select)return;
  const previous=paletteLibraryId,entries=listPaletteLibrary(),preset=palettePreset();
  select.replaceChildren();
- const head=document.createElement('option');head.value='';head.textContent='（未选择色板）';select.append(head);
+ const head=document.createElement('option');head.value='';head.textContent=paletteImportName||'（未选择色板）';select.append(head);
  for(const [label,user] of [['内置色板',false],['我的色板',true]]){
   const list=entries.filter(entry=>!!entry.user===user);
   if(!list.length)continue;
@@ -424,7 +424,11 @@ function syncPaletteLibraryButtons(){
 }
 function syncPalettePresetButton(){
  const button=document.querySelector('[data-action="set-palette-preset"]');
- if(button)button.disabled=!documentTabs.items.length||isPalettePreset(doc.palette);
+ if(button)button.disabled=!palettePresetCandidate();
+}
+function palettePresetCandidate(){
+ const entry=paletteById(paletteLibraryId);
+ return documentTabs.items.length&&entry&&isPalettePreset(doc.palette,entry)&&!isPalettePreset(doc.palette)?entry:null;
 }
 function libraryPaletteColors(entry){
  const colors=entry.colors.map(value=>value.length===7?value+'ff':value);
@@ -449,7 +453,7 @@ function applyPaletteLibrary(id){
  if(!documentTabs.items.length){message('请先打开或新建项目');return;}
  const indexed=modeOf(doc)==='indexed',previous=indexed?doc.palette.slice():null,sources=indexed?paletteRemapSources():null;
  mutate(()=>{
-  paletteLibraryId=id;doc.palette=libraryPaletteColors(entry);
+  paletteLibraryId=id;paletteImportName='';doc.palette=libraryPaletteColors(entry);
   if(indexed){paletteRemap={oldPalette:previous,newPalette:doc.palette.slice(),sources};repaintIndexedPixels();paletteRemap.applied=paletteRemapSources();}
  },'已应用色板 '+entry.name);
  renderPaletteLibrary();syncRemapButton();renderColors();
@@ -478,9 +482,9 @@ function remapPaletteIndices(){
 }
 async function savePaletteLibraryEntry(){
  if(!documentTabs.items.length){message('请先打开或新建项目');return;}
- const values=await modal('存为色板','<label>色板名称<input name="name" maxlength="60" required></label><p class="note">把当前色板的 '+doc.palette.length+' 个颜色保存到本机色板库；同名会覆盖。</p>',form=>{form.elements.name.value=doc.name+' 色板';});
+ const values=await modal('存为色板','<label>色板名称<input name="name" maxlength="60" required></label><p class="note">把当前色板的 '+doc.palette.length+' 个颜色保存到本机色板库；同名会覆盖。</p>',form=>{form.elements.name.value=paletteImportName?paletteImportName.replace(/\.[^.]+$/,''):doc.name+' 色板';});
  if(!values)return;
- try{const entry=savePaletteToLibrary(values.name,doc.palette);renderPaletteLibrary();$('palette-library').value=entry.id;paletteLibraryId=entry.id;syncPaletteLibraryButtons();message('已把色板存为 '+entry.name);}catch(error){showError(error.message);}
+ try{const entry=savePaletteToLibrary(values.name,doc.palette);paletteLibraryId=entry.id;paletteImportName='';renderPaletteLibrary();message('已把色板存为 '+entry.name);}catch(error){showError(error.message);}
 }
 function deletePaletteLibraryEntry(){
  const select=$('palette-library'),id=select?select.value:'';
@@ -808,9 +812,9 @@ function initPaletteSizeMenu(){
  applyPaletteSize();
 }
 async function colorModeDialog(){const values=await modal('颜色模式与量化','<label>模式<select name="mode"><option value="rgba">RGBA</option><option value="indexed">8位索引色</option><option value="grayscale">灰度 + Alpha</option></select></label><label>索引色板<select name="palette"><option value="adaptive">从全部帧自适应生成</option><option value="current">使用当前色板</option></select></label><label>最多色数（含透明槽）<input name="colors" type="number" min="2" max="256" value="256" required></label><label>4×4有序抖动<input name="dither" type="checkbox"></label><p>影响全部帧和像素图层，参考图保持原色。索引模式使用真实调色板索引，绘画 / 合并按色板映射；透明槽保留。重复颜色槽可独立改色。模式转换可撤销；灰度使用亮度加权并保留Alpha。</p>',form=>{form.elements.mode.value=modeOf(doc);const update=()=>{for(const key of ['palette','colors','dither'])form.elements[key].disabled=form.elements.mode.value!=='indexed';};form.elements.mode.onchange=update;update();});if(!values)return;mutate(()=>{convertColorMode(doc,values.mode,{palette:values.palette,colors:+values.colors||256,dither:$('modal-form').elements.dither.checked});if(values.mode==='indexed')colorIndex=createMapper(doc,doc.layers[li])(colorValue(color)).index;},'已转换颜色模式',{colorsReady:true});renderColors();}
-function loadPaletteColors(colors){
- if(!documentTabs.items.length){const next=createDocument();next.palette=colors;replaceDocument(next,false,null,crypto.randomUUID(),true);return;}
- mutate(()=>{paletteLibraryId='';$('palette-library').value='';editIndexedPalette(doc,colors);syncPaletteLibraryButtons();},'已导入色板',{colorsReady:true});
+function loadPaletteColors(colors,name){
+ if(!documentTabs.items.length){const next=createDocument();next.palette=colors;replaceDocument(next,false,null,crypto.randomUUID(),true,{id:'',importName:name,remap:null});return;}
+ mutate(()=>{paletteLibraryId='';paletteImportName=name;editIndexedPalette(doc,colors);renderPaletteLibrary();},'已导入色板',{colorsReady:true});
 }
 async function importPalette(){
  if(!window.desktop)return message('请在桌面应用中导入色板');
@@ -818,7 +822,7 @@ async function importPalette(){
   const target=documentId,file=await window.desktop.openPalette();if(file===null)return;
   const colors=typeof file==='string'?parsePalette(file):await importPaletteFile(file.name,paletteBytes(file.data));
   if(documentId!==target){message('当前项目已切换，请重新导入色板');return;}
-  loadPaletteColors(colors);
+  loadPaletteColors(colors,typeof file==='string'?'palette':file.name);
  }catch(error){showError('色板导入失败：'+error.message);}
 }
 async function exportPalette(){try{if(await saveData(paletteBase64(encodePalette(doc.palette)),'pix',doc.name+'-palette',true))message('色板已导出');}catch(error){showError('色板导出失败：'+error.message);}}
@@ -1727,12 +1731,12 @@ async function recentDialog(){
  if(values&&entries.length){const file=await window.desktop.openRecent(entries[+values.index].path);await importFile(file,true);}
 }
 async function newDocument(){const defaults={...DEFAULT_APPLICATION,...JSON.parse(localStorage.getItem(APP_SETTINGS_KEY)||'{}')};const values=await modal('新建像素项目','<label>项目名称 <input type="text" name="name" value="未命名" maxlength="100" required></label><label>宽度 <input type="number" name="width" value="'+defaults.width+'" min="1" required></label><label>高度 <input type="number" name="height" value="'+defaults.height+'" min="1" required></label><p>宽高不设固定上限；所有图层与帧的总像素最多 32M。</p>');if(values){const next=createDocument(+values.width,+values.height,values.name);next.palette=palettePreset().colors;next.frames[0].duration=defaults.duration;next.canvasBackground=validateCanvasBackground(defaults.canvasBackground||DEFAULT_CANVAS_BACKGROUND);replaceDocument(next,false,null,crypto.randomUUID(),true);}}
-function replaceDocument(value,isSaved=true,nextPath=null,id=crypto.randomUUID(),newTab=false){
+function replaceDocument(value,isSaved=true,nextPath=null,id=crypto.randomUUID(),newTab=false,paletteUI=null){
   activeSliceId=null;
   if(textSession)cancelTextSession();
   if(newTab)documentTabs.save(captureDocumentState());
   if(dirty)void flushRecovery();
-  stopPreview();stop();onionCache.clear();frameCache.clear();referenceCache.clear();restorePaletteUI({id:listPaletteLibrary().find(entry=>entry.colors.length===value.palette.length&&entry.colors.every((color,index)=>normalizeColor(color)===normalizeColor(value.palette[index])))?.id||'',remap:null});doc=value;documentId=id;filePath=nextPath;window.desktop?.activateDocument(filePath);fi=0;li=doc.layers.length-1;selection=null;previousSelection=null;frameSelection=new Set([0]);frameAnchor=0;celRange=null;celAnchor={frame:0,layer:li};$('timeline-mode').value='frames';$('play-range').value='all';$('play-direction').value='tag';$('play-once').checked=false;history.reset();boardRevision=0;savedBoardRevision=0;saved=isSaved?history.revision:-1;setDirty(!isSaved);if(newTab)documentTabs.add(captureDocumentState());else documentTabs.replace(captureDocumentState());render();fit();scheduleRecovery();
+  stopPreview();stop();onionCache.clear();frameCache.clear();referenceCache.clear();restorePaletteUI(paletteUI||{id:listPaletteLibrary().find(entry=>entry.colors.length===value.palette.length&&entry.colors.every((color,index)=>normalizeColor(color)===normalizeColor(value.palette[index])))?.id||'',remap:null});doc=value;documentId=id;filePath=nextPath;window.desktop?.activateDocument(filePath);fi=0;li=doc.layers.length-1;selection=null;previousSelection=null;frameSelection=new Set([0]);frameAnchor=0;celRange=null;celAnchor={frame:0,layer:li};$('timeline-mode').value='frames';$('play-range').value='all';$('play-direction').value='tag';$('play-once').checked=false;history.reset();boardRevision=0;savedBoardRevision=0;saved=isSaved?history.revision:-1;setDirty(!isSaved);if(newTab)documentTabs.add(captureDocumentState());else documentTabs.replace(captureDocumentState());render();fit();scheduleRecovery();
 }
 async function requestClose(closeWindow=true){
   if(closePending)return;
@@ -1767,7 +1771,7 @@ async function importSheetManifest(file,newTab=false){
   }finally{setBusy(false);}
 }
 async function importFile(file,newTab=false){
-  if(file.type==='palette'){const target=documentId,colors=await importPaletteFile(file.name,paletteBytes(file.data));if(documentId===target)loadPaletteColors(colors);return;}
+  if(file.type==='palette'){const target=documentId,colors=await importPaletteFile(file.name,paletteBytes(file.data));if(documentId===target)loadPaletteColors(colors,file.name);return;}
   if(file.type==='aseprite'){const next=validateDocument(file.doc);const answer=await modal('导入 Aseprite · '+(next.colorMode||'rgba').toUpperCase(),'<p>保留已支持的颜色模式、图层、完整帧、时长、标签和静态切片。</p><p id="ase-warnings"></p>',()=>{$('ase-warnings').textContent=file.warnings.length?file.warnings.join('；'):'未发现未保留的扩展元数据';});if(answer){replaceDocument(next,false,null,crypto.randomUUID(),newTab);message('已导入 Aseprite '+(next.colorMode||'rgba').toUpperCase()+' 子集');}return;}
   if(file.type==='sheet-manifest')return importSheetManifest(file,newTab);
   if(file.type==='sequence')return importPngSequence(file,newTab);
@@ -2516,7 +2520,7 @@ const actions={
   reselect:()=>{if(previousSelection){const last=previousSelection;previousSelection=selection;selection=selectionFrom(doc,(x,y)=>selectionContains(last,x,y));drawOverlay();}},
   'select-content':()=>{previousSelection=selection;const visible=composite(doc,fi);selection=selectionFrom(doc,(x,y)=>visible[(y*doc.width+x)*4+3]>0);drawOverlay();},
   'capture-brush':captureBrush,'brush-presets':brushPresets,'save-pattern-brush':savePatternBrushToLibrary,'delete-pattern-brush':deletePatternBrushFromLibrary,
-  'set-palette-preset':()=>{const entry=paletteById(paletteLibraryId);setPalettePreset(doc.palette,paletteLibraryId,entry?.name||'自定义预设');renderPaletteLibrary();message('已设为预设色板');},'palette-editor':togglePaletteEditor,'import-palette':importPalette,'export-palette':exportPalette,
+  'set-palette-preset':()=>{const entry=palettePresetCandidate();if(!entry)return;setPalettePreset(doc.palette,entry.id,entry.name);renderPaletteLibrary();message('已设为预设色板');},'palette-editor':togglePaletteEditor,'import-palette':importPalette,'export-palette':exportPalette,
   'save-palette':savePaletteLibraryEntry,'delete-palette':deletePaletteLibraryEntry,'remap-indices':remapPaletteIndices,
   'extract-palette':()=>{const palette=extractPalette(composite(doc,fi));if(!palette.length)return message('当前帧没有可提取的颜色');mutate(()=>editIndexedPalette(doc,palette),'已按使用频率提取当前帧颜色',{colorsReady:true});},
   'swap-colors':()=>{[color,background]=[background,color];saveColorPreferences();renderColors();},
@@ -4583,5 +4587,5 @@ if(window.desktop?.inputAudit&&!editorHost.detached)window.startInputAudit();
 
 window.runPaletteWorkflowSmoke=async samples=>{
  const {paletteWorkflowSmoke}=await import('./palette-workflow-smoke.js');
- return paletteWorkflowSmoke(samples,{$,actions,newDocument,replaceDocument,createDocument,importFile,importPalette,exportPalette,setTool,updateBrushControls,state:()=>({doc,documentId,paletteLibraryId,dirty,history:history.undoStack.length}),pattern:()=>{brushSettings.shape='pattern';brushSettings.pattern={width:1,height:1,data:[0xff0000ff]};updateBrushControls();},library:renderPaletteLibrary});
+ return paletteWorkflowSmoke(samples,{$,actions,newDocument,replaceDocument,createDocument,importFile,importPalette,exportPalette,setTool,updateBrushControls,switchDocument,empty:enterEmptyState,state:()=>({doc,documentId,paletteLibraryId,dirty,history:history.undoStack.length}),pattern:()=>{brushSettings.shape='pattern';brushSettings.pattern={width:1,height:1,data:[0xff0000ff]};updateBrushControls();},library:renderPaletteLibrary});
 };

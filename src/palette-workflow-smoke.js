@@ -1,14 +1,15 @@
 import {BRIGHT24} from './builtin-palette.js';
 import {encodePalette,decodePalette,importPaletteFile,paletteBase64,paletteBytes} from './palette-file.js';
-import {palettePreset,PALETTE_PRESET_KEY} from './palette-library.js';
+import {palettePreset,PALETTE_PRESET_KEY,deletePaletteFromLibrary} from './palette-library.js';
 import {applyLocale} from './i18n.js';
 import {convertColorMode} from './color-modes.js';
 
 export async function paletteWorkflowSmoke(samples,api){
- const {$,actions,newDocument,replaceDocument,createDocument,importFile,importPalette,exportPalette,setTool,state,pattern,library}=api;
+ const {$,actions,newDocument,replaceDocument,createDocument,importFile,importPalette,exportPalette,setTool,state,pattern,library,switchDocument,empty}=api;
  const results=[],check=(name,value)=>{results.push({name,pass:!!value});if(!value)throw new Error(name);};
  const nextFrame=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
  const preset=localStorage.getItem(PALETTE_PRESET_KEY),bridge=window.desktop;
+ let savedPaletteId;
  const originalOpen=bridge.openPalette,originalSave=bridge.save;
  async function makeDocument(){
   const pending=newDocument();
@@ -35,16 +36,31 @@ export async function paletteWorkflowSmoke(samples,api){
   const ase=await importPaletteFile('lost-century.ase',paletteBytes(samples.ase));
   check('用户 Adobe ASE 样本导入16色',ase.length===16&&ase[0]==='#d1b187');
   const colors=['#ff000080','#00ff00','#ff000080'];
-  bridge.openPalette=async()=>({name:'palette.pix',data:paletteBase64(encodePalette(colors))});
+  bridge.openPalette=async()=>({name:'coast.v2.pix',data:paletteBase64(encodePalette(colors))});
   await importPalette();
-  check('导入不同色板后预设按钮启用',!presetButton.disabled);
+  check('导入色板未入库时预设按钮置灰',presetButton.disabled);
+  check('导入后显示文件名并替换未选择色板选项',$('palette-library').selectedOptions[0].textContent==='coast.v2.pix'&&![...$('palette-library').options].some(option=>option.textContent==='（未选择色板）'));
   check('导入保留 Alpha 与重复色槽，允许撤销',state().doc.palette.join()===colors.join()&&state().history===1&&$('palette-library').value==='');
+  const importedDocumentId=state().documentId;await makeDocument();switchDocument(importedDocumentId);
+  check('切换项目后恢复导入文件名与未入库状态',$('palette-library').selectedOptions[0].textContent==='coast.v2.pix'&&presetButton.disabled);
   actions.undo();check('撤销恢复 bright24 及库选择',$('palette-library').value==='bright24'&&state().doc.palette.join()===BRIGHT24.join());
   actions.redo();
+  check('重做恢复导入文件名且预设仍置灰',$('palette-library').selectedOptions[0].textContent==='coast.v2.pix'&&presetButton.disabled);
+  const beforePreset=localStorage.getItem(PALETTE_PRESET_KEY);actions['set-palette-preset']();
+  check('未入库色板不能绕过按钮设置预设',localStorage.getItem(PALETTE_PRESET_KEY)===beforePreset);
   let exported;
   bridge.save=async(...args)=>{exported=args;return true;};
   await exportPalette();
   check('导出二进制 .pix 并可完整回读',exported[1]==='pix'&&exported[3]===true&&decodePalette(paletteBytes(exported[0])).join()===colors.join());
+  const canceledSave=actions['save-palette']();
+  check('存为色板默认使用导入文件名并仅移除最后扩展名',$('modal-form').elements.name.value==='coast.v2');
+  $('modal').close('cancel');await canceledSave;
+  check('取消保存保持导入名称与预设禁用状态',$('palette-library').selectedOptions[0].textContent==='coast.v2.pix'&&presetButton.disabled);
+  const saved=actions['save-palette']();$('modal-form').requestSubmit($('modal-submit'));await saved;
+  savedPaletteId=$('palette-library').value;
+  check('保存入库后选中命名色板并启用预设按钮',!!savedPaletteId&&$('palette-library').selectedOptions[0].textContent==='coast.v2'&&!presetButton.disabled);
+  $('add-color').click();check('入库后修改色板需重新保存才能设为预设',presetButton.disabled);
+  actions.undo();check('撤销修改恢复已入库色板的预设资格',!presetButton.disabled&&$('palette-library').value===savedPaletteId);
   actions['set-palette-preset']();
   check('设为预设保存当前内容',palettePreset().colors.join()===colors.join());
   check('自定义色板设为预设后设置按钮置灰',presetButton.disabled);
@@ -52,6 +68,7 @@ export async function paletteWorkflowSmoke(samples,api){
   const before=state().documentId,bytes=encodePalette(['#11223344','#abcdef']);
   await importFile({type:'palette',name:'opened.pix',data:paletteBase64(bytes)},true);
   check('普通打开色板应用到当前项目',state().documentId===before&&state().doc.palette[0]==='#11223344');
+  check('普通打开同样显示导入文件名并禁用未入库预设',$('palette-library').selectedOptions[0].textContent==='opened.pix'&&presetButton.disabled);
   const sample=createDocument(2,1);sample.palette=['#00000000','#ff0000','#00ff00'];sample.frames[0].cels[0]=[0xff0000ff,0x00ff00ff];
   convertColorMode(sample,'indexed',{palette:'current'});replaceDocument(sample,true,null,crypto.randomUUID(),true);
   await importFile({type:'palette',name:'indexed.pix',data:paletteBase64(encodePalette(['#00000000','#00ff00','#ff0000']))});
@@ -61,6 +78,8 @@ export async function paletteWorkflowSmoke(samples,api){
   const pending=importPalette();replaceDocument(createDocument(2,2),true,null,crypto.randomUUID(),true);
   const current=state().doc.palette.join();resolveImport({name:'late.pix',data:paletteBase64(bytes)});await pending;
   check('异步导入不会改动切换后的文档',state().doc.palette.join()===current);
+  empty();await importFile({type:'palette',name:'empty-import.pix',data:paletteBase64(bytes)},true);
+  check('无项目时打开色板仍显示文件名且禁止未入库预设',$('palette-library').selectedOptions[0].textContent==='empty-import.pix'&&presetButton.disabled);
   setTool('pencil');pattern();await nextFrame();
   const shape=$('brush-shape').closest('.toolbar-select-label'),host=$('pattern-controls');
   check('图案笔刷按钮紧邻笔形按钮右侧',shape.nextElementSibling===host&&!host.hidden&&host.getBoundingClientRect().left>=shape.getBoundingClientRect().right);
@@ -78,10 +97,12 @@ export async function paletteWorkflowSmoke(samples,api){
   $('pattern-menu').hidePopover();$('brush-shape').value='square';$('brush-shape').dispatchEvent(new Event('change',{bubbles:true}));await nextFrame();
   check('离开图案笔形隐藏图案按钮',host.hidden);
   if(samples.inspectPattern){pattern();host.querySelector('button').click();await nextFrame();}
+
   return {ok:true,results};
  }catch(error){return {ok:false,results,error:error.stack};}
  finally{
   bridge.openPalette=originalOpen;bridge.save=originalSave;
+  if(savedPaletteId)deletePaletteFromLibrary(savedPaletteId);
   if(preset===null)localStorage.removeItem(PALETTE_PRESET_KEY);else localStorage.setItem(PALETTE_PRESET_KEY,preset);
  }
 }
