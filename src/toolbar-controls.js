@@ -29,6 +29,10 @@ function popup(host,id,title,icon,nodes,trigger=null){
   const fields=ids.map(id=>panel.querySelector('#'+id).closest('label,.color-field'));fields[0].before(row);row.append(...fields);
  }
  for(const command of panel.querySelectorAll('button')){const text=command.textContent.trim()||command.getAttribute('aria-label')||command.title;command.classList.remove('visual-button','icon-button');command.querySelectorAll('svg').forEach(icon=>icon.remove());if(!command.textContent.trim())command.textContent=text;}
+ if(id==='pattern-menu'){
+  const actions=document.createElement('div');actions.className='pattern-brush-actions';
+  actions.append(...panel.querySelectorAll('[data-action="save-pattern-brush"],[data-action="delete-pattern-brush"]'));panel.append(actions);
+ }
  normalizeFormLayout(panel);orderFormOptions(panel);
  panel.addEventListener('beforetoggle',event=>{
   button.setAttribute('aria-expanded',String(event.newState==='open'));
@@ -169,6 +173,7 @@ export function initToolbarControls(presets){
    for(let i=1;i<sections.length;i++)separators[i-1].hidden=sections[i].hidden||!sections.slice(0,i).some(section=>!section.hidden);
   });
  }
+ $('brush-shape').closest('.toolbar-select-label').after($('pattern-controls'));
  initPresets(presets);
  const canvas=uiQuery('.canvas-actions'),fit=canvas.querySelector('[data-action=fit]');
  fit.classList.add('icon-button','visual-button');setButtonIcon(fit,'fit','适应内容');canvas.prepend(fit);

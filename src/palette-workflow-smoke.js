@@ -47,6 +47,14 @@ export async function paletteWorkflowSmoke(samples,api){
   const pending=importPalette();replaceDocument(createDocument(2,2),true,null,crypto.randomUUID(),true);
   const current=state().doc.palette.join();resolveImport({name:'late.pix',data:paletteBase64(bytes)});await pending;
   check('异步导入不会改动切换后的文档',state().doc.palette.join()===current);
+  setTool('pencil');pattern();await nextFrame();
+  const shape=$('brush-shape').closest('.toolbar-select-label'),host=$('pattern-controls');
+  check('图案笔刷按钮紧邻笔形按钮右侧',shape.nextElementSibling===host&&!host.hidden&&host.getBoundingClientRect().left>=shape.getBoundingClientRect().right);
+  host.querySelector('button').click();await nextFrame();
+  const save=document.querySelector('[data-action="save-pattern-brush"]'),remove=document.querySelector('[data-action="delete-pattern-brush"]');
+  check('气泡内保存与删除同一行',$('pattern-menu').matches(':popover-open')&&Math.abs(save.getBoundingClientRect().top-remove.getBoundingClientRect().top)<1&&remove.getBoundingClientRect().left>=save.getBoundingClientRect().right);
+  $('pattern-menu').hidePopover();$('brush-shape').value='square';$('brush-shape').dispatchEvent(new Event('change',{bubbles:true}));await nextFrame();
+  check('离开图案笔形隐藏图案按钮',host.hidden);
   return {ok:true,results};
  }catch(error){return {ok:false,results,error:error.stack};}
  finally{
