@@ -17,6 +17,7 @@ export async function paletteWorkflowSmoke(samples,api){
   localStorage.removeItem(PALETTE_PRESET_KEY);
   await makeDocument();
   check('新建项目使用 bright24 且下拉选中该内置色板',state().doc.palette.join()===BRIGHT24.join()&&$('palette-library').value==='bright24');
+  check('前景色调整标题已移除且通道模式保留',!document.querySelector('.color-adjust-heading strong')&&!!document.querySelector('#color-adjustments select'));
   const png=await importPaletteFile('bright24.png',paletteBytes(samples.png));
   check('PNG 导入逐色匹配 bright24 原图顺序',png.map(color=>color.toUpperCase()).join()===BRIGHT24.join());
   const ase=await importPaletteFile('lost-century.ase',paletteBytes(samples.ase));

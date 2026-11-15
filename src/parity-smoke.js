@@ -20,7 +20,7 @@ export async function runParitySmoke(suite,api){
    sample();setTool('fill');setColor('#00ff00');input('ink-mode','copy');input('fill-tolerance',0);input('fill-contiguous',true);
    check('项目已打开且画布可见',$('welcome').hidden&&viewport.getBoundingClientRect().width>0);
    check('填充工具显示容差与连续参数',!$('fill-controls').hidden&&$('fill-contiguous').checked);
-   check('绘画取色面板显示前景色调整',document.querySelector('.color-adjust-heading strong').textContent==='前景色调整');
+   check('绘画取色面板显示前景色调整',!document.querySelector('.color-adjust-heading strong')&&!!document.querySelector('#color-adjustments select'));
    click(0,0);check('默认连续零容差只填精确连通像素',JSON.stringify(documentState().frames[0].cels[0].slice(0,4))===JSON.stringify([green,near,blue,red]));
    actions.undo();check('填充一次撤销恢复原图',documentState().frames[0].cels[0][0]===red);
    input('fill-tolerance',5);click(0,0);check('容差填充包含相近颜色但不越过分隔',JSON.stringify(documentState().frames[0].cels[0].slice(0,4))===JSON.stringify([green,green,blue,red]));
@@ -29,8 +29,8 @@ export async function runParitySmoke(suite,api){
    check('非连续填充仍限制在实际拖出的选区',documentState().frames[0].cels[0][0]===green&&documentState().frames[0].cels[0][1]===green&&documentState().frames[0].cels[0][3]===red);
    actions.deselect();setTool('pencil');check('离开填充工具隐藏专属选项',$('fill-controls').hidden);setTool('fill');check('切回工具保留填充参数',+$('fill-tolerance').value===5&&!$('fill-contiguous').checked);
    applyLocale('en');await new Promise(requestAnimationFrame);
-   check('前景色与填充参数英文同步',document.querySelector('.color-adjust-heading strong').textContent==='Foreground color adjustment'&&$('fill-tolerance').closest('label').textContent.includes('Fill tolerance')&&$('fill-contiguous').closest('label').textContent.includes('Contiguous fill'));
-   applyLocale('zh');await new Promise(requestAnimationFrame);check('切回中文恢复面板名称',document.querySelector('.color-adjust-heading strong').textContent==='前景色调整');
+   check('前景色与填充参数英文同步',!document.querySelector('.color-adjust-heading strong')&&$('fill-tolerance').closest('label').textContent.includes('Fill tolerance')&&$('fill-contiguous').closest('label').textContent.includes('Contiguous fill'));
+   applyLocale('zh');await new Promise(requestAnimationFrame);check('切回中文恢复面板名称',!document.querySelector('.color-adjust-heading strong')&&!!document.querySelector('#color-adjustments select'));
    input('fill-tolerance',0);input('fill-contiguous',true);await new Promise(requestAnimationFrame);
   }else if(suite==='parity-symmetry'){
    const sample=createDocument(8,8,'symmetry');replaceDocument(sample,true,null,crypto.randomUUID(),true);setTool('pencil');setColor('#ff0000');input('brush',1);input('ink-mode','copy');input('symmetry',true);input('symmetry-vertical',true);
@@ -86,13 +86,13 @@ export async function runParitySmoke(suite,api){
    const formInput=(name,value)=>{const el=$('modal-form').elements[name];if(el.type==='checkbox')el.checked=value;else el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));};
    const sample=createDocument(3,2,'image-adjustments');sample.frames[0].cels[0].fill(0xff0000ff);sample.frames[0].cels[0][0]=0xff000080;sample.frames.push({duration:100,cels:[Array(6).fill(0x0000ffff)]});replaceDocument(sample,true,null,crypto.randomUUID(),true);const source=JSON.stringify(documentState());
    await wait(()=>document.querySelector('[data-menu-command="image-hsv"]')?.disabled===false);document.querySelector('[data-top-menu="编辑"]').click();[...document.querySelectorAll('.app-menu > button')].find(el=>el.textContent==='图像颜色调整').click();document.querySelector('[data-menu-command="image-hsv"]').click();await wait(()=>$('modal').open);
-   check('图像颜色调整与前景色面板名称区分',$('modal-title').textContent==='图像颜色调整'&&document.querySelector('.color-adjust-heading strong').textContent==='前景色调整');
+   check('图像颜色调整与前景色面板名称区分',$('modal-title').textContent==='图像颜色调整'&&!document.querySelector('.color-adjust-heading strong')&&!!document.querySelector('#color-adjustments select'));
    const numeric=$('modal-form').querySelector('[data-field="hue"]');numeric.value=120;numeric.dispatchEvent(new Event('input',{bubbles:true}));check('数值和滑杆同步实时 HSV 预览',+$('modal-form').elements.hue.value===120&&documentState().frames[0].cels[0][0]===0x00ff0080&&documentState().frames[1].cels[0][0]===0x0000ffff);
    check('预览不标记工程修改',!document.title.startsWith('●'));formInput('preview',false);check('关闭预览恢复原图',JSON.stringify(documentState())===source);$('modal').close('cancel');await wait(()=>JSON.stringify(documentState())===source);check('取消 HSV 不写入历史',JSON.stringify(documentState())===source);
    let pending=actions['image-hsv']();formInput('hue',120);formInput('scope','sprite');$('modal-form').requestSubmit($('modal-submit'));await pending;check('确认整图作用范围覆盖多帧',documentState().frames[0].cels[0][0]===0x00ff0080&&documentState().frames[1].cels[0][0]===0xff0000ff);actions.undo();check('多帧调色单次撤销',JSON.stringify(documentState())===source);
    pending=actions['image-brightness']();formInput('brightness',50);check('亮度对比度预览保持 Alpha',(documentState().frames[0].cels[0][0]&255)===128&&(documentState().frames[0].cels[0][0]>>>16&255)===128);$('modal').close('cancel');await pending;
    setTool('select');$('selection-kind').value='rect';$('selection-operation').value='replace';pointer('pointerdown',0,0);pointer('pointerup',0,0);pending=actions['image-invert']();check('反色仅影响实际选区',documentState().frames[0].cels[0][0]===0x00ffff80&&documentState().frames[0].cels[0][1]===0xff0000ff);$('modal-form').requestSubmit($('modal-submit'));await pending;actions.undo();actions.deselect();check('反色可撤销且保留透明度',JSON.stringify(documentState())===source);
-   pending=actions['image-brightness']();applyLocale('en');await new Promise(requestAnimationFrame);check('图像调整及前景色英文同步',$('modal-title').textContent==='Image color adjustments'&&document.querySelector('.color-adjust-heading strong').textContent==='Foreground color adjustment'&&$('modal-form').elements.brightness.closest('label').textContent.includes('Brightness shift'));$('modal').close('cancel');await pending;applyLocale('zh');await new Promise(requestAnimationFrame);void actions['image-hsv']();await new Promise(requestAnimationFrame);
+   pending=actions['image-brightness']();applyLocale('en');await new Promise(requestAnimationFrame);check('图像调整及前景色英文同步',$('modal-title').textContent==='Image color adjustments'&&!document.querySelector('.color-adjust-heading strong')&&$('modal-form').elements.brightness.closest('label').textContent.includes('Brightness shift'));$('modal').close('cancel');await pending;applyLocale('zh');await new Promise(requestAnimationFrame);void actions['image-hsv']();await new Promise(requestAnimationFrame);
   }else if(suite==='parity-outline'){
    const wait=async predicate=>{const end=performance.now()+10000;while(!predicate()){if(performance.now()>end)throw new Error('等待描边界面超时');await new Promise(r=>setTimeout(r,20));}};
    const formInput=(name,value)=>{const el=$('modal-form').elements[name];if(el.type==='checkbox')el.checked=value;else el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));};

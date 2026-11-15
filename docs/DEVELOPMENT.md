@@ -38,6 +38,8 @@ npm run package
 
 ## 定向测试
 
+前景色面板去除标题文字，保留通道模式与调整控件；同步更新中英文相关浏览器断言，色板浏览器专项验证通过。
+
 色板库调整范围：二进制 PIX 色板读写、旧色板库迁移、Adobe ASE / Aseprite / GPL / PAL / PNG 导入、bright24 初始预设及自定义预设持久化；普通打开与项目 PIX 分流、索引色 / Alpha / 撤销和异步文档绑定。定向验证：相关 Node 69 项、Rust 文件 9 项、浏览器色板流程通过，前端及本地 Debug 桌面版构建通过。原生交互自动化因 WebView 调试连接超时未完成，不视为通过；不执行安装更新或发布。
 
 色板浏览器专项执行 `node scripts/test-palette-browser.mjs`，使用临时 Chrome 配置；桌面专项为 `node scripts/test-palette-desktop.mjs`，须先关闭已有 MinePix，使用隔离 WebView 配置并在结束恢复最近文件与更新设置。

@@ -2,7 +2,7 @@ import {rgba,hsv,fromRgba,fromHsv,normalizeColor} from './colors.js';
 
 export function initColorAdjustments({onPreview,onCommit}){
  const host=document.createElement('section');host.id='color-adjustments';host.setAttribute('aria-label','当前前景色调整');
- host.innerHTML='<div class="color-adjust-heading"><strong>前景色调整</strong><select aria-label="颜色通道模式"><option value="hsv">HSV</option><option value="rgb">RGB</option></select></div><div class="color-sv" role="slider" tabindex="0" aria-label="饱和度与明度" aria-valuemin="0" aria-valuemax="100"><span></span></div><div class="color-adjust-channels"></div>';
+ host.innerHTML='<div class="color-adjust-heading"><select aria-label="颜色通道模式"><option value="hsv">HSV</option><option value="rgb">RGB</option></select></div><div class="color-sv" role="slider" tabindex="0" aria-label="饱和度与明度" aria-valuemin="0" aria-valuemax="100"><span></span></div><div class="color-adjust-channels"></div>';
  document.getElementById('add-color').after(host);
  const mode=host.querySelector('select'),square=host.querySelector('.color-sv'),marker=square.firstElementChild,rows=host.querySelector('.color-adjust-channels');
  let current=null,channels={h:0,s:100,v:100,a:255},rgb={r:255,g:0,b:0,a:255};
