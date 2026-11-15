@@ -1,6 +1,6 @@
 import {BRIGHT24} from './builtin-palette.js';
 import {encodePalette,decodePalette,importPaletteFile,paletteBase64,paletteBytes} from './palette-file.js';
-import {palettePreset,PALETTE_PRESET_KEY,deletePaletteFromLibrary} from './palette-library.js';
+import {palettePreset,PALETTE_PRESET_KEY,paletteById,deletePaletteFromLibrary} from './palette-library.js';
 import {applyLocale} from './i18n.js';
 import {convertColorMode} from './color-modes.js';
 
@@ -65,6 +65,17 @@ export async function paletteWorkflowSmoke(samples,api){
   check('设为预设保存当前内容',palettePreset().colors.join()===colors.join());
   check('自定义色板设为预设后设置按钮置灰',presetButton.disabled);
   await makeDocument();check('后续新建应用自定义预设',state().doc.palette.join()===colors.join());
+  check('我的色板分组排在内置色板之前',[...$('palette-library').querySelectorAll('optgroup')].map(group=>group.label).join('|')==='我的色板|内置色板');
+  changeLibrary(savedPaletteId);
+  const beforeDelete=JSON.stringify(state().doc),presetBeforeDelete=localStorage.getItem(PALETTE_PRESET_KEY);
+  let deleting=actions['delete-palette']();
+  check('删除前弹出含色板名的二次确认且条目仍存在',$('modal').open&&$('delete-palette-confirm').textContent.includes('coast.v2')&&!!paletteById(savedPaletteId));
+  $('modal').close('cancel');await deleting;
+  check('取消删除保留色板及当前选择',!!paletteById(savedPaletteId)&&$('palette-library').value===savedPaletteId&&JSON.stringify(state().doc)===beforeDelete);
+  deleting=actions['delete-palette']();$('modal-form').requestSubmit($('modal-submit'));await deleting;
+  check('确认后才删除色板库条目',!paletteById(savedPaletteId)&&!option(savedPaletteId)&&document.querySelector('[data-action="delete-palette"]').disabled);
+  check('删除库条目保留当前项目颜色与预设',JSON.stringify(state().doc)===beforeDelete&&localStorage.getItem(PALETTE_PRESET_KEY)===presetBeforeDelete);
+
   const before=state().documentId,bytes=encodePalette(['#11223344','#abcdef']);
   await importFile({type:'palette',name:'opened.pix',data:paletteBase64(bytes)},true);
   check('普通打开色板应用到当前项目',state().documentId===before&&state().doc.palette[0]==='#11223344');

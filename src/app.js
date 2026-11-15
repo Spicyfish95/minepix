@@ -403,7 +403,7 @@ function renderPaletteLibrary(){
  const previous=paletteLibraryId,entries=listPaletteLibrary(),preset=palettePreset();
  select.replaceChildren();
  const head=document.createElement('option');head.value='';head.textContent=paletteImportName||'（未选择色板）';select.append(head);
- for(const [label,user] of [['内置色板',false],['我的色板',true]]){
+ for(const [label,user] of [['我的色板',true],['内置色板',false]]){
   const list=entries.filter(entry=>!!entry.user===user);
   if(!list.length)continue;
   const group=document.createElement('optgroup');group.label=label;
@@ -486,12 +486,14 @@ async function savePaletteLibraryEntry(){
  if(!values)return;
  try{const entry=savePaletteToLibrary(values.name,doc.palette);paletteLibraryId=entry.id;paletteImportName='';renderPaletteLibrary();message('已把色板存为 '+entry.name);}catch(error){showError(error.message);}
 }
-function deletePaletteLibraryEntry(){
+async function deletePaletteLibraryEntry(){
  const select=$('palette-library'),id=select?select.value:'';
  if(!id){message('先在色板库选择一个色板');return;}
  const entry=paletteById(id);
  if(!entry)return;
  if(!entry.user){message('内置色板不能删除');return;}
+ const answer=await modal('删除色板？','<p id="delete-palette-confirm"></p>',()=>{$('delete-palette-confirm').textContent='确定从色板库删除“'+entry.name+'”？此操作不可撤销。';},null,{confirm:'删除'});
+ if(!answer)return;
  deletePaletteFromLibrary(id);renderPaletteLibrary();message('已从色板库删除 '+entry.name);
 }
 function syncPaletteEditorButton(){
@@ -4227,7 +4229,7 @@ window.runColorAdjustmentsSmoke=async()=>{const results=[],check=(name,pass)=>{r
   const libSelect=$('palette-library');
   check('色板库把内置色板分组列出',!!libSelect&&libSelect.querySelectorAll('optgroup[label="内置色板"] option').length>=3&&libSelect.options[0].textContent==='（未选择色板）');
   const savedEntry=savePaletteToLibrary('验收色板',['#000000','#ff0000','#00ff00']);renderPaletteLibrary();
-  check('保存色板后出现在我的色板',[...libSelect.querySelectorAll('optgroup')].map(group=>group.label).join('|')==='内置色板|我的色板'&&[...libSelect.querySelectorAll('optgroup[label="我的色板"] option')].some(option=>option.value===savedEntry.id));
+  check('保存色板后出现在我的色板',[...libSelect.querySelectorAll('optgroup')].map(group=>group.label).join('|')==='我的色板|内置色板'&&[...libSelect.querySelectorAll('optgroup[label="我的色板"] option')].some(option=>option.value===savedEntry.id));
   libSelect.value='';libSelect.dispatchEvent(new Event('change'));
   libSelect.value=savedEntry.id;libSelect.dispatchEvent(new Event('change'));
   const paletteSwapped=JSON.stringify(doc.palette)===JSON.stringify(libraryPaletteColors(paletteById(savedEntry.id))),indexBeforeRemap=doc.frames[0].indices[0][0];
@@ -4245,7 +4247,8 @@ window.runColorAdjustmentsSmoke=async()=>{const results=[],check=(name,pass)=>{r
   check('内置色板时删色板按钮置灰',deletePaletteButton.disabled&&deletePaletteButton.title==='内置色板不能删除');
   libSelect.value=savedEntry.id;libSelect.dispatchEvent(new Event('change'));
   check('用户色板时删色板按钮可用',!deletePaletteButton.disabled);
-  libSelect.value=savedEntry.id;actions['delete-palette']();
+  libSelect.value=savedEntry.id;const deletingPalette=actions['delete-palette']();
+  $('modal-form').requestSubmit($('modal-submit'));await deletingPalette;
   check('从色板库删除用户色板',!paletteById(savedEntry.id)&&![...libSelect.options].some(option=>option.value===savedEntry.id));
   const svNode=document.querySelector('.color-sv'),palettePanelNode=$('palette').closest('.palette-panel'),svBox=svNode.getBoundingClientRect(),svStyle=getComputedStyle(svNode);
   check('色阶图宽度在 180 到 260 之间且贴合栏宽',svBox.width>=179.5&&svBox.width<=260.5&&svStyle.minWidth==='180px'&&svStyle.maxWidth==='260px',{width:svBox.width,min:svStyle.minWidth,max:svStyle.maxWidth});
