@@ -60,7 +60,9 @@ export function palettePreset(){
 export function setPalettePreset(colors,id='',name='自定义预设'){
  localStorage.setItem(PALETTE_PRESET_KEY,JSON.stringify({id,name,data:paletteBase64(encodePalette(colors))}));
 }
-
+export function isPalettePreset(colors,preset=palettePreset()){
+ return colors.length===preset.colors.length&&colors.every((color,index)=>normalizeColor(color)===normalizeColor(preset.colors[index]));
+}
 
 export function listPaletteLibrary(){return [...BUILTIN_PALETTES,...readUserPalettes()];}
 

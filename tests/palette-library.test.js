@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {PALETTE_LIBRARY_KEY,BUILTIN_PALETTES,listPaletteLibrary,paletteById,savePaletteToLibrary,deletePaletteFromLibrary,nearestIndex,remapIndices,palettePreset,setPalettePreset} from '../src/palette-library.js';
+import {PALETTE_LIBRARY_KEY,BUILTIN_PALETTES,listPaletteLibrary,paletteById,savePaletteToLibrary,deletePaletteFromLibrary,nearestIndex,remapIndices,palettePreset,setPalettePreset,isPalettePreset} from '../src/palette-library.js';
 
 // node 里没有 localStorage：用内存实现顶替，写读走同一份数据。
 const store=new Map();
@@ -61,6 +61,14 @@ test('默认预设是 bright24，自定义预设保存内容且不依赖库条�
  setPalettePreset(entry.colors,entry.id,entry.name);deletePaletteFromLibrary(entry.id);
  assert.deepEqual(palettePreset().colors,['#12345678','#12345678']);
  assert.equal(palettePreset().name,'预设');
+});
+
+test('预设匹配按颜色内容和色槽顺序比较，忽略大小写及不透明 Alpha 写法',()=>{
+ reset();setPalettePreset(['#AABBCC','#12345678','#AABBCC']);
+ assert.ok(isPalettePreset(['#aabbccff','#12345678','#abc']));
+ assert.equal(isPalettePreset(['#aabbcc','#12345679','#aabbcc']),false);
+ assert.equal(isPalettePreset(['#aabbcc','#aabbcc','#12345678']),false);
+ assert.equal(isPalettePreset(['#aabbcc','#12345678']),false);
 });
 
 test('最近色按 RGB 距离选取，空色板返回 -1',()=>{

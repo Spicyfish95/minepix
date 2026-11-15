@@ -22,7 +22,7 @@ import {initI18n,persistLocale,applyLocale,locale,t,LOCALE_KEY} from './i18n.js'
 import {initVisualWorkspace,syncVisualTimeline,syncVisualControls} from './visual-workspace.js';
 import {initColorAdjustments} from './color-adjustments.js';
 import {listPatternBrushes,patternBrushById,savePatternBrush,deletePatternBrush,MAX_BRUSH_PATTERN} from './brush-library.js';
-import {listPaletteLibrary,paletteById,savePaletteToLibrary,deletePaletteFromLibrary,remapIndices,palettePreset,setPalettePreset} from './palette-library.js';
+import {listPaletteLibrary,paletteById,savePaletteToLibrary,deletePaletteFromLibrary,remapIndices,palettePreset,setPalettePreset,isPalettePreset} from './palette-library.js';
 import {encodePalette,importPaletteFile,paletteBase64,paletteBytes,isPaletteFile} from './palette-file.js';
 import {initWindowChrome} from './window-chrome.js';
 import {uiGet,uiAll,uiQuery,uiActive,onUI,onUIWindow} from './ui-surfaces.js';
@@ -334,6 +334,7 @@ function useForegroundForPattern(){if(brushSettings.shape!=='pattern'||brushSett
 function setColor(value,index=null){if(modeOf(doc)==='indexed'){colorIndex=index??createMapper(doc,doc.layers[li])(colorValue(normalizeColor(value))).index;}else if(modeOf(doc)==='grayscale')value='#'+grayPixel(colorValue(normalizeColor(value))).toString(16).padStart(8,'0');const next=normalizeColor(value);if(next!==color)useForegroundForPattern();color=next;saveColorPreferences();renderColors();}
 function setBackground(value){const next=normalizeColor(value);if(next!==background)useForegroundForPattern();background=next;saveColorPreferences();renderColors();}
 function renderPalette(){
+ syncPalettePresetButton();
  const key=JSON.stringify(doc.palette)+color+colorIndex+modeOf(doc)+doc.transparentIndex;
  if(key===paletteDomKey)return;
  paletteDomKey=key;
@@ -399,14 +400,14 @@ function capturePaletteUI(){return{id:paletteLibraryId,remap:paletteRemap?clone(
 function restorePaletteUI(state){paletteLibraryId=state.id;paletteRemap=state.remap?clone(state.remap):null;$('palette-library').value=paletteLibraryId;syncPaletteLibraryButtons();syncRemapButton();}
 function renderPaletteLibrary(){
  const select=$('palette-library');if(!select)return;
- const previous=paletteLibraryId,entries=listPaletteLibrary();
+ const previous=paletteLibraryId,entries=listPaletteLibrary(),preset=palettePreset();
  select.replaceChildren();
  const head=document.createElement('option');head.value='';head.textContent='（未选择色板）';select.append(head);
  for(const [label,user] of [['内置色板',false],['我的色板',true]]){
   const list=entries.filter(entry=>!!entry.user===user);
   if(!list.length)continue;
   const group=document.createElement('optgroup');group.label=label;
-  for(const entry of list){const option=document.createElement('option');option.value=entry.id;option.textContent=entry.name;group.append(option);}
+  for(const entry of list){const option=document.createElement('option');option.value=entry.id;const activePreset=isPalettePreset(entry.colors,preset);option.dataset.preset=String(activePreset);option.textContent=entry.name+(activePreset?'（预设）':'');group.append(option);}
   select.append(group);
  }
  if(previous&&entries.some(entry=>entry.id===previous))select.value=previous;
@@ -414,11 +415,16 @@ function renderPaletteLibrary(){
 }
 // 内置色板与「未选择」没有可删条目，按钮直接置灰，避免点了只弹一句提示。
 function syncPaletteLibraryButtons(){
+ syncPalettePresetButton();
  const select=$('palette-library'),button=document.querySelector('[data-action="delete-palette"]');
  if(!select||!button)return;
  const entry=paletteById(select.value);
  button.disabled=!entry||!entry.user;
  button.title=!entry?'先在色板库选择一个色板':(entry.user?'从本机色板库删除选中的用户色板':'内置色板不能删除');
+}
+function syncPalettePresetButton(){
+ const button=document.querySelector('[data-action="set-palette-preset"]');
+ if(button)button.disabled=!documentTabs.items.length||isPalettePreset(doc.palette);
 }
 function libraryPaletteColors(entry){
  const colors=entry.colors.map(value=>value.length===7?value+'ff':value);
@@ -1678,6 +1684,7 @@ async function openWelcomeRecent(path){
  await importFile(await window.desktop.openRecent(path),true);
 }
 function renderEmptyDocument(){
+ syncPalettePresetButton();
  renderDocumentTabs();
  $('doc-name').textContent='未打开项目';$('doc-name').title='';$('dirty-mark').textContent='';$('doc-meta').textContent='';$('canvas-label').textContent='画布';
  $('preview-frame').textContent='';$('preview-time').textContent='';
@@ -2509,7 +2516,7 @@ const actions={
   reselect:()=>{if(previousSelection){const last=previousSelection;previousSelection=selection;selection=selectionFrom(doc,(x,y)=>selectionContains(last,x,y));drawOverlay();}},
   'select-content':()=>{previousSelection=selection;const visible=composite(doc,fi);selection=selectionFrom(doc,(x,y)=>visible[(y*doc.width+x)*4+3]>0);drawOverlay();},
   'capture-brush':captureBrush,'brush-presets':brushPresets,'save-pattern-brush':savePatternBrushToLibrary,'delete-pattern-brush':deletePatternBrushFromLibrary,
-  'set-palette-preset':()=>{const entry=paletteById(paletteLibraryId);setPalettePreset(doc.palette,paletteLibraryId,entry?.name||'自定义预设');message('已设为预设色板');},'palette-editor':togglePaletteEditor,'import-palette':importPalette,'export-palette':exportPalette,
+  'set-palette-preset':()=>{const entry=paletteById(paletteLibraryId);setPalettePreset(doc.palette,paletteLibraryId,entry?.name||'自定义预设');renderPaletteLibrary();message('已设为预设色板');},'palette-editor':togglePaletteEditor,'import-palette':importPalette,'export-palette':exportPalette,
   'save-palette':savePaletteLibraryEntry,'delete-palette':deletePaletteLibraryEntry,'remap-indices':remapPaletteIndices,
   'extract-palette':()=>{const palette=extractPalette(composite(doc,fi));if(!palette.length)return message('当前帧没有可提取的颜色');mutate(()=>editIndexedPalette(doc,palette),'已按使用频率提取当前帧颜色',{colorsReady:true});},
   'swap-colors':()=>{[color,background]=[background,color];saveColorPreferences();renderColors();},
