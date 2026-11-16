@@ -40,6 +40,24 @@ async function runPaletteEyedropperChecks(){
    actions.undo();check(mode+' second undo restores original swatch and HEX',doc.palette[1]===original&&colorValue(color)===colorValue(original)&&colorValue($('hex').value)===colorValue(original));
    actions.redo();actions.redo();check(mode+' two redos restore second pick and HEX',doc.palette[1]===second&&colorValue($('hex').value)===colorValue(second));
   }
+  for(const mode of ['rgba','indexed','grayscale']){
+   const next=createDocument(1,1,'live-ramp');next.palette=['#00000000','#ff0000'];next.frames[0].cels[0]=[0xff0000ff];if(mode!=='rgba')convertColorMode(next,mode,{palette:'current'});
+   replaceDocument(next,true);li=0;setPaletteEditing(true);paletteActive=1;paletteSelection=new Set([1]);renderColors();
+   const original=doc.palette[1],range=$('color-adjustments').querySelector('[data-channel="v"] input[type="range"]');
+   for(const value of [80,40]){range.value=value;range.dispatchEvent(new Event('input',{bubbles:true}));check(mode+' ramp input '+value+' updates swatch before commit',doc.palette[1]!==original&&colorValue($('hex').value)===colorValue(doc.palette[1])&&history.undoStack.length===0);}
+   if(mode==='indexed')check('indexed ramp repaints canvas during drag',pixels()[0]===colorValue(doc.palette[1])&&ctx.getImageData(0,0,1,1).data[0]===102);
+   const final=doc.palette[1];range.dispatchEvent(new Event('change',{bubbles:true}));check(mode+' ramp release commits one step',!gesture&&history.undoStack.length===1);
+   actions.undo();check(mode+' ramp undo restores palette and HEX',doc.palette[1]===original&&colorValue($('hex').value)===colorValue(original));actions.redo();check(mode+' ramp redo restores final color',doc.palette[1]===final);
+   range.value=20;range.dispatchEvent(new Event('input',{bubbles:true}));window.dispatchEvent(new Event('blur'));check(mode+' ramp blur cancels live changes',!gesture&&doc.palette[1]===final&&history.undoStack.length===1&&colorValue($('hex').value)===colorValue(final));
+  }
+  {
+   const next=createDocument(1,1,'live-index-controls');next.palette=['#00000000','#ff0000'];next.frames[0].cels[0]=[0xff0000ff];convertColorMode(next,'indexed',{palette:'current'});replaceDocument(next,true);li=0;setPaletteEditing(true);paletteActive=1;paletteSelection=new Set([1]);renderColors();
+   for(const [channel,value] of [['h',120],['s',60],['a',128]]){const input=$('color-adjustments').querySelector('[data-channel="'+channel+'"] input[type="range"]'),before=doc.palette[1],count=history.undoStack.length;input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));check('indexed '+channel+' previews palette and pixels',doc.palette[1]!==before&&pixels()[0]===colorValue(doc.palette[1])&&history.undoStack.length===count);input.dispatchEvent(new Event('change',{bubbles:true}));check('indexed '+channel+' commits one step',history.undoStack.length===count+1);}
+   const control=$('color-adjustments').querySelector('select');control.value='rgb';control.dispatchEvent(new Event('change',{bubbles:true}));const green=$('color-adjustments').querySelector('[data-channel="g"] input[type="range"]');green.value=37;green.dispatchEvent(new Event('input',{bubbles:true}));check('indexed RGB previews immediately',rgba(doc.palette[1]).g===37&&pixels()[0]===colorValue(doc.palette[1]));green.dispatchEvent(new Event('change',{bubbles:true}));
+   control.value='hsv';control.dispatchEvent(new Event('change',{bubbles:true}));
+   const square=$('color-adjustments').querySelector('.color-sv'),capture=square.setPointerCapture,hasCapture=square.hasPointerCapture,release=square.releasePointerCapture;let captured=false;square.setPointerCapture=()=>{captured=true;};square.hasPointerCapture=()=>captured;square.releasePointerCapture=()=>{captured=false;};
+   try{const count=history.undoStack.length,at=(type,x)=>{const r=square.getBoundingClientRect();square.dispatchEvent(new PointerEvent(type,{bubbles:true,pointerId:30,button:0,clientX:r.left+r.width*x,clientY:r.top+r.height*.4}));};at('pointerdown',.2);const first=doc.palette[1];at('pointermove',.8);check('indexed SV square previews throughout drag',doc.palette[1]!==first&&pixels()[0]===colorValue(doc.palette[1])&&history.undoStack.length===count);at('pointerup',.8);check('indexed SV square release commits one step',!gesture&&history.undoStack.length===count+1);}finally{square.setPointerCapture=capture;square.hasPointerCapture=hasCapture;square.releasePointerCapture=release;}
+  }
   replaceDocument(createDocument(2,1,'transparent-pick'),true);setTool('pencil');fit();setPaletteEditing(true);
   const before=JSON.stringify(doc.palette),foreground=color;key('keydown',{altKey:true});pick(0);key('keyup');
   check('transparent canvas pick leaves foreground palette and history unchanged',color===foreground&&JSON.stringify(doc.palette)===before&&history.undoStack.length===0);
