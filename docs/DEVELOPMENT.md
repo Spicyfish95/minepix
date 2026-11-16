@@ -38,10 +38,6 @@ npm run package
 
 ## 定向测试
 
-独立取色历史：前景色改变使用独立历史条目，色板改变复用文档差量；完成手势记录，取消不记录，前景色条目不改变项目修订号。取色与历史 Node 30 项通过，覆盖三种颜色模式、编辑／非编辑、两次完整取色及撤销重做。Chrome 与 Edge 专项均未能建立调试连接，浏览器交互未验证。
-
-本批范围：独立取色各自记录可撤销历史，Alt 移出窗口使用原生屏幕取色；参考板及参考图层仅持久化源路径，剪贴板／截图先保存外部图片，缺失可重新定位，不兼容旧嵌入参考图；ASE 直接打开；默认保存格式初始 PIX，成功保存后跟随最后类型。分项运行取色／历史、参考／项目传输／文件、ASE、应用设置／保存相关 Node 与 Rust 测试及浏览器专项，最后构建本地 Debug；原生行为须走桌面路径，未执行部分如实说明，不运行无关全量回归。
-
 大参考图保存范围：已定位 2048×2048（16 MiB 原始 RGBA）参考图的前端逐字节转换和 Rust 压缩耗时，采用发起时快照、持久 Worker 打包、内容匹配的参考传输字节／压缩 DATA 块缓存。两级缓存各限 96 MiB，超限单项不保留；PIX v1 容器与像素不变。保存取消全局 busy 锁，按文档去重并绑定发起路径；切换标签后仅更新原文档保存点，后续修改仍标脏，关闭会等待保存并复核新修改，跨窗口转移保存中文档暂拒绝。项目传输／Worker／异步文档／参考图 Node 46 项、真实 Worker 浏览器 18 项、Rust project 11 项和 files 10 项通过；前端生产构建、Worker 资源引用、仓库及空白检查通过。构建保留 >500 kB chunk 提示，未做无关拆包。未运行真实桌面键鼠、系统保存选择器、完整原生保存链路或全量回归。
 
 保存性能复现：`node scripts/profile-project-save.mjs`；`powershell -NoProfile -File scripts/cargo.ps1 run --manifest-path src-tauri/Cargo.toml --example project-tool -- profile-save artifacts/profile-project-save.bin artifacts/profile-project-save.pix`；`node scripts/test-project-save-browser.mjs`。本机 Node 打包由约 1935–1959 ms 降至首次约 57 ms／缓存约 10–11 ms；Rust **Debug** 编码由每次约 3376–3390 ms 降至首次约 3359 ms／缓存约 11–12 ms，写盘约 8 ms，不代表 Release 端到端时间。浏览器 Worker 冷／热请求含消息传输约 132／34 ms，首次打包期间心跳 21 次；主线程仍有同步快照、编辑历史与恢复序列化，打包阶段最大心跳间隔约 55 ms，包含编辑／恢复时约 296 ms，不宣称完全零停顿。首次浏览器心跳断言把同步编辑历史也混入打包阶段而失败，分开阶段后验证通过，并保留整体间隔记录。原始日志、性能样本和输出项目仅在 artifacts，不提交。

@@ -75,7 +75,7 @@ async function runPaletteEyedropperChecks(){
     if(baseTool!=='eyedropper')key('keyup');at('pointerup',2,{altKey:false});
     check(baseTool+' release restores tool and zoom '+editing,!gesture&&tool===baseTool&&zoom===startZoom);
     if(editing){check(baseTool+' drag is single palette history step',history.undoStack.length===1&&colorIndex===1);actions.undo();check(baseTool+' undo restores all drag changes',JSON.stringify(doc.palette)===before);actions.redo();check(baseTool+' redo restores final swatch',doc.palette[1]==='#0000ff');}
-    else{check(baseTool+' foreground drag records one step without editing document',history.undoStack.length===1&&history.revision===0&&JSON.stringify(doc.palette)===before);actions.undo();check(baseTool+' foreground undo restores original color',color==='#ffff00');actions.redo();check(baseTool+' foreground redo restores final color',color==='#0000ff');}
+    else check(baseTool+' foreground drag does not edit document',history.undoStack.length===0&&JSON.stringify(doc.palette)===before);
     if(editing){const original=doc.palette[1],foreground=color;at('pointerdown',0);at('pointermove',1);at('pointercancel',1);check(baseTool+' cancellation restores palette and foreground',doc.palette[1]===original&&color===foreground&&!gesture);}
    }
    setPaletteEditing(true);paletteActive=1;paletteSelection=new Set([1]);setTool('eyedropper');
