@@ -7,7 +7,7 @@ import {pointerMode} from '../src/interaction.js';
 
 const source=readFileSync(new URL('../src/app.js',import.meta.url),'utf8');
 function editor(keymap,playing=false){
- const handlers={},actions=[],context={space:true,playing,keymap,modifiers:{alt:false,shift:false,grid:false},releasedHoldActionFor,
+ const handlers={},actions=[],context={space:true,playing,keymap,screenColorPicking:false,cancelCalls:0,window:{desktop:{cancelScreenColor:()=>{context.cancelCalls++;}}},modifiers:{alt:false,shift:false,grid:false},releasedHoldActionFor,
   onUI:(type,handler)=>{handlers[type]=handler;},$:()=>({open:false}),isTextTarget:()=>false,
   dispatch:action=>{actions.push(action);if(action==='play')context.playing=!context.playing;},drawOverlay:()=>{},
   syncInteraction:()=>{context.cursor=pointerMode({tool:'pencil',space:context.space,playing:context.playing}).cursor;}};
@@ -36,5 +36,15 @@ for(const keymap of [defaultKeymap(),asepriteKeymap()]){
   release({key:'Unidentified',code:'Space',ctrlKey:true,shiftKey:true});
   assert.equal(context.space,false);assert.equal(context.cursor,'pencil');assert.deepEqual(actions,[]);
   context.space=true;release({code:'',key:' '});assert.equal(context.space,false);
+ });
+}
+
+for(const keymap of [defaultKeymap(),asepriteKeymap()]){
+ for(const picking of [false,true])test(`${keymap.profile}: Alt release cancels screen sampling only when picking=${picking}`,()=>{
+  const {context,release}=editor(keymap);context.screenColorPicking=picking;context.modifiers.alt=true;
+  release({key:'Alt',code:'AltLeft',altKey:false});assert.equal(context.cancelCalls,Number(picking));assert.equal(context.modifiers.alt,false);
+ });
+ test(`${keymap.profile}: Space release does not cancel active screen sampling`,()=>{
+  const {context,release}=editor(keymap);context.screenColorPicking=true;release();assert.equal(context.cancelCalls,0);assert.equal(context.space,false);
  });
 }

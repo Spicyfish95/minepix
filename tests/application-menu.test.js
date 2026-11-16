@@ -16,7 +16,7 @@ test('导出菜单的静态图像项使用单一图像措辞',()=>{
  const file=applicationMenu(()=>{})[0];
  const exports=file.submenu.find(item=>item.label==='导出');
  assert.deepEqual(exports.submenu.map(item=>[item.id,item.label]),[
-  ['png','单一图像…'],['normal-map','法线贴图…'],['sheet-pair','精灵表 / 引擎图集…'],['gif','GIF动画…'],['sequence','PNG序列…'],['export-aseprite','Aseprite文件…']
+  ['quick-export','快捷导出'],['png','单一图像…'],['normal-map','法线贴图…'],['sheet-pair','精灵表 / 引擎图集…'],['gif','GIF动画…'],['sequence','PNG序列…'],['export-aseprite','Aseprite文件…']
  ]);
 });
 
