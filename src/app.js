@@ -347,7 +347,7 @@ function renderPalette(){
  const el=$('palette');el.replaceChildren();el.classList.toggle('editing',paletteEditing);
  doc.palette.forEach((c,index)=>{
   const b=document.createElement('button');b.type='button';b.className='swatch';b.dataset.index=index;b.style.background=c;
-  if(modeOf(doc)==='indexed'?index===colorIndex&&colorValue(c)===colorValue(color):c.toLowerCase()===color)b.classList.add('selected');
+  if(!paletteEditing&&(modeOf(doc)==='indexed'?index===colorIndex&&colorValue(c)===colorValue(color):c.toLowerCase()===color))b.classList.add('selected');
   if(palettePicking()&&paletteSelection.has(index))b.classList.add('edit-selected');
   b.title=paletteEditing?'拖动经过即累积选择 · '+c:(modeOf(doc)==='indexed'?'索引 '+index+(index===doc.transparentIndex?'（透明槽）':'')+' · ':'')+c+' · 点击取色';
   b.setAttribute('aria-label',c);b.setAttribute('aria-pressed',String(palettePicking()&&paletteSelection.has(index)));
@@ -571,11 +571,7 @@ function setPaletteEditing(value){
   if(paletteEditing===value)return;
   paletteEditing=value;
   cancelPaletteDrag();closeContextMenu();
-  if(value){
-    const match=modeOf(doc)==='indexed'?colorIndex:doc.palette.findIndex(c=>c.toLowerCase()===color.toLowerCase());
-    paletteActive=match>=0&&match<doc.palette.length?match:(doc.palette.length?0:null);
-    paletteSelection=new Set(paletteActive===null?[]:[paletteActive]);
-  }else{paletteSelection.clear();paletteActive=null;}
+  paletteSelection.clear();paletteActive=null;
   paletteDomKey='';renderPalette();syncPaletteEditorButton();syncPalettePanel();
   message(value?'色板编辑：按下拖动累积选择，右下角手柄排序，右上角图标删除，右键更多':'已退出色板编辑模式，点击色块取色');
 }
@@ -3290,7 +3286,7 @@ window.runColorPanelSmoke=async()=>{
   setColor('#ff0000');renderColors();
   setPaletteEditing(true);
   check('编辑按钮进入内联色板编辑',paletteEditing&&el.classList.contains('editing')&&document.querySelector('[data-action="palette-editor"]').getAttribute('aria-pressed')==='true');
-  check('进入编辑自动选中当前前景色',paletteSelection.size===1&&paletteActive===0&&swatch(0).classList.contains('edit-selected'));
+  check('进入编辑不自动选中或显示操作按钮',paletteSelection.size===0&&paletteActive===null&&!el.querySelector('.swatch.selected,.edit-selected,.edit-active')&&actionBar().hidden);
   pointer('pointerdown',2,30);pointer('pointerup',2,30);
   check('点击色块稳定单选并高亮',paletteSelection.size===1&&paletteSelection.has(2)&&swatch(2).classList.contains('edit-selected')&&!swatch(0).classList.contains('edit-selected'));
   const barNode=actionBar(),reorderNode=barNode.querySelector('[data-palette-action="reorder"]'),deleteNode=barNode.querySelector('[data-palette-action="delete"]');

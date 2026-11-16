@@ -15,7 +15,8 @@ async function runPaletteEyedropperChecks(){
    const next=createDocument(2,1,'palette-eyedropper');next.palette=['#00000000','#ff0000','#00ff00'];next.frames[0].cels[0]=[0xff0000ff,0x00ff00ff];
    if(mode!=='rgba')convertColorMode(next,mode,{palette:'current'});
    replaceDocument(next,true);li=0;setTool('pencil');fit();setColor(doc.palette[1],1);setPaletteEditing(true);
-   paletteActive=1;paletteSelection=new Set([1]);renderColors();const before=doc.palette[1],sample=pixels()[1];
+   check(mode+' edit entry has no selection highlight or actions',paletteActive===null&&paletteSelection.size===0&&!$('palette').querySelector('.selected,.edit-selected,.edit-active')&&$('palette').querySelector('.palette-edit-actions').hidden);
+   paletteActive=1;paletteSelection=new Set([1]);renderColors();syncPaletteSelection();check(mode+' explicit selection displays edit actions',!$('palette').querySelector('.palette-edit-actions').hidden);const before=doc.palette[1],sample=pixels()[1];
    const expected=fromRgba({r:sample>>>24,g:sample>>>16&255,b:sample>>>8&255,a:sample&255});
    key('keydown',{altKey:true});pick(1);key('keyup');
    check(mode+' Alt pick updates foreground and active swatch',color===expected&&colorValue(doc.palette[1])===colorValue(expected)&&paletteActive===1);
@@ -76,7 +77,7 @@ async function runPaletteEyedropperChecks(){
  finally{finishGesture(true);viewport.setPointerCapture=originalCapture;resetModifiers();setPaletteEditing(false);syncInteraction();}
 }
 
-const server=await createServer({server:{port:eyedropper?14213:0,strictPort:eyedropper},plugins:[{
+const server=await createServer({server:{port:14213,strictPort:true},plugins:[{
  name:'palette-browser-harness',
  transform(source,id){if(eyedropper&&id.replaceAll('\\','/').endsWith('/src/app.js'))return source+'\nwindow.runPaletteEyedropperChecks='+runPaletteEyedropperChecks.toString()+';';},
  transformIndexHtml(html){

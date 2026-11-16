@@ -21,6 +21,16 @@ function editor(mode='rgba'){
  vm.runInContext(section('function paletteTargetIndex(','function paletteTargetColor(')+'\n'+section('function setColor(','function setBackground(')+'\n'+section('function setPaletteColor(','function insertPaletteColor('),context);
  return context;
 }
+test('entering and leaving palette editing clears selection without changing foreground or document',()=>{
+ const context=editor(),before=structuredClone(context.doc),foreground=context.color;
+ Object.assign(context,{paletteEditing:false,paletteDomKey:'cached',cancelPaletteDrag:()=>{},closeContextMenu:()=>{},renderPalette:()=>{},syncPaletteEditorButton:()=>{},syncPalettePanel:()=>{},message:()=>{}});
+ vm.runInContext(section('function setPaletteEditing(','function togglePaletteEditor('),context);
+ for(const value of [true,false,true]){
+  context.paletteActive=1;context.paletteSelection.add(1);context.setPaletteEditing(value);
+  assert.equal(context.paletteActive,null);assert.equal(context.paletteSelection.size,0);
+  assert.equal(context.color,foreground);assert.deepEqual(context.doc,before);
+ }
+});
 for(const mode of ['rgba','indexed','grayscale'])test(`${mode}: picking updates foreground and active palette slot, with undo/redo`,()=>{
  const context=editor(mode),before=structuredClone(context.doc),picked='#12345680';
  context.pickColor(picked);
