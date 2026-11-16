@@ -18,7 +18,7 @@ export async function exportNormalMap(source,{modal,$,showError,saveData,name,me
  const image=source.getContext('2d',{willReadFrequently:true}).getImageData(0,0,source.width,source.height);
  let client,preview,lighting,disposeAngle,result=null,output,manualAngle=defaultNormalMapOptions().paintedLightAngle;
  try{
-  const values=await modal('导出法线贴图',(chooseDirectory?'<label>导出目录<input name="directory" readonly aria-label="导出目录"></label><button type="button" id="choose-normal-directory">选择目录…</button>':'')+'<div id="normal-preview-pair">'+previewMarkup+lightingPreviewMarkup()+'</div><p>当前帧可见图层 · 原始尺寸 PNG · 保留透明度</p>'+normalMapFields()+'<p id="normal-map-status" role="status" aria-live="polite"></p>',form=>{
+  const values=await modal('导出法线贴图',(chooseDirectory?'<div class="export-directory-row"><label>导出目录<input name="directory" readonly aria-label="导出目录"></label><button type="button" id="choose-normal-directory">选择目录…</button></div>':'')+'<div id="normal-preview-pair">'+previewMarkup+lightingPreviewMarkup()+'</div><p>当前帧可见图层 · 原始尺寸 PNG · 保留透明度</p>'+normalMapFields()+'<p id="normal-map-status" role="status" aria-live="polite"></p>',form=>{
    if(chooseDirectory){form.elements.directory.value=directory;$('choose-normal-directory').onclick=async()=>{try{const next=await chooseDirectory(form.elements.directory.value);if(next)form.elements.directory.value=next;}catch(error){showError('选择导出目录失败：'+error.message);}};}
    preview=createImportPreview($('image-import-preview'));
    $('image-import-preview').setAttribute('aria-label','法线贴图预览');

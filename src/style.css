@@ -678,6 +678,11 @@ body :is(#modal-content,.toolbar-popover,.dock-panel,.context-popover) .form-fie
 body :is(#modal-content,.toolbar-popover,.dock-panel,.context-popover) .form-field>.field-control:is([type=checkbox],[type=color]){width:30px;}
 body :is(#modal-content,.toolbar-popover,.dock-panel,.context-popover) .form-field>.number-unit input{width:100%;max-width:none;min-width:0;}
 body #modal-content .form-field{min-height:28px;}
+#modal-content .export-directory-row{display:flex;align-items:center;gap:8px;min-width:0;}
+#modal-content .export-directory-row[hidden]{display:none;}
+#modal-content .export-directory-row>label{flex:1;margin:0;min-width:0;}
+body #modal-content .export-directory-row .field-control{flex:1;width:0;max-width:none;}
+#modal-content .export-directory-row>button{flex:none;white-space:nowrap;}
 body .toolbar-popover:has(.form-field){min-width:320px;}
 #modal-content .form-option-row,.toolbar-popover .form-option-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-column:1/-1;align-items:center;gap:8px 20px;min-width:0;}
 .toolbar-popover:has(.form-option-row){min-width:min(620px,calc(100vw - 16px));}
