@@ -9,6 +9,18 @@ async function fail(error){
  await call('captureReady');
 }
 async function show(state){
+ if(state.colorPicker){
+  selection?.dispose();document.body.replaceChildren();document.body.classList.add('screen-color-picker');
+  const hint=document.createElement('div');hint.className='capture-hint';hint.style.left='12px';hint.style.top='12px';hint.textContent='Alt 取色 · 单击采集屏幕颜色 · 松开 Alt / Esc 取消';document.body.append(hint);
+  let finishing=false;
+  const finish=method=>{if(finishing)return;finishing=true;void call(method).catch(error=>fail(error));};
+  const down=event=>{event.preventDefault();finish(event.button===0?'finishScreenColor':'finishCapture');};
+  const key=event=>{if(event.key==='Escape'||event.type==='keyup'&&event.key==='Alt'){event.preventDefault();finish('finishCapture');}};
+  document.addEventListener('pointerdown',down);document.addEventListener('keydown',key);document.addEventListener('keyup',key);
+  selection={idle:true,dispose:()=>{document.removeEventListener('pointerdown',down);document.removeEventListener('keydown',key);document.removeEventListener('keyup',key);document.body.classList.remove('screen-color-picker');}};
+  await call('captureReady');return;
+ }
+
  const image=document.createElement('canvas');image.width=state.screen.width;image.height=state.screen.height;
  const token=generation;
  selection?.dispose();document.body.classList.remove('capture-error');

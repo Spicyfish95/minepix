@@ -101,15 +101,19 @@ async fn desktop_call(
 ) -> Result<Value, String> {
     let io_error = |error: std::io::Error| error.to_string();
     match method.as_str() {
+        "pickScreenColor" => { screen_capture::start_color(&window)?;Ok(Value::Null) }
+        "cancelScreenColor" => { screen_capture::cancel_color(&window)?;Ok(Value::Null) }
         "captureScreen" => {
             screen_capture::start(&window)?;
             Ok(Value::Null)
         }
-        "captureReady" | "captureMonitor" | "captureLock" | "captureActive" | "finishCapture" => {
+        "captureReady" | "captureMonitor" | "captureLock" | "captureActive" | "finishCapture" | "finishScreenColor" => {
             if window.label() != "screen-capture" {
                 return Err("只能由截图窗口完成截图".into());
             }
-            if method == "captureActive" {
+            if method == "finishScreenColor" {
+                screen_capture::finish_color(&window)?;Ok(Value::Null)
+            } else if method == "captureActive" {
                 Ok(json!(screen_capture::active(window.app_handle())))
             } else if method == "captureMonitor" {
                 screen_capture::monitor(&window)

@@ -338,6 +338,18 @@ function useForegroundForPattern(){if(brushSettings.shape!=='pattern'||brushSett
 function setColor(value,index=null){if(modeOf(doc)==='indexed'){colorIndex=index??createMapper(doc,doc.layers[li])(colorValue(normalizeColor(value))).index;}else if(modeOf(doc)==='grayscale')value='#'+grayPixel(colorValue(normalizeColor(value))).toString(16).padStart(8,'0');const next=normalizeColor(value);if(next!==color)useForegroundForPattern();color=next;saveColorPreferences();renderColors();}
 function pickColor(value){const index=paletteTargetIndex();if(index!==null)setPaletteColor(index,value,{live:gesture?.kind==='eyedropper'});setColor(value,index);}
 function beginColorPick(event,node){gesture={kind:'eyedropper',pointerId:event.pointerId,node,oldSelection:selection,foreground:color,colorIndex,...(paletteTargetIndex()!==null?{before:clone(doc)}:{})};node.setPointerCapture(event.pointerId);}
+let screenColorPicking=false;
+async function pickScreenColor(){
+ if(screenColorPicking||busy||gesture||shapeSession||!window.desktop||!documentTabs.items.length||$('modal').open)return;
+ screenColorPicking=true;
+ const target=documentId,index=paletteTargetIndex(),before=index!==null?clone(doc):null,foreground={color,index:colorIndex};
+ try{
+  const sampled=await window.desktop.pickScreenColor();if(!sampled||documentId!==target)return;
+  if(index!==null)setPaletteColor(index,sampled,{live:true});setColor(sampled,index);
+  if(before&&history.push(before,doc,{colorsReady:true})){history.undoStack.at(-1).colorPick={before:foreground,after:{color,index:colorIndex}};changed();}
+  render();message('已从屏幕取色 '+color.toUpperCase());
+ }catch(error){showError('屏幕取色失败：'+error.message);}finally{screenColorPicking=false;}
+}
 function pickCanvasColor(event){const raw=point(event,false);if(!insideTiledCanvas(doc,raw,tiledMode))return;const p=tiledPoint(doc,raw.x,raw.y,tiledMode),c=composite(doc,fi),i=(p.y*doc.width+p.x)*4;if(c[i+3])pickColor(fromRgba({r:c[i],g:c[i+1],b:c[i+2],a:c[i+3]}));}
 function setBackground(value){const next=normalizeColor(value);if(next!==background)useForegroundForPattern();background=next;saveColorPreferences();renderColors();}
 function renderPalette(){
@@ -2791,7 +2803,9 @@ onUI('keydown',e=>{
   const repeatable=['zoom-in','zoom-out','previous','next','undo','redo'];
   if(!e.repeat||repeatable.includes(match.action))dispatch(match.action);
 });
+onUI('pointerout',event=>{if(!event.relatedTarget&&event.altKey&&!event.buttons&&!isTextTarget(event.target))void pickScreenColor();});
 onUI('keyup',e=>{
+  if(screenColorPicking&&e.key==='Alt')void window.desktop.cancelScreenColor();
   if(e.key==='Alt'&&!isTextTarget(e.target)&&!$('modal').open)e.preventDefault();
   modifiers.alt=e.altKey;modifiers.shift=e.shiftKey;
   if(releasedHoldActionFor(e,keymap)==='grid-select')modifiers.grid=false;

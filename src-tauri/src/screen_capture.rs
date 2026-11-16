@@ -15,6 +15,7 @@ struct Session {
     screens: Vec<Screen>,
     current: usize,
     locked: bool,
+    color_picker: bool,
 }
 #[derive(Clone, Copy, serde::Serialize)]
 struct Screen {
@@ -121,13 +122,15 @@ impl Image {
     }
 }
 
-pub fn start(window: &WebviewWindow) -> Result<(), String> {
+pub fn start(window: &WebviewWindow) -> Result<(), String> { start_mode(window, false) }
+pub fn start_color(window: &WebviewWindow) -> Result<(), String> { start_mode(window, true) }
+fn start_mode(window: &WebviewWindow, color_picker: bool) -> Result<(), String> {
     let app = window.app_handle();
     prepare(app)?;
     let state = app.state::<Capture>();
     let mut active = state.0.lock().unwrap();
     if active.is_some() {
-        return Ok(());
+        return Err("请先完成当前屏幕操作".into());
     }
     let (image, x, y) = native::capture()?;
     let screens: Vec<Screen> = window
@@ -154,6 +157,7 @@ pub fn start(window: &WebviewWindow) -> Result<(), String> {
         screens,
         current,
         locked: false,
+        color_picker,
     });
     let overlay = app
         .get_webview_window("screen-capture")
@@ -241,7 +245,7 @@ pub fn monitor(window: &WebviewWindow) -> Result<Value, String> {
     let screen = session.screens[session.current];
     Ok(json!({"index": session.current, "screen": screen,
         "pointer": {"x": cursor.x - screen.x as f64, "y": cursor.y - screen.y as f64},
-        "screens": session.screens, "locked": session.locked, "changed": changed}))
+        "screens": session.screens, "locked": session.locked, "colorPicker":session.color_picker, "changed": changed}))
 }
 
 pub fn lock(app: &AppHandle, locked: bool) -> Result<(), String> {
@@ -259,6 +263,23 @@ pub fn ready(window: &WebviewWindow) -> Result<(), String> {
     window.set_focus().map_err(|e| e.to_string())
 }
 
+pub fn finish_color(window: &WebviewWindow) -> Result<(), String> {
+    let cursor = window.cursor_position().map_err(|error| error.to_string())?;
+    let app = window.app_handle();
+    let state = app.state::<Capture>();let active = state.0.lock().unwrap();
+    let session = active.as_ref().ok_or("取色已结束")?;
+    if !session.color_picker { return Err("当前不是取色操作".into()); }
+    let screen = session.screens[session.current];
+    let x = cursor.x - screen.x as f64;let y = cursor.y - screen.y as f64;
+    if x < 0.0 || y < 0.0 || x >= screen.width as f64 || y >= screen.height as f64 { return Err("鼠标已移出当前屏幕，请重试".into()); }
+    drop(active);finish(app, Some([x as u32, y as u32, 1, 1]))
+}
+pub fn cancel_color(window: &WebviewWindow) -> Result<(), String> {
+    let state = window.app_handle().state::<Capture>();let active = state.0.lock().unwrap();
+    if !active.as_ref().is_some_and(|session| session.color_picker && session.owner == window.label()) { return Ok(()); }
+    drop(active);finish(window.app_handle(), None)
+}
+
 pub fn finish(app: &AppHandle, region: Option<[u32; 4]>) -> Result<(), String> {
     let state = app.state::<Capture>();
     let mut active = state.0.lock().unwrap();
@@ -271,10 +292,17 @@ pub fn finish(app: &AppHandle, region: Option<[u32; 4]>) -> Result<(), String> {
         let overlay = app
             .get_webview_window("screen-capture")
             .ok_or("截图窗口已关闭")?;
-        native::write_clipboard(&image, &overlay)?;
-        if let Some(owner) = &owner {
-            crate::windows::event(owner, "capture:complete", image.file()?)?;
+        if session.color_picker {
+            if let Some(owner) = &owner {
+                let rgba = &image.rgba;
+                crate::windows::event(owner, "capture:color", json!(format!("#{:02x}{:02x}{:02x}", rgba[0], rgba[1], rgba[2])))?;
+            }
+        } else {
+            native::write_clipboard(&image, &overlay)?;
+            if let Some(owner) = &owner { crate::windows::event(owner, "capture:complete", image.file()?)?; }
         }
+    } else if session.color_picker {
+        if let Some(owner) = &owner { crate::windows::event(owner, "capture:color", Value::Null)?; }
     }
     active.take();
     drop(active);

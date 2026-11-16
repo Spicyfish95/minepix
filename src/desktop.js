@@ -85,9 +85,13 @@ function windowBridge(target){
 
 export async function initializeDesktop(){
  const bridge={testing:false,secondary:current.label!=='main'},projectSaveClient=createProjectSaveClient();
- const methods=['readReference','saveReference','captureScreen','clipboardImages','openRepository','appInfo','editorInfo','editorReady','detachDocument','moveDocument','recordInputAudit','testNotification','recentFiles','recentThumbs','removeRecent','clearRecent','openRecent','startupFiles','openKeymap','openPalette','open','exportAseprite','pickExportDirectory','exportSheetMetadata','exportSheet','exportAnimation','save','saveProject','activateDocument','setDirty','checkUpdates','installUpdate','downloadUpdate','cancelUpdate','updateState','openUpdateRelease','setAutoUpdate','setLocale'];
+ const methods=['cancelScreenColor','readReference','saveReference','captureScreen','clipboardImages','openRepository','appInfo','editorInfo','editorReady','detachDocument','moveDocument','recordInputAudit','testNotification','recentFiles','recentThumbs','removeRecent','clearRecent','openRecent','startupFiles','openKeymap','openPalette','open','exportAseprite','pickExportDirectory','exportSheetMetadata','exportSheet','exportAnimation','save','saveProject','activateDocument','setDirty','checkUpdates','installUpdate','downloadUpdate','cancelUpdate','updateState','openUpdateRelease','setAutoUpdate','setLocale'];
  for(const method of methods)bridge[method]=(...args)=>call(method,...args);
  bridge.readReference=readReference;
+ bridge.pickScreenColor=()=>new Promise((resolve,reject)=>{
+  const unsubscribe=subscribe('capture:color',value=>{unsubscribe();resolve(value);});
+  call('pickScreenColor').catch(error=>{unsubscribe();reject(error);});
+ });
  // Internal smoke helpers may select a fresh entry by index; IPC always receives its path.
  bridge.openRecent=async entry=>{
   const path=typeof entry==='number'?(await call('recentFiles'))[entry]?.path:entry;
