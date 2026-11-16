@@ -73,3 +73,20 @@ test('reference picking uses same palette edit path and ignores transparent pixe
  pixel=0;context.pickBoardColor(event,item);
  assert.equal(context.doc.palette[1],'#12345680');assert.equal(context.history.undoStack.length,1);
 });
+
+test('indexed two picks survive leaving editing with a 2048 reference',()=>{
+ const context=editor('indexed');Object.assign(context,{paletteDomKey:'',cancelPaletteDrag:()=>{},closeContextMenu:()=>{},renderPalette:()=>{},syncPaletteEditorButton:()=>{},syncPalettePanel:()=>{},message:()=>{}});
+ vm.runInContext(section('function setPaletteEditing(','function togglePaletteEditor('),context);
+ const data='A'.repeat(4*Math.ceil(2048*2048*4/3)-2)+'==';
+ context.doc.references=[{id:'large',name:'large',width:2048,height:2048,data,x:0,y:0,scale:1}];
+ context.doc.requiredFeatures.push('reference-board');
+ const original=structuredClone(context.doc);
+ context.pickColor('#123456');context.pickColor('#abcdef');context.setPaletteEditing(false);
+ assert.equal(context.history.undoStack.length,2);assert.ok(context.history.memoryBytes<16384);
+ assert.equal(context.history.undoStack[0].before.references,undefined);
+ context.doc=context.history.undo(context.doc);assert.equal(context.doc.palette[1],'#123456');validateColorMode(context.doc);
+ context.doc=context.history.undo(context.doc);assert.deepEqual(context.doc,original);validateColorMode(context.doc);
+ context.doc=context.history.redo(context.doc);assert.equal(context.doc.palette[1],'#123456');
+ context.doc=context.history.redo(context.doc);assert.equal(context.doc.palette[1],'#abcdef');validateColorMode(context.doc);
+ assert.equal(context.doc.references[0].data,data);
+});

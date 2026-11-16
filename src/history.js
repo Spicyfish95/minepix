@@ -3,7 +3,7 @@ import {hydrateLinks,synchronizeLinks,linkedMembers} from './cel-links.js';
 import {finalizeBackground} from './layer-types.js';
 import {isTileset} from './tilemap.js';
 const copy=value=>structuredClone(value);
-const meta=doc=>({...doc,frames:doc.frames.map(({cels,indices,...frame})=>frame)});
+const meta=({references,...doc})=>({...doc,frames:doc.frames.map(({cels,indices,...frame})=>frame)});
 function packed(doc){return{meta:copy(meta(doc)),cels:doc.frames.map(frame=>frame.cels.map(cel=>Uint32Array.from(cel))),indices:doc.frames.map(frame=>frame.indices?.map(cel=>cel?Uint8Array.from(cel):null))};}
 function unpack(state){return hydrateLinks({...copy(state.meta),frames:state.meta.frames.map((frame,i)=>({...copy(frame),cels:state.cels[i].map(cel=>Array.from(cel)),...(state.indices[i]?{indices:state.indices[i].map(cel=>cel?Array.from(cel):null)}:{})}))});}
 const packedBytes=state=>JSON.stringify(state.meta).length*2+state.cels.reduce((sum,cels)=>sum+cels.reduce((n,cel)=>n+cel.byteLength,0),0)+state.indices.reduce((sum,cels)=>sum+(cels?.reduce((n,cel)=>n+(cel?.byteLength||0),0)||0),0);

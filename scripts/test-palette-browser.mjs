@@ -33,9 +33,11 @@ async function runPaletteEyedropperChecks(){
   for(const mode of ['rgba','indexed','grayscale']){
    const next=createDocument(2,1,'successive-picks');next.palette=['#00000000','#ffff00','#ff0000','#00ff00'];next.frames[0].cels[0]=[0xff0000ff,0x00ff00ff];
    if(mode!=='rgba')convertColorMode(next,mode,{palette:'current'});
+   if(mode==='indexed')addReference(next,{...encodeReference(2048,2048,new Uint8Array(2048*2048*4)),id:'large-history',name:'large history',x:0,y:0});
    replaceDocument(next,true);li=0;setTool('pencil');fit();setPaletteEditing(true);paletteActive=1;paletteSelection=new Set([1]);renderColors();
    const original=doc.palette[1];setColor(original,1);key('keydown',{altKey:true});pick(0);const first=doc.palette[1];pick(1);key('keyup');const second=doc.palette[1];
    check(mode+' two separate picks create two undo steps',history.undoStack.length===2&&first!==original&&second!==first);
+   setPaletteEditing(false);check(mode+' leaving palette editing preserves both picks',history.undoStack.length===2&&!paletteEditing);
    actions.undo();check(mode+' first undo restores first picked swatch and HEX',doc.palette[1]===first&&colorValue(color)===colorValue(first)&&colorValue($('hex').value)===colorValue(first));
    actions.undo();check(mode+' second undo restores original swatch and HEX',doc.palette[1]===original&&colorValue(color)===colorValue(original)&&colorValue($('hex').value)===colorValue(original));
    actions.redo();actions.redo();check(mode+' two redos restore second pick and HEX',doc.palette[1]===second&&colorValue($('hex').value)===colorValue(second));
