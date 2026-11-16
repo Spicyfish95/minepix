@@ -7,6 +7,7 @@ mod formats;
 mod notifications;
 pub mod project;
 mod screen_capture;
+mod screen_color_shortcut;
 mod storage;
 mod updater;
 mod windows;
@@ -740,6 +741,7 @@ pub fn run() {
                 updates,
             });
             app.manage(screen_capture::Capture::default());
+            app.manage(screen_color_shortcut::Owner::default());
             notifications::register(app.handle())?;
             app.state::<Backend>()
                 .windows
@@ -754,6 +756,7 @@ pub fn run() {
                     },
                 );
             windows::build_editor(app.handle(), "main")?;
+            screen_color_shortcut::start(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

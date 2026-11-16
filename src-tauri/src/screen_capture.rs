@@ -16,6 +16,7 @@ struct Session {
     current: usize,
     locked: bool,
     color_picker: bool,
+    foreground: isize,
 }
 #[derive(Clone, Copy, serde::Serialize)]
 struct Screen {
@@ -123,7 +124,10 @@ impl Image {
 }
 
 pub fn start(window: &WebviewWindow) -> Result<(), String> { start_mode(window, false) }
-pub fn start_color(window: &WebviewWindow) -> Result<(), String> { start_mode(window, true) }
+pub fn start_color(window: &WebviewWindow) -> Result<(), String> {
+    if !crate::screen_color_shortcut::alt_down() { return crate::windows::event(window, "capture:color", Value::Null); }
+    start_mode(window, true)
+}
 fn start_mode(window: &WebviewWindow, color_picker: bool) -> Result<(), String> {
     let app = window.app_handle();
     prepare(app)?;
@@ -158,6 +162,7 @@ fn start_mode(window: &WebviewWindow, color_picker: bool) -> Result<(), String> 
         current,
         locked: false,
         color_picker,
+        foreground: native::foreground(),
     });
     let overlay = app
         .get_webview_window("screen-capture")
@@ -256,11 +261,13 @@ pub fn lock(app: &AppHandle, locked: bool) -> Result<(), String> {
 }
 
 pub fn ready(window: &WebviewWindow) -> Result<(), String> {
-    if !active(window.app_handle()) {
-        return Ok(());
-    }
+    let color_picker = {
+        let state = window.app_handle().state::<Capture>();let active = state.0.lock().unwrap();
+        let Some(session) = active.as_ref() else { return Ok(()) };session.color_picker
+    };
     window.show().map_err(|e| e.to_string())?;
-    window.set_focus().map_err(|e| e.to_string())
+    // Tao's forced-focus fallback sends Alt down/up. A held-Alt picker must avoid that path.
+    if color_picker { native::focus_color(window) } else { window.set_focus().map_err(|e| e.to_string()) }
 }
 
 pub fn finish_color(window: &WebviewWindow) -> Result<(), String> {
@@ -283,7 +290,7 @@ pub fn cancel_color(window: &WebviewWindow) -> Result<(), String> {
 pub fn finish(app: &AppHandle, region: Option<[u32; 4]>) -> Result<(), String> {
     let state = app.state::<Capture>();
     let mut active = state.0.lock().unwrap();
-    let session = active.as_ref().ok_or("截图已结束")?;
+    let Some(session) = active.as_ref() else { return if region.is_none() { Ok(()) } else { Err("截图已结束".into()) }; };
     let owner = app.get_webview_window(&session.owner);
     if let Some([x, y, width, height]) = region {
         let [x, y, width, height] =
@@ -304,6 +311,7 @@ pub fn finish(app: &AppHandle, region: Option<[u32; 4]>) -> Result<(), String> {
     } else if session.color_picker {
         if let Some(owner) = &owner { crate::windows::event(owner, "capture:color", Value::Null)?; }
     }
+    let foreground = session.color_picker.then_some(session.foreground);
     active.take();
     drop(active);
     if let Some(overlay) = app.get_webview_window("screen-capture") {
@@ -312,9 +320,8 @@ pub fn finish(app: &AppHandle, region: Option<[u32; 4]>) -> Result<(), String> {
             .eval("window.stopCapture?.()")
             .map_err(|e| e.to_string())?;
     }
-    if let Some(owner) = owner {
-        let _ = owner.set_focus();
-    }
+    if let Some(foreground) = foreground { native::restore_foreground(foreground); }
+    else if let Some(owner) = owner { let _ = owner.set_focus(); }
     Ok(())
 }
 
@@ -355,6 +362,8 @@ mod native {
     }
     #[link(name = "user32")]
     unsafe extern "system" {
+        fn GetForegroundWindow() -> Handle;
+        fn SetForegroundWindow(window: Handle) -> i32;
         fn GetDC(window: Handle) -> Handle;
         fn ReleaseDC(window: Handle, dc: Handle) -> i32;
         fn GetSystemMetrics(index: i32) -> i32;
@@ -366,6 +375,13 @@ mod native {
         fn IsClipboardFormatAvailable(format: u32) -> i32;
         fn RegisterClipboardFormatW(name: *const u16) -> u32;
     }
+    pub fn focus_color(window: &WebviewWindow) -> Result<(), String> {
+        let hwnd = window.hwnd().map_err(|error| error.to_string())?;
+        unsafe { SetForegroundWindow(hwnd.0 as Handle); }
+        Ok(())
+    }
+    pub fn foreground() -> isize { unsafe { GetForegroundWindow() as isize } }
+    pub fn restore_foreground(window: isize) { if window != 0 { unsafe { SetForegroundWindow(window as Handle); } } }
     #[link(name = "gdi32")]
     unsafe extern "system" {
         fn CreateCompatibleDC(dc: Handle) -> Handle;
@@ -654,6 +670,9 @@ mod native {
 #[cfg(not(windows))]
 mod native {
     use super::*;
+    pub fn focus_color(window: &WebviewWindow) -> Result<(), String> { window.set_focus().map_err(|error| error.to_string()) }
+    pub fn foreground() -> isize { 0 }
+    pub fn restore_foreground(_: isize) {}
     pub fn capture() -> Result<(Image, i32, i32), String> {
         Err("截图仅支持 Windows".into())
     }

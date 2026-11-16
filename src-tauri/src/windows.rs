@@ -271,6 +271,7 @@ pub fn build_editor(app: &AppHandle, label: &str) -> tauri::Result<WebviewWindow
     window.on_window_event(move |event| {
         let state = handle.state::<crate::Backend>();
         match event {
+            tauri::WindowEvent::Focused(true) => crate::screen_color_shortcut::focus(&handle, &label),
             tauri::WindowEvent::CloseRequested { api, .. } => {
                 let allowed = state
                     .windows

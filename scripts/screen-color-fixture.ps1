@@ -1,4 +1,4 @@
-param([ValidateSet('show','alt-start','click','release')][string]$Mode,[string]$Output,[int]$ProcessId,[int]$X,[int]$Y)
+param([ValidateSet('show','alt-start','click','release','focus','modified-alt')][string]$Mode,[string]$Output,[int]$ProcessId,[int]$X,[int]$Y)
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -7,6 +7,8 @@ using System;
 using System.Runtime.InteropServices;
 public static class ScreenColorInput {
  [DllImport("user32.dll")] public static extern bool SetCursorPos(int x,int y);
+ [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+ [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window,out uint process);
  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
  [DllImport("user32.dll")] public static extern void keybd_event(byte key,byte scan,uint flags,UIntPtr extra);
  [DllImport("user32.dll")] public static extern void mouse_event(uint flags,uint x,uint y,uint data,UIntPtr extra);
@@ -26,8 +28,14 @@ if($Mode -eq 'show') {
  [ScreenColorInput]::SetCursorPos($X,$Y) | Out-Null
  Start-Sleep -Milliseconds 150
  [ScreenColorInput]::keybd_event(18,0,0,[UIntPtr]::Zero)
+} elseif($Mode -eq 'focus') {
+ $taskForeground=0;[ScreenColorInput]::GetWindowThreadProcessId([ScreenColorInput]::GetForegroundWindow(),[ref]$taskForeground)|Out-Null
+ @{process=$taskForeground}|ConvertTo-Json -Compress
+} elseif($Mode -eq 'modified-alt') {
+ [ScreenColorInput]::keybd_event(17,0,0,[UIntPtr]::Zero)
+ [ScreenColorInput]::keybd_event(18,0,0,[UIntPtr]::Zero)
 } elseif($Mode -eq 'click') {
  [ScreenColorInput]::SetCursorPos($X,$Y) | Out-Null
  [ScreenColorInput]::mouse_event(2,0,0,0,[UIntPtr]::Zero)
  [ScreenColorInput]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
-} else {[ScreenColorInput]::keybd_event(18,0,2,[UIntPtr]::Zero)}
+} else {[ScreenColorInput]::keybd_event(18,0,2,[UIntPtr]::Zero);[ScreenColorInput]::keybd_event(17,0,2,[UIntPtr]::Zero)}
