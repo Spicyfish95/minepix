@@ -10,11 +10,16 @@ export function normalMapFields(){
  return '<label>法线预设<select name="preset"><option value="object">物体</option><option value="character">角色</option><option value="architecture">建筑</option><option value="terrain">地形</option></select></label><details id="normal-map-advanced"><summary>高级设置</summary><div class="repair-groups"><fieldset class="repair-group"><legend>形状与切面</legend><div class="repair-settings">'+numericFields.slice(0,4).map(number).join('')+'</div></fieldset><fieldset class="repair-group"><legend>光照与输出</legend><div class="normal-light-settings"><div class="repair-settings">'+numericFields.slice(5).map(number).join('')+'<div class="repair-option-row"><label><input name="autoLight" type="checkbox" checked>自动估计原绘光照</label>'+numericFields.slice(4,5).map(number).join('')+'</div><div class="repair-option-row"><label><input name="mergeOutlines" type="checkbox" checked>合并轮廓法线</label><label><input name="invertY" type="checkbox">翻转 Y（DirectX）</label></div></div>'+normalAngleGuideMarkup()+'</div></fieldset></div></details>';
 }
 
-export async function exportNormalMap(source,{modal,$,showError,saveData,name,message}){
+export async function normalMapPng(source,settings){
+ const image=source.getContext('2d',{willReadFrequently:true}).getImageData(0,0,source.width,source.height);
+ let client;try{return await new Promise((resolve,reject)=>{client=createNormalMapClient({onStatus:()=>{},onError:reject,onResult:value=>{const canvas=document.createElement('canvas');canvas.width=value.width;canvas.height=value.height;canvas.getContext('2d').putImageData(new ImageData(value.data,value.width,value.height),0,0);resolve(canvas.toDataURL('image/png').split(',')[1]);}});client.request(image,settings);});}finally{client?.dispose();}
+}
+export async function exportNormalMap(source,{modal,$,showError,saveData,name,message,directory='',chooseDirectory}){
  const image=source.getContext('2d',{willReadFrequently:true}).getImageData(0,0,source.width,source.height);
  let client,preview,lighting,disposeAngle,result=null,output,manualAngle=defaultNormalMapOptions().paintedLightAngle;
  try{
-  const values=await modal('导出法线贴图','<div id="normal-preview-pair">'+previewMarkup+lightingPreviewMarkup()+'</div><p>当前帧可见图层 · 原始尺寸 PNG · 保留透明度</p>'+normalMapFields()+'<p id="normal-map-status" role="status" aria-live="polite"></p>',form=>{
+  const values=await modal('导出法线贴图',(chooseDirectory?'<label>导出目录<input name="directory" readonly aria-label="导出目录"></label><button type="button" id="choose-normal-directory">选择目录…</button>':'')+'<div id="normal-preview-pair">'+previewMarkup+lightingPreviewMarkup()+'</div><p>当前帧可见图层 · 原始尺寸 PNG · 保留透明度</p>'+normalMapFields()+'<p id="normal-map-status" role="status" aria-live="polite"></p>',form=>{
+   if(chooseDirectory){form.elements.directory.value=directory;$('choose-normal-directory').onclick=async()=>{try{const next=await chooseDirectory(form.elements.directory.value);if(next)form.elements.directory.value=next;}catch(error){showError('选择导出目录失败：'+error.message);}};}
    preview=createImportPreview($('image-import-preview'));
    $('image-import-preview').setAttribute('aria-label','法线贴图预览');
    lighting=createLightingPreview($('normal-light-preview'),image);
@@ -45,6 +50,9 @@ export async function exportNormalMap(source,{modal,$,showError,saveData,name,me
    disposeAngle=bindNormalAngleGuide($('normal-angle-guide'),angle=>{form.elements.paintedLightAngle.value=angle;form.elements.paintedLightAngle.dispatchEvent(new Event('input',{bubbles:true}));});
    request();
   },()=>{if(!result)throw new Error('请等待法线贴图生成完成后再确定');},{confirm:'导出 PNG'});
-  if(values){const saved=await saveData(output.toDataURL('image/png').split(',')[1],'png',name+'-normal');message(saved?'法线贴图已导出':'已取消导出');}
+  if(values){
+   const settings={preset:values.preset};for(const [key]of numericFields)if(values[key]!==undefined)settings[key]=+values[key];for(const key of ['mergeOutlines','invertY'])settings[key]=values[key]==='on';
+   const saved=await saveData(output.toDataURL('image/png').split(',')[1],'png',name+'-normal',true,{directory:values.directory||directory});message(saved?'法线贴图已导出':'已取消导出');return{settings,result:saved};
+  }
  }finally{disposeAngle?.();client?.dispose();preview?.dispose();lighting?.dispose();$('modal-form').oninput=null;$('modal-submit').disabled=false;}
 }

@@ -13,7 +13,7 @@ import {paintGradient} from './gradient.js';
 import {editSelectionDialog} from './selection-edit-dialog.js';
 import {createStabilizer} from './stabilizer.js';
 import {symmetryPoints} from './symmetry.js';
-import {exportNormalMap} from './normal-map-export.js';
+import {exportNormalMap,normalMapPng} from './normal-map-export.js';
 import {rasterImportDocument} from './image-import.js';
 import {imageMime} from './pixel-repair.js';
 import {installErrorDialog} from './error-dialog.js';
@@ -44,6 +44,7 @@ import {asepriteKeymap,selectionOperationFor,holdActionFor,releasedHoldActionFor
 import {validateSlices,sliceAtFrame,sliceKeys,setSliceKey,deleteSliceKey} from './slices.js';
 import { atlasMetadata, drawAtlasFrame } from './formats/atlas.js';
 import { exportLayerPlan } from './export-layers.js';
+import { lastProjectExport, defaultExportDirectory, rememberProjectExport } from './project-export.js';
 import { sheetManifestPlan } from './formats/sheet-manifest.js';
 import { EXPORT_SETTINGS_KEY, BUILTIN_EXPORT_PRESETS, exportFamily, pickExportOptions, readExportSettings, restoredExportOptions, rememberExportOptions, saveExportPreset, deleteExportPreset } from './export-settings.js';
 import { exportFormatsFor, formatLabel, encodeCanvas, encodeAnimatedWebp } from './export-formats.js';
@@ -168,7 +169,7 @@ async function toTilesetDialog(){
 // 命令可用性：替换颜色需要可编辑的像素层；图像大小在播放时不可用；网格设置始终可用。
 function commandStates(){
   const layer=doc.layers[li],canEdit=!playing&&!busy,canEditPixels=canEdit&&!isGroup(layer)&&!isReference(layer)&&!layerState(doc,li).locked&&layerState(doc,li).visible;
-  return {...menuAvailability({hasDocument:documentTabs.items.length>0,hasTileset:doc.layers.some(isTileset),canEdit,canEditPixels,hasSelection:!!selection,hasPreviousSelection:!!previousSelection,hasCelRange:!!celRange,hasCelClipboard:!!celClipboard,hasClipboard:!!clipboard,hasClosed:closedDocuments.length>0,canUndo:history.undoStack.length>0,canRedo:history.redoStack.length>0,frameCount:doc.frames.length,frameIndex:fi,layerCount:doc.layers.length,layerIndex:li,hasTags:!!doc.tags?.length,hasSavedPath:!!filePath}),'delete-active-slice':documentTabs.items.length>0&&canEdit&&visibleSlices().some(slice=>slice.id===activeSliceId),'clear-slices':documentTabs.items.length>0&&canEdit&&doc.slices.length>0};
+  return {...menuAvailability({hasDocument:documentTabs.items.length>0,hasTileset:doc.layers.some(isTileset),canEdit,canEditPixels,hasSelection:!!selection,hasPreviousSelection:!!previousSelection,hasCelRange:!!celRange,hasCelClipboard:!!celClipboard,hasClipboard:!!clipboard,hasClosed:closedDocuments.length>0,canUndo:history.undoStack.length>0,canRedo:history.redoStack.length>0,frameCount:doc.frames.length,frameIndex:fi,layerCount:doc.layers.length,layerIndex:li,hasTags:!!doc.tags?.length,hasSavedPath:!!filePath,hasExport:!!window.desktop&&!!lastProjectExport(localStorage,filePath,documentId)}),'delete-active-slice':documentTabs.items.length>0&&canEdit&&visibleSlices().some(slice=>slice.id===activeSliceId),'clear-slices':documentTabs.items.length>0&&canEdit&&doc.slices.length>0};
 }
 // 合并按钮按当前图层类型切换文案与行为：像素层转为图集，图集层转回像素。
 function syncTilesetToggle(){
@@ -1802,7 +1803,7 @@ async function importFile(file,newTab=false){
   }
   const next=await rasterImportDocument(file,{modal,$,showError});if(next){replaceDocument(next,false,null,crypto.randomUUID(),newTab);message(`已导入 ${next.frames.length} 帧`);}
 }
-async function saveData(data,kind,name,binary=['bmp','gif','ico','jpeg','jpg','png','webp'].includes(kind)){if(window.desktop)return window.desktop.save(data,kind,name,binary);const blob=new Blob([binary?Uint8Array.from(atob(data),c=>c.charCodeAt(0)):data]);const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name+'.'+(kind==='project'?'pix':kind);a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return true;}
+async function saveData(data,kind,name,binary=['bmp','gif','ico','jpeg','jpg','png','webp'].includes(kind),destination){if(window.desktop)return window.desktop.save(data,kind,name,binary,...(destination?[destination]:[]));const blob=new Blob([binary?Uint8Array.from(atob(data),c=>c.charCodeAt(0)):data]);const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name+'.'+(kind==='project'?'pix':kind);a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return true;}
 async function saveProject(saveAs=false){
   if(busy||gesture)return false;setBusy(true);stop();
   const revision=history.revision,referenceRevision=boardRevision;
@@ -2316,15 +2317,22 @@ function initReferenceBoard(){
  panel.append(viewportWrap);initTerrainPreview();renderReferenceBoard(true);
 }
 function sheetOptions(form){return{margin:+form.elements.margin.value,gapX:+form.elements.gapX.value,gapY:+form.elements.gapY.value,order:form.elements.order.value,trim:form.elements.trim.checked,pack:form.elements.pack.checked,extrude:+form.elements.extrude.value};}
-async function normalMapDialog(){try{await exportNormalMap(frameCanvas(fi),{modal,$,showError,saveData,name:doc.name,message});}catch(error){showError('法线贴图导出失败：'+error.message);}}
+async function normalMapDialog(){
+ const targetId=documentId,targetPath=filePath,frame=fi;
+ try{const exported=await exportNormalMap(frameCanvas(frame),{modal,$,showError,saveData:async(...args)=>{setBusy(true);try{return await saveData(...args);}finally{setBusy(false);}},name:doc.name,message,directory:defaultExportDirectory(localStorage,filePath,documentId),chooseDirectory:window.desktop?directory=>window.desktop.pickExportDirectory(directory):null});
+  if(exported?.result)rememberProjectExport(localStorage,targetPath,targetId,{mode:'normal-map',frame,settings:exported.settings},exported.result);
+ }catch(error){showError('法线贴图导出失败：'+error.message);}finally{syncCommandStates();}
+}
 async function exportDialog(defaultMode='png'){
   const form=$('modal-form');let settings=readExportSettings(localStorage);
   const writeSettings=next=>{settings=next;localStorage.setItem(EXPORT_SETTINGS_KEY,JSON.stringify(settings));};
   const readOptions=(mode=form.elements.mode.value)=>{const options={mode};for(const key of ['scale','columns','margin','gapX','gapY','colors','threshold','extrude'])options[key]=+form.elements[key].value;for(const key of ['format','order','direction','repeat','alphaMode','matte','engineFormat'])options[key]=form.elements[key].value;options.trim=form.elements.trim.checked;options.pack=form.elements.pack.checked;return pickExportOptions(options);};
   const applyOptions=options=>{for(const [key,value]of Object.entries(options)){if(form.elements[key].type==='checkbox')form.elements[key].checked=value;else form.elements[key].value=value;}};
-  const remember=()=>writeSettings(rememberExportOptions(settings,readOptions()));
   const layerPlan=()=>exportLayerPlan(doc,form.elements.layerScope.value,li,[...$('export-layer-list').querySelectorAll('input:checked')].map(input=>+input.value));
-  const values=await modal('导出作品','<div class="export-presets"><label>导出预设<select name="preset"><option value="">当前设置</option></select></label><div><input name="presetName" placeholder="预设名称" maxlength="40" aria-label="预设名称"><button type="button" id="save-export-preset">保存预设</button><button type="button" id="delete-export-preset">删除</button></div><p id="export-preset-status"></p></div><label>导出内容 <select name="mode"><option value="png">单一图像</option><option value="gif">动画</option><option value="sheet">动画精灵表</option><option value="metadata">精灵表帧信息 JSON</option><option value="sheet-pair">精灵表图像 + JSON</option><option value="sequence">PNG 序列 + 时长清单</option><option value="normal-map">导出法线贴图</option></select></label><label id="export-format">文件格式 <select name="format"></select></label><label id="export-scope">帧范围 <select name="scope"></select></label><label>放大倍数 <input type="number" name="scale" value="1" min="1" max="8" required></label><label id="export-columns">精灵表列数 <input type="number" name="columns" value="'+Math.min(8,doc.frames.length)+'" min="1" max="256" required></label><label id="engine-format">引擎格式<select name="engineFormat"><option value="native">MinePix JSON</option><option value="phaser">Phaser 3 图集 + 动画</option><option value="godot">Godot 4 SpriteFrames</option></select></label><div id="export-layers"><label>图层范围<select name="layerScope"><option value="visible">全部可见图层</option><option value="current">当前图层（包括隐藏）</option><option value="custom">指定图层（包括隐藏）</option></select></label><div id="export-layer-list"></div><p id="export-layer-info"></p></div><div id="sheet-options" class="sheet-fields"><label>四边边距<input name="margin" type="number" min="0" max="512" value="0" required></label><label>水平间距<input name="gapX" type="number" min="0" max="512" value="0" required></label><label>垂直间距<input name="gapY" type="number" min="0" max="512" value="0" required></label><label>排列方向<select name="order"><option value="rows">逐行</option><option value="columns">逐列</option></select></label></div><div id="atlas-options" class="sheet-fields"><label>自动裁边<input name="trim" type="checkbox"></label><label>紧密打包<input name="pack" type="checkbox"></label><label>边缘挤出 (px)<input name="extrude" type="number" min="0" max="16" value="0" required></label></div><div id="gif-options"><label>方向 <select name="direction"><option value="tag">标签默认 / 正向</option><option value="timeline">时间轴顺序</option><option value="reverse">反向</option><option value="pingpong">往返</option></select></label><label>播放 <select name="repeat"><option value="loop">无限循环</option><option value="once">单次</option></select></label><label>颜色数 <input name="colors" type="number" min="2" max="256" value="256" required></label><label>透明处理 <select name="alphaMode"><option value="threshold">透明阈值</option><option value="matte">合成到背景色</option></select></label><label>透明阈值 <input name="threshold" type="number" min="0" max="255" value="127" required></label><label>背景色 <input name="matte" type="color" value="#ffffff"></label><p>GIF 每帧最多 256 色；WebP 保留 RGBA。时长按毫秒写入，往返不重复端点。</p></div><p id="export-note"></p>',()=>{
+  const values=await modal('导出作品','<div id="export-directory"><label>导出目录<input name="directory" readonly aria-label="导出目录"></label><button type="button" id="choose-export-directory">选择目录…</button></div><div class="export-presets"><label>导出预设<select name="preset"><option value="">当前设置</option></select></label><div><input name="presetName" placeholder="预设名称" maxlength="40" aria-label="预设名称"><button type="button" id="save-export-preset">保存预设</button><button type="button" id="delete-export-preset">删除</button></div><p id="export-preset-status"></p></div><label>导出内容 <select name="mode"><option value="png">单一图像</option><option value="gif">动画</option><option value="sheet">动画精灵表</option><option value="metadata">精灵表帧信息 JSON</option><option value="sheet-pair">精灵表图像 + JSON</option><option value="sequence">PNG 序列 + 时长清单</option><option value="normal-map">导出法线贴图</option></select></label><label id="export-format">文件格式 <select name="format"></select></label><label id="export-scope">帧范围 <select name="scope"></select></label><label>放大倍数 <input type="number" name="scale" value="1" min="1" max="8" required></label><label id="export-columns">精灵表列数 <input type="number" name="columns" value="'+Math.min(8,doc.frames.length)+'" min="1" max="256" required></label><label id="engine-format">引擎格式<select name="engineFormat"><option value="native">MinePix JSON</option><option value="phaser">Phaser 3 图集 + 动画</option><option value="godot">Godot 4 SpriteFrames</option></select></label><div id="export-layers"><label>图层范围<select name="layerScope"><option value="visible">全部可见图层</option><option value="current">当前图层（包括隐藏）</option><option value="custom">指定图层（包括隐藏）</option></select></label><div id="export-layer-list"></div><p id="export-layer-info"></p></div><div id="sheet-options" class="sheet-fields"><label>四边边距<input name="margin" type="number" min="0" max="512" value="0" required></label><label>水平间距<input name="gapX" type="number" min="0" max="512" value="0" required></label><label>垂直间距<input name="gapY" type="number" min="0" max="512" value="0" required></label><label>排列方向<select name="order"><option value="rows">逐行</option><option value="columns">逐列</option></select></label></div><div id="atlas-options" class="sheet-fields"><label>自动裁边<input name="trim" type="checkbox"></label><label>紧密打包<input name="pack" type="checkbox"></label><label>边缘挤出 (px)<input name="extrude" type="number" min="0" max="16" value="0" required></label></div><div id="gif-options"><label>方向 <select name="direction"><option value="tag">标签默认 / 正向</option><option value="timeline">时间轴顺序</option><option value="reverse">反向</option><option value="pingpong">往返</option></select></label><label>播放 <select name="repeat"><option value="loop">无限循环</option><option value="once">单次</option></select></label><label>颜色数 <input name="colors" type="number" min="2" max="256" value="256" required></label><label>透明处理 <select name="alphaMode"><option value="threshold">透明阈值</option><option value="matte">合成到背景色</option></select></label><label>透明阈值 <input name="threshold" type="number" min="0" max="255" value="127" required></label><label>背景色 <input name="matte" type="color" value="#ffffff"></label><p>GIF 每帧最多 256 色；WebP 保留 RGBA。时长按毫秒写入，往返不重复端点。</p></div><p id="export-note"></p>',()=>{
+    $('export-directory').hidden=!window.desktop;
+    form.elements.directory.value=defaultExportDirectory(localStorage,filePath,documentId);
+    $('choose-export-directory').onclick=async()=>{try{const directory=await window.desktop.pickExportDirectory(form.elements.directory.value);if(directory)form.elements.directory.value=directory;}catch(error){showError('选择导出目录失败：'+error.message);}};
     const syncScopeControl=()=>{const current=form.elements.scope.value,selected=frameSelection.size;form.elements.scope.replaceChildren(new Option('全部帧','all'),...(selected?[new Option('选中帧','selected')]:[]),...doc.tags.map(tag=>new Option(tag.name,tag.id)));form.elements.scope.value=[...form.elements.scope.options].some(option=>option.value===current)?current:'all';};form.elements.mode.value=defaultMode;syncScopeControl();const playRange=$('play-range').value;if([...form.elements.scope.options].some(option=>option.value===playRange))form.elements.scope.value=playRange;
     for(const index of [...doc.layers.keys()].reverse()){const layer=doc.layers[index],label=document.createElement('label'),input=document.createElement('input'),name=document.createElement('span');input.type='checkbox';input.value=index;input.checked=layer.visible;name.textContent=layer.name+(!layer.visible?' · 隐藏':'')+(layer.locked?' · 锁定':'')+` · ${layer.opacity}%`;label.append(input,name);$('export-layer-list').append(label);}
     const updateLayers=()=>{const custom=form.elements.layerScope.value==='custom';$('export-layer-list').hidden=!custom;for(const input of $('export-layer-list').querySelectorAll('input'))input.disabled=!custom||$('export-layers').hidden;try{const plan=layerPlan();$('export-layer-info').textContent=`将合成 ${plan.indices.length} 个图层；保留层序与不透明度。锁定不影响导出。`;}catch(error){$('export-layer-info').textContent=error.message;}};
@@ -2346,25 +2354,62 @@ async function exportDialog(defaultMode='png'){
     const layout=['sheet','metadata','sheet-pair'].includes(v.mode)?(()=>{const m=atlasMetadata(layerPlan().document,indices,{columns:cols,scale,...sheetOptions(form)});return{width:m.size.w,height:m.size.h};})():{width:doc.width*scale,height:doc.height*scale};const w=layout.width,h=layout.height,pixels=w*h*(animated?indices.length:1);
     if(animated&&indices.length>256)throw new Error('动画输出最多 256 帧，请缩小范围或使用非往返方向');if(pixels>32*1024*1024||w>16384||h>16384)throw new Error('导出图像过大，请减少放大倍数或调整范围');
   });
-  if(!values){if($('modal').returnValue==='normal-map')await normalMapDialog();return;}setBusy(true);
+  if(!values){if($('modal').returnValue==='normal-map')await normalMapDialog();return;}
+  const options={...values,...readOptions(),frame:fi,selectedFrames:[...frameSelection],layerIds:['sheet','metadata','sheet-pair'].includes(values.mode)?layerPlan().indices.map(index=>doc.layers[index].id):[]};
+  await runExport(options,{directory:form.elements.directory.value});
+}
+async function quickExport(){
+  const record=lastProjectExport(localStorage,filePath,documentId);
+  if(!record||!window.desktop||playing)return;
+  await runExport(record.options,{...record.destination,silent:true});
+}
+async function runExport(values,destination){
+  if(busy||gesture||shapeSession||celGesture||!documentTabs.items.length)return;
+  const targetId=documentId,targetPath=filePath;setBusy(true);
   try{
-    const {mode}=values,scale=+values.scale,indices=mode==='gif'?animationIndices(doc,values.scope,frameSelection,values.direction):scopeFrames(doc,values.scope,frameSelection),cols=Math.min(+values.columns||1,indices.length);let ok;
-    if(['gif','sequence'].includes(mode)){
-      if(!window.desktop)throw new Error('动画导出请使用 桌面版');
-      const format=mode==='gif'?values.format:mode,output=document.createElement('canvas');output.width=doc.width*scale;output.height=doc.height*scale;const context=output.getContext('2d',{willReadFrequently:format==='gif'});context.imageSmoothingEnabled=false;const frames=[];
-      for(const sourceIndex of indices){context.clearRect(0,0,output.width,output.height);context.drawImage(frameCanvas(sourceIndex),0,0,output.width,output.height);frames.push({duration:doc.frames[sourceIndex].duration,sourceIndex,...(format==='gif'?{rgba:context.getImageData(0,0,output.width,output.height).data}:format==='webp'?{webp:output.toDataURL('image/webp',1).split(',')[1]}:{png:output.toDataURL('image/png').split(',')[1]})});await new Promise(resolve=>setTimeout(resolve,0));}
-      if(format==='webp'){const data=encodeAnimatedWebp(frames,output.width,output.height,form.elements.repeat.value==='loop'),result=await saveData(data,'webp',doc.name,true);if(result)remember();message(result?'导出完成':'已取消导出');return;}
-      const result=await window.desktop.exportAnimation({format,name:doc.name,width:output.width,height:output.height,frames,tags:animationTags(doc,indices),colors:+form.elements.colors.value,threshold:+form.elements.threshold.value,alphaMode:form.elements.alphaMode.value,matte:form.elements.matte.value,loop:form.elements.repeat.value==='loop'});
-      if(result)remember();message(result?'导出完成 · '+(result.folder||result.filePath):'已取消导出');return;
+    const result=await performExport(values,destination);
+    if(result){
+      if(!['normal-map','aseprite'].includes(values.mode))localStorage.setItem(EXPORT_SETTINGS_KEY,JSON.stringify(rememberExportOptions(readExportSettings(localStorage),values)));
+      rememberProjectExport(localStorage,targetPath,targetId,values,result);
     }
-    const isSheet=['sheet','metadata','sheet-pair'].includes(mode),layers=isSheet?layerPlan():null,metadata=isSheet?{...atlasMetadata(layers.document,indices,{columns:cols,scale,...sheetOptions(form)}),layerScope:values.layerScope,sourceLayers:layers.sourceLayers}:null;
-    {const c=document.createElement('canvas');c.width=metadata?.size.w||doc.width*scale;c.height=metadata?.size.h||doc.height*scale;const cx=c.getContext('2d',{willReadFrequently:true});cx.imageSmoothingEnabled=false;if(isSheet)metadata.frames.forEach(item=>drawAtlasFrame(cx,imageCanvas(composite(layers.document,item.sourceIndex)),item,scale,metadata.extrude));else cx.drawImage(frameCanvas(fi),0,0,c.width,c.height);const png=c.toDataURL('image/png').split(',')[1],format=values.format||'png';
-      if(mode==='metadata'){if(!window.desktop)throw new Error('关联 PNG 元数据导出请使用桌面应用');ok=await window.desktop.exportSheetMetadata({name:doc.name,png,metadata});}
-      else if(mode==='sheet-pair'){if(!window.desktop)throw new Error('配对导出请使用桌面应用');const result=await window.desktop.exportSheet({name:doc.name,png,metadata,engineFormat:values.engineFormat});if(result)remember();message(result?'导出完成 · '+result.folder:'已取消导出');return;}
-      else if(format==='gif'){const rgba=cx.getImageData(0,0,c.width,c.height).data,result=await window.desktop.exportAnimation({format:'gif',name:doc.name+(isSheet?'-sheet':''),width:c.width,height:c.height,frames:[{duration:doc.frames[fi].duration,sourceIndex:fi,rgba}],tags:[],colors:+form.elements.colors.value||256,threshold:+form.elements.threshold.value||127,alphaMode:form.elements.alphaMode.value||'threshold',matte:form.elements.matte.value||'#ffffff',loop:false});ok=!!result;}
-      else {const encoded=encodeCanvas(c,format);ok=await saveData(encoded.data,format,doc.name+(isSheet?'-sheet':''),encoded.binary);}}
-    if(ok)remember();message(ok?'导出完成':'已取消导出');
-  }catch(error){showError('导出失败：'+error.message);}finally{setBusy(false);}
+    message(result?'导出完成'+(result.folder?' · '+result.folder:''):'已取消导出');
+  }catch(error){showError('导出失败：'+error.message);}finally{setBusy(false);syncCommandStates();}
+}
+async function performExport(values,destination){
+  if(values.mode==='aseprite')return window.desktop.exportAseprite(doc,destination);
+  if(values.mode==='normal-map'){
+    if(!doc.frames[values.frame])throw new Error('导出帧已不存在，请重新配置导出');
+    return saveData(await normalMapPng(frameCanvas(values.frame),values.settings),'png',doc.name+'-normal',true,destination);
+  }
+  const {mode}=values,scale=+values.scale,selected=new Set(values.selectedFrames),frame=values.frame;
+  if(!doc.frames[frame])throw new Error('导出帧已不存在，请重新配置导出');
+  if(values.scope==='selected'&&values.selectedFrames.some(index=>!doc.frames[index]))throw new Error('导出帧已不存在，请重新配置导出');
+  if(values.scope&& !['all','selected'].includes(values.scope)&&!doc.tags.some(tag=>tag.id===values.scope))throw new Error('导出标签已不存在，请重新配置导出');
+  const indices=mode==='gif'?animationIndices(doc,values.scope,selected,values.direction):scopeFrames(doc,values.scope,selected),cols=Math.min(+values.columns||1,indices.length);
+  const isSheet=['sheet','metadata','sheet-pair'].includes(mode),layerIndices=isSheet?values.layerIds.map(id=>doc.layers.findIndex(layer=>layer.id===id)):[];
+  if(layerIndices.includes(-1))throw new Error('导出图层已不存在');
+  const layers=isSheet?exportLayerPlan(doc,'custom',li,layerIndices):null;
+  const sheet={margin:+values.margin,gapX:+values.gapX,gapY:+values.gapY,order:values.order,trim:values.trim===true||values.trim==='on',pack:values.pack===true||values.pack==='on',extrude:+values.extrude};
+  const metadata=isSheet?{...atlasMetadata(layers.document,indices,{columns:cols,scale,...sheet}),layerScope:values.layerScope,sourceLayers:layers.sourceLayers}:null;
+  const width=metadata?.size.w||doc.width*scale,height=metadata?.size.h||doc.height*scale,animated=['gif','sequence'].includes(mode);
+  if(animated&&indices.length>256)throw new Error('动画输出最多 256 帧，请缩小范围或使用非往返方向');
+  if(width*height*(animated?indices.length:1)>32*1024*1024||width>16384||height>16384)throw new Error('导出图像过大，请减少放大倍数或调整范围');
+  const animationOptions={destination,colors:+values.colors||256,threshold:values.threshold===undefined?127:+values.threshold,alphaMode:values.alphaMode||'threshold',matte:values.matte||'#ffffff',loop:values.repeat==='loop'};
+  if(animated){
+    if(!window.desktop)throw new Error('动画导出请使用 桌面版');
+    const format=mode==='gif'?values.format:mode,output=document.createElement('canvas');output.width=width;output.height=height;
+    const context=output.getContext('2d',{willReadFrequently:format==='gif'});context.imageSmoothingEnabled=false;const frames=[];
+    for(const sourceIndex of indices){context.clearRect(0,0,width,height);context.drawImage(frameCanvas(sourceIndex),0,0,width,height);frames.push({duration:doc.frames[sourceIndex].duration,sourceIndex,...(format==='gif'?{rgba:context.getImageData(0,0,width,height).data}:format==='webp'?{webp:output.toDataURL('image/webp',1).split(',')[1]}:{png:output.toDataURL('image/png').split(',')[1]})});await new Promise(resolve=>setTimeout(resolve,0));}
+    if(format==='webp')return saveData(encodeAnimatedWebp(frames,width,height,values.repeat==='loop'),'webp',doc.name,true,destination);
+    return window.desktop.exportAnimation({...animationOptions,format,name:doc.name,width,height,frames,tags:animationTags(doc,indices)});
+  }
+  const c=document.createElement('canvas');c.width=width;c.height=height;const cx=c.getContext('2d',{willReadFrequently:true});cx.imageSmoothingEnabled=false;
+  if(isSheet)metadata.frames.forEach(item=>drawAtlasFrame(cx,imageCanvas(composite(layers.document,item.sourceIndex)),item,scale,metadata.extrude));else cx.drawImage(frameCanvas(frame),0,0,width,height);
+  const png=c.toDataURL('image/png').split(',')[1],format=values.format||'png';
+  if(mode==='metadata'){if(!window.desktop)throw new Error('关联 PNG 元数据导出请使用桌面应用');return window.desktop.exportSheetMetadata({name:doc.name,png,metadata,destination});}
+  if(mode==='sheet-pair'){if(!window.desktop)throw new Error('配对导出请使用桌面应用');return window.desktop.exportSheet({name:doc.name,png,metadata,engineFormat:values.engineFormat,destination});}
+  if(format==='gif')return window.desktop.exportAnimation({...animationOptions,format:'gif',name:doc.name+(isSheet?'-sheet':''),width,height,frames:[{duration:doc.frames[frame].duration,sourceIndex:frame,rgba:cx.getImageData(0,0,width,height).data}],tags:[],loop:false});
+  const encoded=encodeCanvas(c,format);return saveData(encoded.data,format,doc.name+(isSheet?'-sheet':''),encoded.binary,destination);
 }
 
 function canvasEdit(fn,text){mutate(()=>{fn();selection=null;},text);fit();}
@@ -2498,7 +2543,7 @@ async function exportAsepriteDialog(){
  if(doc.layers.some(isReference))notes.push('参考层仅用于编辑，不写入此素材文件。');
  if(doc.layers.some(l=>isGroup(l)&&!l.passThrough))notes.push('Aseprite 1.3不应用隔离组透明度 / 混合。与该版本交换时，请改用穿透组，或在副本中扁平化以保留外观。');
  if(doc.layers.some(l=>isGroup(l)&&l.passThrough)&&doc.layers.some(l=>isGroup(l)&&!l.passThrough))return message('ASE不能混合保留隔离与穿透组，请先统一组模式');
- const answer=await modal('导出 Aseprite '+label,notes.map(text=>'<p>'+text+'</p>').join(''));if(!answer)return;if(!window.desktop)return message('原生格式导出请使用桌面版');setBusy(true);try{const output=await window.desktop.exportAseprite(doc);message(output?'已导出 Aseprite '+label:'已取消导出');}catch(error){showError('ASE导出失败：'+error.message);}finally{setBusy(false);}
+ const answer=await modal('导出 Aseprite '+label,notes.map(text=>'<p>'+text+'</p>').join('')+'<label>导出目录<input name="directory" readonly aria-label="导出目录"></label><button type="button" id="choose-aseprite-directory">选择目录…</button>',form=>{form.elements.directory.value=defaultExportDirectory(localStorage,filePath,documentId);$('choose-aseprite-directory').onclick=async()=>{try{const directory=await window.desktop?.pickExportDirectory(form.elements.directory.value);if(directory)form.elements.directory.value=directory;}catch(error){showError('选择导出目录失败：'+error.message);}};});if(!answer)return;if(!window.desktop)return message('原生格式导出请使用桌面版');await runExport({mode:'aseprite'},{directory:answer.directory});
 }
 async function celPropertiesDialog(){
  if(!editable()||isBackground(doc.layers[li])||isReference(doc.layers[li])||isGroup(doc.layers[li]))return message('请选择普通像素 cel');
@@ -2551,7 +2596,7 @@ const actions={
   'crop-selection':()=>{if(!selection)return message('请先建立矩形选区');const bounds={...selection};canvasEdit(()=>reframe(doc,bounds),'已按选区裁剪全部帧');},
   'flip-sprite-x':()=>canvasEdit(()=>flipSprite(doc,'x'),'已翻转所有图层与帧'),
   'flip-sprite-y':()=>canvasEdit(()=>flipSprite(doc,'y'),'已翻转所有图层与帧'),
-  new:newDocument,open:openDocument,'import-gif':()=>openDocument('gif'),'import-sequence':()=>openDocument('sequence'),'import-sequence-manifest':()=>openDocument('sequence-manifest'),'import-sheet-json':()=>openDocument('sheet-manifest'),'import-aseprite':()=>openDocument('aseprite'),'normal-map':normalMapDialog,gif:()=>exportDialog('gif'),sequence:()=>exportDialog('sequence'),save:()=>saveProject(),'save-as':()=>saveProject(true),recover:()=>recover(false),export:()=>exportDialog(),png:()=>exportDialog(),sheet:()=>exportDialog('sheet'),'sheet-pair':()=>exportDialog('sheet-pair'),
+  new:newDocument,open:openDocument,'import-gif':()=>openDocument('gif'),'import-sequence':()=>openDocument('sequence'),'import-sequence-manifest':()=>openDocument('sequence-manifest'),'import-sheet-json':()=>openDocument('sheet-manifest'),'import-aseprite':()=>openDocument('aseprite'),'normal-map':normalMapDialog,gif:()=>exportDialog('gif'),sequence:()=>exportDialog('sequence'),save:()=>saveProject(),'save-as':()=>saveProject(true),recover:()=>recover(false),export:()=>exportDialog(),'quick-export':quickExport,png:()=>exportDialog(),sheet:()=>exportDialog('sheet'),'sheet-pair':()=>exportDialog('sheet-pair'),
   shortcuts:keymapDialog,
   'cel-properties':celPropertiesDialog,
   'slice-properties':()=>sliceDialog(),'delete-active-slice':()=>{if(activeSliceId)mutate(()=>{doc.slices=doc.slices.filter(s=>s.id!==activeSliceId);activeSliceId=null;},'切片已删除');},'clear-slices':()=>{if(!doc.slices.length)return;mutate(()=>{doc.slices=[];activeSliceId=null;},'已清除所有切片');},
@@ -3020,6 +3065,7 @@ async function runSelectionSmoke(check){
     const cursors={};for(const kind of ['rect','ellipse','lasso','polygon','wand']){$('selection-kind').value=kind;$('selection-kind').dispatchEvent(new Event('change'));cursors[kind]=viewport.dataset.cursor;}
     check('五种选区模式共用一个选区绘制光标',new Set(Object.values(cursors)).size===5&&Object.entries(cursors).every(([kind,cursor])=>cursor==='select-'+kind)&&new Set(Object.values(cursors).map(cursorStyle)).size===1);
     $('selection-kind').value='rect';$('selection-kind').dispatchEvent(new Event('change'));
+    const defaultGridKeymap=keymap;keymap=structuredClone(keymap);keymap.bindings['grid-select']=['G'];
     const hold=(type,value)=>{document.dispatchEvent(new KeyboardEvent(type,{key:value,code:'KeyG',bubbles:true,cancelable:true}));};
     gridSettings={x:2,y:2,w:4,h:4,visible:false};
     hold('keydown','g');
@@ -3032,7 +3078,7 @@ async function runSelectionSmoke(check){
     check('松开 G 恢复自由矩形',!modifiers.grid&&viewport.dataset.cursor==='select-rect');
     click(4,4);
     check('松开后点击回到单像素矩形',selection.x===4&&selection.y===4&&selection.w===1&&selection.h===1);
-    const gridKeymap=keymap;keymap=asepriteKeymap();refreshKeymapLabels();
+    const gridKeymap=defaultGridKeymap;keymap=asepriteKeymap();keymap.bindings['grid-select']=['G'];refreshKeymapLabels();
     hold('keydown','g');click(4,4);
     document.dispatchEvent(new KeyboardEvent('keydown',{key:'Shift',code:'ShiftLeft',shiftKey:true,bubbles:true,cancelable:true}));
     event('pointerdown',8,8,{shiftKey:true});event('pointerup',8,8,{shiftKey:true});

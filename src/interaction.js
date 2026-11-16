@@ -21,7 +21,7 @@ export const SHORTCUTS = [
   ['绘图约束','Shift：直线按 45°、矩形 / 椭圆 / 选区等宽高、移动锁定轴'],
   ['鼠标操作','滚轮以鼠标为中心缩放；绘画工具右键擦除'],
   ['笔刷与颜色','- 缩小 / = 放大；X 交换前景色与背景色'],
-  ['文件操作','Ctrl+N 新建 / Ctrl+O 打开 / Ctrl+S 保存 / Ctrl+Shift+S 另存为 / Ctrl+Shift+E 导出'],
+  ['文件操作','Ctrl+N 新建 / Ctrl+O 打开 / Ctrl+S 保存 / Ctrl+Shift+S 另存为 / Ctrl+Shift+E 导出 / Ctrl+E 快捷导出'],
   ['历史记录','Ctrl+Z 撤销 / Ctrl+Shift+Z 或 Ctrl+Y 重做'],
   ['剪贴板','Ctrl+C 复制 / Ctrl+X 剪切 / Ctrl+V 粘贴'],
   ['选区','Ctrl+A 全选 / Ctrl+D 取消 / Ctrl+T 缩放旋转 / Delete 清除 / Esc 取消当前操作'],

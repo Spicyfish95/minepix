@@ -40,6 +40,14 @@ fn dialog(state: &Backend) -> rfd::AsyncFileDialog {
     })
 }
 
+fn export_dialog(state: &Backend, destination: Option<&formats::ExportDestination>) -> rfd::AsyncFileDialog {
+    let picker = dialog(state);
+    match destination.and_then(|value| value.directory.as_deref()) {
+        Some(directory) => picker.set_directory(directory),
+        None => picker,
+    }
+}
+
 #[tauri::command]
 async fn save_project_packed(
     request: tauri::ipc::Request<'_>,
@@ -429,8 +437,19 @@ async fn desktop_call(
                 .map_err(io_error)?;
             Ok(result)
         }
+        "pickExportDirectory" => {
+            let destination = if let Some(value) = args.first().filter(|value| !value.is_null()) {
+                let directory = value.as_str().ok_or("导出目录无效")?;
+                formats::ExportDestination::parse(Some(&json!({"directory":directory}))).map_err(io_error)?
+            } else {
+                None
+            };
+            Ok(export_dialog(&state, destination.as_ref()).pick_folder().await
+                .map(|chosen| json!(chosen.path())).unwrap_or(Value::Null))
+        }
         "save" => {
             use base64::Engine;
+            let destination = formats::ExportDestination::parse(args.get(4)).map_err(io_error)?;
             let kind = text(&args, 1);
             let extension = match kind {
                 "project" => "pix",
@@ -441,13 +460,18 @@ async fn desktop_call(
                 .file_stem()
                 .unwrap_or_default()
                 .to_string_lossy();
-            let Some(chosen) = dialog(&state)
-                .add_filter(extension, &[extension])
-                .set_file_name(format!("{name}.{extension}"))
-                .save_file()
-                .await
-            else {
-                return Ok(json!(false));
+            let target = if let Some(destination) = destination.as_ref().filter(|value| value.silent) {
+                destination.file_path().map_err(io_error)?.to_path_buf()
+            } else {
+                let Some(chosen) = export_dialog(&state, destination.as_ref())
+                    .add_filter(extension, &[extension])
+                    .set_file_name(format!("{name}.{extension}"))
+                    .save_file()
+                    .await
+                else {
+                    return Ok(if destination.is_some() { Value::Null } else { json!(false) });
+                };
+                chosen.path().to_path_buf()
             };
             let data = if kind == "project" {
                 project::encode(
@@ -461,98 +485,112 @@ async fn desktop_call(
             } else {
                 text(&args, 0).as_bytes().to_vec()
             };
-            storage::write_atomic(chosen.path(), &data).map_err(io_error)?;
-            Ok(json!(true))
+            storage::write_atomic(&target, &data).map_err(io_error)?;
+            Ok(if destination.is_some() {
+                json!({"filePath":target,"directory":target.parent()})
+            } else {
+                json!(true)
+            })
         }
         "exportAseprite" => {
             let document = args.first().ok_or("缺少导出文档")?;
+            let destination = formats::ExportDestination::parse(args.get(1)).map_err(io_error)?;
             let bytes = aseprite::encode(document).map_err(io_error)?;
             let name = formats::safe_base(document["name"].as_str().unwrap_or("sprite"));
-            let Some(chosen) = dialog(&state)
-                .add_filter("Aseprite", &["aseprite"])
-                .set_file_name(format!("{name}.aseprite"))
-                .save_file()
-                .await
-            else {
-                return Ok(Value::Null);
+            let target = if let Some(destination) = destination.as_ref().filter(|value| value.silent) {
+                destination.file_path().map_err(io_error)?.to_path_buf()
+            } else {
+                let Some(chosen) = export_dialog(&state, destination.as_ref())
+                    .add_filter("Aseprite", &["aseprite"])
+                    .set_file_name(format!("{name}.aseprite"))
+                    .save_file()
+                    .await
+                else {
+                    return Ok(Value::Null);
+                };
+                chosen.path().to_path_buf()
             };
-            storage::write_atomic(chosen.path(), &bytes).map_err(io_error)?;
-            Ok(json!({"filePath":chosen.path()}))
+            storage::write_atomic(&target, &bytes).map_err(io_error)?;
+            Ok(json!({"filePath":target,"directory":target.parent()}))
         }
         "exportAnimation" => {
             let value = args.first().ok_or("动画参数缺失")?;
             let options: formats::AnimationOptions =
                 serde_json::from_value(value.clone()).map_err(|error| error.to_string())?;
+            let destination = formats::ExportDestination::parse(value.get("destination")).map_err(io_error)?;
             match value["format"].as_str() {
                 Some("gif") => {
-                    let Some(chosen) = dialog(&state)
-                        .add_filter("GIF", &["gif"])
-                        .set_file_name(format!("{}.gif", formats::safe_base(&options.name)))
-                        .save_file()
-                        .await
-                    else {
-                        return Ok(Value::Null);
+                    let target = if let Some(destination) = destination.as_ref().filter(|value| value.silent) {
+                        destination.file_path().map_err(io_error)?.to_path_buf()
+                    } else {
+                        let Some(chosen) = export_dialog(&state, destination.as_ref())
+                            .add_filter("GIF", &["gif"])
+                            .set_file_name(format!("{}.gif", formats::safe_base(&options.name)))
+                            .save_file()
+                            .await
+                        else {
+                            return Ok(Value::Null);
+                        };
+                        chosen.path().to_path_buf()
                     };
                     storage::write_atomic(
-                        chosen.path(),
+                        &target,
                         &formats::encode_gif(&options).map_err(io_error)?,
                     )
                     .map_err(io_error)?;
-                    Ok(json!({"filePath":chosen.path(),"count":options.frames.len()}))
+                    Ok(json!({"filePath":target,"directory":target.parent(),"count":options.frames.len()}))
                 }
                 Some("sequence") => {
-                    let Some(chosen) = dialog(&state).pick_folder().await else {
-                        return Ok(Value::Null);
+                    let parent = if let Some(destination) = destination.as_ref().filter(|value| value.silent) {
+                        destination.folder().map_err(io_error)?.parent().unwrap().to_path_buf()
+                    } else {
+                        let Some(chosen) = export_dialog(&state, destination.as_ref()).pick_folder().await else {
+                            return Ok(Value::Null);
+                        };
+                        chosen.path().to_path_buf()
                     };
-                    formats::export_sequence(chosen.path(), &options).map_err(io_error)
+                    formats::export_sequence(&parent, &options).map_err(io_error)
                 }
                 _ => Err("未知动画格式".into()),
             }
         }
         "exportSheet" => {
-            let Some(chosen) = dialog(&state).pick_folder().await else {
-                return Ok(Value::Null);
+            let options = args.first().ok_or("缺少图集参数")?;
+            let destination = formats::ExportDestination::parse(options.get("destination")).map_err(io_error)?;
+            let parent = if let Some(destination) = destination.as_ref().filter(|value| value.silent) {
+                destination.folder().map_err(io_error)?.parent().unwrap().to_path_buf()
+            } else {
+                let Some(chosen) = export_dialog(&state, destination.as_ref()).pick_folder().await else {
+                    return Ok(Value::Null);
+                };
+                chosen.path().to_path_buf()
             };
-            formats::export_sheet(chosen.path(), args.first().ok_or("缺少图集参数")?)
-                .map_err(io_error)
+            formats::export_sheet(&parent, options).map_err(io_error)
         }
         "exportSheetMetadata" => {
-            use base64::Engine;
             let options = args.first().ok_or("缺少图集参数")?;
-            let Some(image) = dialog(&state).add_filter("PNG", &["png"]).pick_file().await else {
-                return Ok(Value::Null);
+            let destination = formats::ExportDestination::parse(options.get("destination")).map_err(io_error)?;
+            let (image, target) = if let Some(destination) = destination.as_ref().filter(|value| value.silent) {
+                (destination.image_path().map_err(io_error)?.to_path_buf(),
+                    destination.file_path().map_err(io_error)?.to_path_buf())
+            } else {
+                let Some(image) = export_dialog(&state, destination.as_ref())
+                    .add_filter("PNG", &["png"]).pick_file().await else {
+                    return Ok(Value::Null);
+                };
+                formats::check_sheet_image(image.path(), options).map_err(io_error)?;
+                let name = image.path().file_stem().unwrap_or_default().to_string_lossy();
+                let root = image.path().parent().ok_or("图集目录无效")?;
+                let Some(target) = dialog(&state)
+                    .add_filter("JSON", &["json"])
+                    .set_directory(root)
+                    .set_file_name(format!("{name}.json"))
+                    .save_file().await else {
+                    return Ok(Value::Null);
+                };
+                (image.path().to_path_buf(), target.path().to_path_buf())
             };
-            let expected = base64::engine::general_purpose::STANDARD
-                .decode(options["png"].as_str().ok_or("缺少预期 PNG")?)
-                .map_err(|error| error.to_string())?;
-            let actual = storage::read_file(image.path()).map_err(io_error)?;
-            if formats::png_rgba(&actual).map_err(io_error)?
-                != formats::png_rgba(&expected).map_err(io_error)?
-            {
-                return Err("关联 PNG 的尺寸或像素与当前导出设置不一致".into());
-            }
-            let name = image
-                .path()
-                .file_stem()
-                .unwrap_or_default()
-                .to_string_lossy();
-            let root = image.path().parent().ok_or("图集目录无效")?;
-            let Some(target) = dialog(&state)
-                .add_filter("JSON", &["json"])
-                .set_directory(root)
-                .set_file_name(format!("{name}.json"))
-                .save_file()
-                .await
-            else {
-                return Ok(Value::Null);
-            };
-            if target.path().parent() != Some(root) {
-                return Err("请将 JSON 保存到 PNG 同一目录".into());
-            }
-            let mut metadata = options["metadata"].clone();
-            metadata["image"] = json!(files::basename(image.path()));
-            storage::write_json(target.path(), &metadata).map_err(io_error)?;
-            Ok(json!({"filePath":target.path(),"image":files::basename(image.path())}))
+            formats::export_sheet_metadata(&image, &target, options).map_err(io_error)
         }
         "quit" => Ok(json!(state.windows.quit(window.app_handle()).await?)),
         _ => Err(format!("不支持的桌面功能：{method}")),

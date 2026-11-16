@@ -26,6 +26,12 @@ test('颜色范围需像素上下文，修改选区需已有选区',()=>{
  assert.equal(menuAvailability({...state,hasDocument:true,canEditPixels:false})['select-color-range'],false);assert.equal(menuAvailability({...state,hasDocument:true})['expand-selection'],false);
 });
 
+test('quick export is enabled only for idle projects with a successful export',()=>{
+ assert.equal(menuAvailability({...state,hasExport:true})['quick-export'],false);
+ assert.equal(menuAvailability({...state,hasDocument:true})['quick-export'],false);
+ assert.equal(menuAvailability({...state,hasDocument:true,hasExport:true})['quick-export'],true);
+ assert.equal(menuAvailability({...state,hasDocument:true,hasExport:true,canEdit:false})['quick-export'],false);
+});
 test('capture brush requires an editable pixel selection',()=>{
  assert.equal(menuAvailability({...state,hasDocument:true})['capture-brush'],false);
  assert.equal(menuAvailability({...state,hasDocument:true,hasSelection:true})['capture-brush'],true);

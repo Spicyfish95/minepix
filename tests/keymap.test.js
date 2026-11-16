@@ -83,6 +83,11 @@ test('新工具升级保留已有自定义冲突键，并迁移旧 Aseprite 切�
  const legacy=asepriteKeymap();delete legacy.bindings['tool:slice'];legacy.bindings.slices=['Shift+C'];const migrated=loadKeymap({getItem:()=>JSON.stringify(legacy)});assert.deepEqual(migrated.bindings['tool:slice'],['Shift+C']);assert.deepEqual(migrated.bindings.slices,[]);
 });
 
+test('quick export defaults to Ctrl+E and preserves custom conflicts during migration',()=>{
+ for(const preset of [defaultKeymap,asepriteKeymap])assert.deepEqual(resolveShortcut({key:'e',code:'KeyE',ctrlKey:true},preset()),{action:'quick-export'});
+ const old=defaultKeymap();delete old.bindings['quick-export'];old.bindings.copy=['Ctrl+E'];
+ const loaded=loadKeymap({getItem:()=>JSON.stringify(old)});assert.deepEqual(loaded.bindings.copy,['Ctrl+E']);assert.deepEqual(loaded.bindings['quick-export'],[]);
+});
 test('capture brush defaults to Ctrl+B and preserves user conflicts on migration',()=>{
  assert.deepEqual(resolveShortcut({key:'b',code:'KeyB',ctrlKey:true},defaultKeymap()),{action:'capture-brush'});
  const old=defaultKeymap();delete old.bindings['capture-brush'];old.bindings.copy=['Ctrl+B'];

@@ -25,7 +25,7 @@ export default {
 "Shift：直线按 45°、矩形 / 椭圆 / 选区等宽高、移动锁定轴": "Shift: 45 degree lines, equal width and height for rectangles / ellipses / selections, axis-locked moves",
 "滚轮以鼠标为中心缩放；绘画工具右键擦除": "The wheel zooms around the pointer; right-click erases with paint tools",
 "[ 缩小 / ] 放大；X 交换前景色与背景色": "[ shrinks / ] grows the brush; X swaps foreground and background",
-"Ctrl+N 新建 / Ctrl+O 打开 / Ctrl+S 保存 / Ctrl+Shift+S 另存为 / Ctrl+Shift+E 导出": "Ctrl+N new / Ctrl+O open / Ctrl+S save / Ctrl+Shift+S save as / Ctrl+Shift+E export",
+"Ctrl+N 新建 / Ctrl+O 打开 / Ctrl+S 保存 / Ctrl+Shift+S 另存为 / Ctrl+Shift+E 导出 / Ctrl+E 快捷导出": "Ctrl+N new / Ctrl+O open / Ctrl+S save / Ctrl+Shift+S save as / Ctrl+Shift+E export / Ctrl+E quick export",
 "Ctrl+Z 撤销 / Ctrl+Shift+Z 或 Ctrl+Y 重做": "Ctrl+Z undo / Ctrl+Shift+Z or Ctrl+Y redo",
 "Ctrl+C 复制 / Ctrl+X 剪切 / Ctrl+V 粘贴": "Ctrl+C copy / Ctrl+X cut / Ctrl+V paste",
 "Ctrl+A 全选 / Ctrl+D 取消 / Ctrl+T 缩放旋转 / Delete 清除 / Esc 取消当前操作": "Ctrl+A select all / Ctrl+D deselect / Ctrl+T scale and rotate / Delete clear / Esc cancels the current action",

@@ -111,6 +111,71 @@ fn check_animation(width: u32, height: u32, count: usize) -> io::Result<()> {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ExportDestination {
+    pub directory: Option<PathBuf>,
+    #[serde(default)]
+    pub silent: bool,
+    pub file_path: Option<PathBuf>,
+    pub folder: Option<PathBuf>,
+    pub image_path: Option<PathBuf>,
+}
+
+impl ExportDestination {
+    pub fn parse(value: Option<&Value>) -> io::Result<Option<Self>> {
+        let mut destination = value.filter(|value| !value.is_null())
+            .map(|value| serde_json::from_value::<Self>(value.clone()))
+            .transpose()?;
+        if let Some(value) = destination.as_mut() {
+            if value.directory.as_ref().is_some_and(|path| path.as_os_str().is_empty()) {
+                value.directory = None;
+            }
+        }
+        if let Some(directory) = destination.as_ref().and_then(|value| value.directory.as_deref()) {
+            Self::check_directory(directory)?;
+        }
+        Ok(destination)
+    }
+
+    pub fn check_directory(path: &Path) -> io::Result<()> {
+        if !path.is_absolute() || !path.is_dir() {
+            return Err(invalid("导出目录无效或不存在"));
+        }
+        Ok(())
+    }
+
+    pub fn file_path(&self) -> io::Result<&Path> {
+        let path = self.file_path.as_deref().ok_or_else(|| invalid("缺少静默导出文件路径"))?;
+        check_output_file(path)?;
+        Ok(path)
+    }
+
+    pub fn folder(&self) -> io::Result<&Path> {
+        let path = self.folder.as_deref().ok_or_else(|| invalid("缺少静默导出文件夹"))?;
+        Self::check_directory(path)?;
+        if path.parent().is_none() {
+            return Err(invalid("静默导出文件夹不能为根目录"));
+        }
+        Ok(path)
+    }
+
+    pub fn image_path(&self) -> io::Result<&Path> {
+        let path = self.image_path.as_deref().ok_or_else(|| invalid("缺少关联 PNG 路径"))?;
+        if !path.is_absolute() || !path.is_file() {
+            return Err(invalid("关联 PNG 路径无效或不存在"));
+        }
+        Ok(path)
+    }
+}
+
+fn check_output_file(path: &Path) -> io::Result<()> {
+    if !path.is_absolute() || path.file_name().is_none() || (path.exists() && !path.is_file()) {
+        return Err(invalid("导出文件路径无效"));
+    }
+    ExportDestination::check_directory(path.parent().ok_or_else(|| invalid("导出目录无效"))?)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AnimationFrame {
     pub duration: u16,
     #[serde(default)]
@@ -140,6 +205,7 @@ pub struct AnimationOptions {
     pub tags: Vec<Value>,
     #[serde(default)]
     pub name: String,
+    pub destination: Option<ExportDestination>,
 }
 
 fn default_colors() -> usize {
@@ -275,8 +341,31 @@ pub fn encode_gif(options: &AnimationOptions) -> io::Result<Vec<u8>> {
     Ok(output)
 }
 
-fn output_folder(parent: &Path, base: &str, files: &[(String, Vec<u8>)]) -> io::Result<PathBuf> {
+fn output_folder(
+    parent: &Path,
+    base: &str,
+    files: &[(String, Vec<u8>)],
+    destination: Option<&ExportDestination>,
+) -> io::Result<PathBuf> {
     check_size(files.iter().map(|(_, bytes)| bytes.len() as u64).sum())?;
+    if let Some(directory) = destination.and_then(|value| value.directory.as_deref()) {
+        ExportDestination::check_directory(directory)?;
+    }
+    for (name, _) in files {
+        if Path::new(name).file_name().is_none_or(|value| value != name.as_str())
+            || name.contains(['/', '\\'])
+            || name.chars().any(|c| c.is_control() || "<>:\"|?*".contains(c))
+        {
+            return Err(invalid("导出文件名无效"));
+        }
+    }
+    if let Some(destination) = destination.filter(|value| value.silent) {
+        let folder = destination.folder()?;
+        for (name, data) in files {
+            write_atomic(&folder.join(name), data)?;
+        }
+        return Ok(folder.to_path_buf());
+    }
     let mut folder = parent.join(base);
     let mut suffix = 1;
     while folder.exists() {
@@ -287,13 +376,6 @@ fn output_folder(parent: &Path, base: &str, files: &[(String, Vec<u8>)]) -> io::
     fs::create_dir(&staging)?;
     let result = (|| {
         for (name, data) in files {
-            if Path::new(name)
-                .file_name()
-                .is_none_or(|value| value != name.as_str())
-                || name.contains(['/', '\\'])
-            {
-                return Err(invalid("导出文件名无效"));
-            }
             write_atomic(&staging.join(name), data)?;
         }
         fs::rename(&staging, &folder)?;
@@ -326,8 +408,8 @@ pub fn export_sequence(parent: &Path, options: &AnimationOptions) -> io::Result<
         files.push((file, bytes));
     }
     files.push(("animation.json".into(), serde_json::to_vec_pretty(&json!({"format":"pixel-studio-png-sequence","version":1,"width":options.width,"height":options.height,"tags":options.tags,"frames":entries}))?));
-    let folder = output_folder(parent, &format!("{base}-frames"), &files)?;
-    Ok(json!({"folder":folder,"count":options.frames.len()}))
+    let folder = output_folder(parent, &format!("{base}-frames"), &files, options.destination.as_ref())?;
+    Ok(json!({"directory":folder.parent(),"folder":folder,"count":options.frames.len()}))
 }
 
 pub fn read_sequence(
@@ -470,10 +552,38 @@ pub fn export_sheet(parent: &Path, options: &Value) -> io::Result<Value> {
             serde_json::to_vec_pretty(&metadata)?,
         ));
     }
-    let folder = output_folder(parent, &base, &files)?;
+    let destination = ExportDestination::parse(options.get("destination"))?;
+    let folder = output_folder(parent, &base, &files, destination.as_ref())?;
     Ok(
-        json!({"folder":folder,"image":image,"metadata":format!("{base}.{}",if format=="godot" {"tres"}else{"json"}),"sourceMetadata":format!("{base}.{}",if format=="native"{"json"}else{"pixpix.json"}),"engineFormat":format}),
+        json!({"directory":folder.parent(),"folder":folder,"image":image,"metadata":format!("{base}.{}",if format=="godot" {"tres"}else{"json"}),"sourceMetadata":format!("{base}.{}",if format=="native"{"json"}else{"pixpix.json"}),"engineFormat":format}),
     )
+}
+
+pub fn check_sheet_image(image: &Path, options: &Value) -> io::Result<()> {
+    let expected = STANDARD
+        .decode(options["png"].as_str().ok_or_else(|| invalid("缺少预期 PNG"))?)
+        .map_err(|_| invalid("PNG 编码无效"))?;
+    if png_rgba(&read_file(image)?)? != png_rgba(&expected)? {
+        return Err(invalid("关联 PNG 的尺寸或像素与当前导出设置不一致"));
+    }
+    Ok(())
+}
+
+pub fn export_sheet_metadata(image: &Path, target: &Path, options: &Value) -> io::Result<Value> {
+    check_output_file(target)?;
+    let root = image.parent().ok_or_else(|| invalid("图集目录无效"))?;
+    if fs::canonicalize(target.parent().unwrap())? != fs::canonicalize(root)? {
+        return Err(invalid("请将 JSON 保存到 PNG 同一目录"));
+    }
+    if target.exists() && fs::canonicalize(target)? == fs::canonicalize(image)? {
+        return Err(invalid("JSON 路径不能覆盖关联 PNG"));
+    }
+    check_sheet_image(image, options)?;
+    let mut metadata = options["metadata"].as_object()
+        .ok_or_else(|| invalid("图集元数据无效"))?.clone();
+    metadata.insert("image".into(), json!(crate::files::basename(image)));
+    crate::storage::write_json(target, &metadata)?;
+    Ok(json!({"filePath":target,"directory":target.parent(),"imagePath":image,"image":crate::files::basename(image)}))
 }
 
 #[cfg(test)]
@@ -519,6 +629,8 @@ mod tests {
         assert_eq!(restored["manifest"]["frames"][0]["duration"], 80);
         let second = export_sequence(root.path(), &options).unwrap();
         assert_ne!(result["folder"], second["folder"]);
+        assert_eq!(result["directory"], json!(root.path()));
+        assert_eq!(second["directory"], json!(root.path()));
         let metadata = json!({"format":"pixel-studio-png-sequence","version":1,"width":2,"height":1,"frames":[{"file":"../escape.png","duration":80}]});
         fs::write(
             folder.join("invalid.json"),
@@ -527,6 +639,120 @@ mod tests {
         .unwrap();
         assert!(read_sequence_manifest(&folder.join("invalid.json")).is_err());
     }
+    #[test]
+    fn silent_sequence_reuses_exact_folder_and_rejects_missing_destination() {
+        let root = tempfile::tempdir().unwrap();
+        let mut value = json!({"name":"walk","width":2,"height":1,"frames":[{"duration":80,"png":STANDARD.encode(png())}]});
+        let first = export_sequence(root.path(), &serde_json::from_value(value.clone()).unwrap()).unwrap();
+        let folder = Path::new(first["folder"].as_str().unwrap());
+        fs::write(folder.join("keep.txt"), "unrelated").unwrap();
+        value["frames"][0]["duration"] = json!(160);
+        value["destination"] = json!({"silent":true,"folder":folder});
+        let second = export_sequence(root.path(), &serde_json::from_value(value.clone()).unwrap()).unwrap();
+        assert_eq!(second["folder"], first["folder"]);
+        assert_eq!(second["directory"], json!(root.path()));
+        assert_eq!(read_sequence_manifest(&folder.join("animation.json")).unwrap()["manifest"]["frames"][0]["duration"], 160);
+        assert_eq!(fs::read_to_string(folder.join("keep.txt")).unwrap(), "unrelated");
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
+        for destination in [json!({"silent":true}), json!({"silent":true,"folder":root.path().join("missing")})] {
+            value["destination"] = destination;
+            assert!(export_sequence(root.path(), &serde_json::from_value(value.clone()).unwrap()).is_err());
+        }
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn silent_sheet_reuses_folder_and_validates_all_names_before_writing() {
+        let root = tempfile::tempdir().unwrap();
+        let mut options = json!({"name":"hero","png":STANDARD.encode(png()),"metadata":{"size":{"w":2,"h":1},"frames":[{"frame":{"x":0,"y":0,"w":2,"h":1},"duration":100}]}});
+        let first = export_sheet(root.path(), &options).unwrap();
+        let folder = Path::new(first["folder"].as_str().unwrap());
+        options["destination"] = json!({"silent":true,"folder":folder});
+        options["metadata"]["frames"][0]["duration"] = json!(200);
+        let second = export_sheet(root.path(), &options).unwrap();
+        assert_eq!(second["folder"], first["folder"]);
+        assert_eq!(second["directory"], json!(root.path()));
+        assert_eq!(read_sheet_manifest(&folder.join("hero-sheet.json")).unwrap()["metadata"]["frames"][0]["duration"], 200);
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
+        let before = fs::read(folder.join("hero-sheet.png")).unwrap();
+        options["engineFiles"] = json!({"../escape.json":"invalid"});
+        assert!(export_sheet(root.path(), &options).is_err());
+        assert_eq!(fs::read(folder.join("hero-sheet.png")).unwrap(), before);
+        assert!(!root.path().join("escape.json").exists());
+    }
+
+    #[test]
+    fn destinations_require_explicit_valid_paths_without_fallbacks() {
+        let root = tempfile::tempdir().unwrap();
+        assert!(ExportDestination::parse(None).unwrap().is_none());
+        assert!(ExportDestination::parse(Some(&Value::Null)).unwrap().is_none());
+        assert!(ExportDestination::parse(Some(&json!({"directory":""}))).unwrap().unwrap().directory.is_none());
+        for value in [json!(false), json!({"silent":"true"}),
+            json!({"directory":"relative"}), json!({"directory":root.path().join("missing")})] {
+            assert!(ExportDestination::parse(Some(&value)).is_err());
+        }
+        let destination = ExportDestination::parse(Some(&json!({"silent":true,"directory":root.path()}))).unwrap().unwrap();
+        assert!(destination.file_path().is_err());
+        assert!(destination.folder().is_err());
+        assert!(destination.image_path().is_err());
+        for path in [PathBuf::from("relative.png"), root.path().to_path_buf(), root.path().join("missing/image.png")] {
+            let destination = ExportDestination::parse(Some(&json!({"silent":true,"filePath":path}))).unwrap().unwrap();
+            assert!(destination.file_path().is_err());
+        }
+        let path = root.path().join("remembered.png");
+        let destination = ExportDestination::parse(Some(&json!({"silent":true,"filePath":path}))).unwrap().unwrap();
+        assert_eq!(destination.file_path().unwrap(), path);
+        write_atomic(destination.file_path().unwrap(), b"first").unwrap();
+        write_atomic(destination.file_path().unwrap(), b"second").unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"second");
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn metadata_export_reuses_exact_image_and_json_paths_and_checks_pixels() {
+        let root = tempfile::tempdir().unwrap();
+        let image = root.path().join("remembered.png");
+        let target = root.path().join("remembered.json");
+        fs::write(&image, png()).unwrap();
+        let mut options = json!({"png":STANDARD.encode(png()),"metadata":{"image":"old.png","size":{"w":2,"h":1}}});
+        let destination = ExportDestination::parse(Some(&json!({"silent":true,"imagePath":image,"filePath":target}))).unwrap().unwrap();
+        let result = export_sheet_metadata(destination.image_path().unwrap(), destination.file_path().unwrap(), &options).unwrap();
+        assert_eq!(result["filePath"], json!(target));
+        assert_eq!(result["imagePath"], json!(image));
+        assert_eq!(result["directory"], json!(root.path()));
+        assert_eq!(serde_json::from_slice::<Value>(&fs::read(&target).unwrap()).unwrap()["image"], "remembered.png");
+        let before = fs::read(&target).unwrap();
+        let mut equivalent = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut equivalent, 2, 1);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.add_text_chunk("Comment".into(), "same pixels".into()).unwrap();
+            encoder.write_header().unwrap().write_image_data(&[255, 0, 0, 255, 0, 0, 255, 0]).unwrap();
+        }
+        assert_ne!(equivalent, png());
+        options["png"] = json!(STANDARD.encode(equivalent));
+        export_sheet_metadata(&image, &target, &options).unwrap();
+        assert!(export_sheet_metadata(&image, &image, &options).is_err());
+        assert_eq!(fs::read(&image).unwrap(), png());
+        let mut different = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut different, 2, 1);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.write_header().unwrap().write_image_data(&[0; 8]).unwrap();
+        }
+        options["png"] = json!(STANDARD.encode(different));
+        assert!(export_sheet_metadata(&image, &target, &options).is_err());
+        assert_eq!(fs::read(&target).unwrap(), before);
+        options["png"] = json!(STANDARD.encode(png()));
+        let other = tempfile::tempdir().unwrap();
+        assert!(export_sheet_metadata(&image, &other.path().join("different.json"), &options).is_err());
+        assert!(!other.path().join("different.json").exists());
+        fs::remove_file(&image).unwrap();
+        assert!(destination.image_path().is_err());
+        assert!(export_sheet_metadata(&image, &target, &options).is_err());
+        assert_eq!(fs::read(&target).unwrap(), before);
+    }
+
     #[test]
     fn sheet_export_preserves_image_and_metadata() {
         let root = tempfile::tempdir().unwrap();

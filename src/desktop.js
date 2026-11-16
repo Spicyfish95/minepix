@@ -62,7 +62,7 @@ function windowBridge(target){
 
 export async function initializeDesktop(){
  const bridge={testing:false,secondary:current.label!=='main'};
- const methods=['captureScreen','clipboardImages','openRepository','appInfo','editorInfo','editorReady','detachDocument','moveDocument','recordInputAudit','testNotification','recentFiles','recentThumbs','removeRecent','clearRecent','openRecent','startupFiles','openKeymap','openPalette','open','exportAseprite','exportSheetMetadata','exportSheet','exportAnimation','save','saveProject','activateDocument','setDirty','checkUpdates','installUpdate','downloadUpdate','cancelUpdate','updateState','openUpdateRelease','setAutoUpdate','setLocale'];
+ const methods=['captureScreen','clipboardImages','openRepository','appInfo','editorInfo','editorReady','detachDocument','moveDocument','recordInputAudit','testNotification','recentFiles','recentThumbs','removeRecent','clearRecent','openRecent','startupFiles','openKeymap','openPalette','open','exportAseprite','pickExportDirectory','exportSheetMetadata','exportSheet','exportAnimation','save','saveProject','activateDocument','setDirty','checkUpdates','installUpdate','downloadUpdate','cancelUpdate','updateState','openUpdateRelease','setAutoUpdate','setLocale'];
  for(const method of methods)bridge[method]=(...args)=>call(method,...args);
  // Internal smoke helpers may select a fresh entry by index; IPC always receives its path.
  bridge.openRecent=async entry=>{
@@ -82,7 +82,7 @@ export async function initializeDesktop(){
   return thumbnails;
  };
  bridge.exportAnimation=options=>call('exportAnimation',{...options,frames:options.frames.map(frame=>({...frame,...(frame.rgba?{rgba:Array.from(frame.rgba)}:{})}))});
- bridge.exportAseprite=async document=>{const {validateDocument}=await import('./model.js');return call('exportAseprite',validateDocument(document));};
+ bridge.exportAseprite=async(document,destination)=>{const {validateDocument}=await import('./model.js');return call('exportAseprite',validateDocument(document),...(destination?[destination]:[]));};
  bridge.exportSheet=async options=>{
   const {engineFiles}=await import('./formats/engine-export.js');
   const name=String(options.name||'animation').replace(/[<>:"/\\|?*\x00-\x1f]/g,'_').replace(/[. ]+$/g,'').slice(0,100)||'animation',base=name+'-sheet';

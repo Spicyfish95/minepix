@@ -8,6 +8,7 @@ export function menuAvailability(state){
  const enabled=Object.fromEntries(projectCommands.map(id=>[id,hasDocument]));
  for(const id of ['tileset','terrain-preview'])enabled['panel-'+id]=panelAvailable(id,state);
  for(const id of editingCommands)enabled[id]=hasDocument&&canEdit;
+ enabled['quick-export']=hasDocument&&canEdit&&!!state.hasExport;
  enabled['capture-brush']=hasDocument&&canEditPixels&&hasSelection;
  enabled.undo=hasDocument&&canUndo;enabled.redo=hasDocument&&canRedo;
  enabled['reopen-document']=hasClosed;enabled.recover=hasDocument&&hasSavedPath;

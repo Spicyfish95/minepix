@@ -1,0 +1,48 @@
+import {createServer} from 'vite';
+import {spawn} from 'node:child_process';
+import {readFile,mkdtemp,rm,mkdir,writeFile} from 'node:fs/promises';
+import path from 'node:path';
+import {targets,connect} from './cdp.mjs';
+async function runChecks(){
+ const results=[],check=(name,pass)=>{results.push({name,pass:!!pass});if(!pass)throw Error(name);};
+ const calls=[],original=window.desktop;let outcome='success';
+ const output=(method,options,destination)=>{calls.push({method,options:structuredClone(options),destination:structuredClone(destination)});if(outcome==='cancel')return null;if(outcome==='error')throw Error('test write failed');return{directory:destination.directory||'C:/out',...(method==='sheet'||options?.format==='sequence'?{folder:destination.folder||'C:/out/animation'}:{filePath:destination.filePath||'C:/out/image.png'}),...(method==='metadata'?{imagePath:destination.imagePath||'C:/out/image.png'}:{})};};
+ try{
+  window.desktop=new Proxy({save:async(data,kind,name,binary,destination)=>output('save',{data,kind,name,binary},destination),pickExportDirectory:async()=> 'D:/exports',exportAnimation:async options=>output('animation',options,options.destination),exportSheet:async options=>output('sheet',options,options.destination),exportSheetMetadata:async options=>output('metadata',options,options.destination),exportAseprite:async(doc,destination)=>output('aseprite',doc,destination)},{get:(target,key)=>key in target?target[key]:original[key]});
+  localStorage.removeItem('minepix-project-exports-v1');localStorage.removeItem(EXPORT_SETTINGS_KEY);
+  const next=createDocument(2,2,'export-A');next.frames.push(structuredClone(next.frames[0]));replaceDocument(next,true,'C:/projects/a.pix');const first=documentId;
+  check('never-exported project disables quick export',!commandStates()['quick-export']);await quickExport();check('disabled command writes nothing',calls.length===0);
+  let pending=exportDialog();const form=$('modal-form');check('first directory is project folder',form.elements.directory.value==='C:/projects/');
+  await $('choose-export-directory').onclick();check('directory picker updates explicit option',form.elements.directory.value==='D:/exports');
+  form.elements.scale.value=2;form.requestSubmit($('modal-submit'));await pending;
+  check('successful export remembers chosen directory and enables command',calls.at(-1).destination.directory==='D:/exports'&&commandStates()['quick-export']);
+  const saved=lastProjectExport(localStorage,filePath,documentId);check('success remembers scale frame and exact file',saved.options.scale===2&&saved.options.frame===0&&saved.destination.filePath==='C:/out/image.png');
+  pending=exportDialog();check('next dialog uses actual last output directory',form.elements.directory.value==='D:/exports');form.elements.scale.value=3;$('modal').close('cancel');await pending;
+  check('configuration cancellation preserves successful settings',lastProjectExport(localStorage,filePath,documentId).options.scale===2);
+  let count=calls.length;await dispatch('quick-export');check('quick export bypasses modal and sends exact silent destination',calls.length===count+1&&!$('modal').open&&calls.at(-1).destination.silent&&calls.at(-1).destination.filePath===saved.destination.filePath);
+  fi=1;await quickExport();check('quick export reuses previous source frame',lastProjectExport(localStorage,filePath,documentId).options.frame===0);
+  count=calls.length;document.activeElement?.blur();document.dispatchEvent(new KeyboardEvent('keydown',{key:'e',code:'KeyE',ctrlKey:true,bubbles:true,cancelable:true}));for(let i=0;i<30&&busy;i++)await new Promise(r=>setTimeout(r,5));check('Ctrl+E invokes silent quick export',calls.length===count+1&&calls.at(-1).destination.silent);
+  for(const result of ['cancel','error']){outcome=result;pending=exportDialog();form.elements.scale.value=4;form.elements.directory.value='E:/failed';form.requestSubmit($('modal-submit'));await pending;check(result+' does not replace successful config or path',lastProjectExport(localStorage,filePath,documentId).options.scale===2&&defaultExportDirectory(localStorage,filePath,documentId)==='D:/exports');}outcome='success';
+  replaceDocument(createDocument(1,1,'export-B'),true,'C:/projects/b.pix',crypto.randomUUID(),true);check('new tab cannot inherit other project quick configuration',!commandStates()['quick-export']);switchDocument(first);check('switching back restores quick export availability',commandStates()['quick-export']);
+  for(const mode of ['gif','sequence','sheet','sheet-pair','metadata']){
+   pending=exportDialog(mode);if(mode==='gif')form.elements.format.value='gif';form.requestSubmit($('modal-submit'));await pending;
+   const previous=lastProjectExport(localStorage,filePath,documentId);check(mode+' remembers successful configuration',previous.options.mode===mode);
+   count=calls.length;await quickExport();check(mode+' quick export is silent and exact',calls.length===count+1&&calls.at(-1).destination.silent&&!$('modal').open&&(previous.destination.folder?calls.at(-1).destination.folder===previous.destination.folder:calls.at(-1).destination.filePath===previous.destination.filePath));
+  }
+  pending=exportDialog('gif');form.elements.format.value='webp';form.requestSubmit($('modal-submit'));await pending;await quickExport();check('animated WebP uses direct remembered file save',calls.at(-1).method==='save'&&calls.at(-1).options.kind==='webp'&&calls.at(-1).destination.silent);
+  pending=exportDialog('sheet-pair');form.requestSubmit($('modal-submit'));await pending;const layer=doc.layers[0];doc.layers[0]={...layer,id:'removed-layer'};count=calls.length;await quickExport();check('deleted remembered layer reports error without writing',calls.length===count&&!busy);doc.layers[0]=layer;
+  pending=exportAsepriteDialog();check('Aseprite export exposes directory',!!form.elements.directory&&!!$('choose-aseprite-directory'));form.requestSubmit($('modal-submit'));await pending;await quickExport();check('Aseprite quick export uses exact silent path',calls.at(-1).method==='aseprite'&&calls.at(-1).destination.silent);
+  pending=normalMapDialog();check('normal map exposes directory',!!form.elements.directory&&!!$('choose-normal-directory'));for(let i=0;i<200&&$('modal-submit').disabled;i++)await new Promise(r=>setTimeout(r,25));check('normal map preview completes',!$('modal-submit').disabled);form.requestSubmit($('modal-submit'));await pending;const normal=lastProjectExport(localStorage,filePath,documentId);check('normal map remembers generation settings',normal.options.mode==='normal-map'&&!!normal.options.settings.preset);await quickExport();check('normal map quick export regenerates silently',calls.at(-1).method==='save'&&calls.at(-1).destination.silent&&!$('modal').open&&lastProjectExport(localStorage,filePath,documentId).options.mode==='normal-map');
+  check('export never changes document history or dirty state',history.undoStack.length===0&&!dirty);
+  if($('error-dialog').open)$('error-dialog').close();void exportDialog('png');
+  return{ok:true,results};
+ }catch(error){return{ok:false,results,error:error.stack};}finally{window.desktop=original;}
+}
+const server=await createServer({server:{port:14214,strictPort:true},plugins:[{name:'quick-export-browser',transform(source,id){if(id.replaceAll('\\','/').endsWith('/src/app.js'))return source+'\nwindow.runQuickExportChecks='+runChecks.toString()+';';},transformIndexHtml(html){return html.replace(/<script type="module" src="(?:\.\/|\/)?bootstrap\.js"><\/script>/,`<script type="module">import {applicationMenu} from '/application-menu.js';window.desktop=new Proxy({testing:true,secondary:false,inputAudit:false,editorInfo:async()=>({id:0,detached:false}),windowMenu:async()=>applicationMenu(()=>{}),windowState:async()=>({maximized:false}),updateState:async()=>({status:'idle'}),appInfo:async()=>({packaged:false,autoUpdate:false}),recentFiles:async()=>[],recentThumbs:async()=>[],listRecovery:async()=>[],onWindowMenu:()=>{},recoveryForPath:async()=>null},{get:(target,key)=>key in target?target[key]:(()=>{})});await import('/app.js');await window.chromeReady;window.exportTestReady=true;</script>`);}}]});
+await server.listen();await mkdir('artifacts',{recursive:true});const profile=await mkdtemp(path.resolve('artifacts/quick-export-browser-'));let browser,session;
+try{
+ browser=spawn(process.env.MINEPIX_TEST_BROWSER||'C:/Program Files/Google/Chrome/Application/chrome.exe',['--headless=new','--disable-gpu','--no-first-run','--disable-extensions',`--user-data-dir=${profile}`,'--remote-debugging-port=0','--window-size=1440,1000',server.resolvedUrls.local[0]+'index.html'],{windowsHide:true,stdio:'ignore'});
+ for(let i=0;i<150;i++){if(!session)try{const port=Number((await readFile(path.join(profile,'DevToolsActivePort'),'utf8')).split('\n')[0]);const target=(await targets(port)).find(t=>t.type==='page');if(target)session=await connect(target);}catch{}if(session&&await session.evaluate('window.exportTestReady===true'))break;await new Promise(r=>setTimeout(r,100));}
+ if(!session||!await session.evaluate('window.exportTestReady===true'))throw Error('Editor failed to initialize');
+ const result=await session.evaluate('window.runQuickExportChecks()');await session.screenshot(path.resolve('artifacts/quick-export-browser.png'));await writeFile('artifacts/quick-export-browser.json',JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result,null,2));if(!result.ok)process.exitCode=1;
+}finally{session?.close();if(browser&&browser.exitCode===null){const exited=new Promise(r=>browser.once('exit',r));browser.kill();await exited;}await server.close();await rm(profile,{recursive:true,force:true,maxRetries:5,retryDelay:200});}
