@@ -4,11 +4,17 @@ import {getCurrentWindow,Window} from '@tauri-apps/api/window';
 import {applicationMenu} from './application-menu.js';
 import {packProjectSave,unpackProjectRead,openedProject} from './project-transfer.js';
 
-// 拦截浏览器刷新快捷键，避免 WebView2 重载页面丢失所有文档状态。
+// 拦截 WebView2 原生浏览器快捷键，防止刷新/查找/打印/源码/缩放重置等操作破坏编辑器状态。
 document.addEventListener('keydown',event=>{
   if(event.defaultPrevented||event.isComposing||event.keyCode===229)return;
-  if((event.ctrlKey||event.metaKey)&&!event.altKey&&!event.shiftKey&&event.code==='KeyR'){event.preventDefault();return;}
+  const ctrl=event.ctrlKey||event.metaKey;
+  if(ctrl&&!event.altKey&&event.code==='KeyR'){event.preventDefault();return;}
   if(event.code==='F5'){event.preventDefault();return;}
+  if(ctrl&&!event.altKey&&!event.shiftKey&&event.code==='KeyF'){event.preventDefault();return;}
+  if(event.code==='F3'){event.preventDefault();return;}
+  if(ctrl&&!event.altKey&&!event.shiftKey&&event.code==='KeyP'){event.preventDefault();return;}
+  if(ctrl&&!event.altKey&&!event.shiftKey&&event.code==='KeyU'){event.preventDefault();return;}
+  if(ctrl&&!event.altKey&&!event.shiftKey&&event.code==='Digit0'){event.preventDefault();return;}
 },true);
 
 const handlers=new Map(),current=getCurrentWindow();
