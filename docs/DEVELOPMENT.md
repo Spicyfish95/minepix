@@ -38,6 +38,8 @@ npm run package
 
 ## 定向测试
 
+更新面板文案调整范围：下载入口由“前往 GitHub Release 下载”改为“手动下载”，英文为“Manual download”，保留原下载地址与点击行为。中英文按钮文案及点击调用浏览器定向检查 4 项通过，静态差异确认仅修改文案，仓库与差异检查通过。现有更新面板浏览器专项在“主题强调色即时应用于图标”断言失败，使用未修改的 help.js 对照运行也在同处失败，不计为通过；不扩大此次文案调整范围。
+
 2.0.5 版本准备范围：同步 package.json、package-lock.json、Tauri 配置、Cargo 清单及锁文件中的应用版本，整理本次快捷键、标签关闭与异步粘贴修复及缓存流程为 2.0.5 更新说明，同步中英文 README。发布协议、说明提取及安装配置 Node 定向测试 23 项通过，五处文件中的六个应用版本字段均为 2.0.5，本版说明提取及仓库检查通过。创建本地提交并推送当前分支；不构建安装包、不创建发布标签或修改更新频道。
 
 快捷键冲突修复范围：全局快捷键尊重控件已处理的键盘事件；网格按住绑定显式配置 Shift 时必须按 Shift，未配置时仍允许 Shift 选区约束，并按实际匹配范围校验冲突；松开网格主键时忽略修饰键释放顺序。执行 `node --test tests/keymap.test.js tests/space-pan.test.js tests/interaction.test.js`（34 项）和 `node scripts/test-space-pan-browser.mjs`（72 项），覆盖面板分隔条／标签、画布方向键、两套预设、Alt／Ctrl／Shift 组合键及不同释放顺序；前端构建、生产资源及仓库检查通过。首次 Node 测试因新增模拟事件缺少 `preventDefault()` 失败，补齐后全部通过。浏览器结果仅存本地 `artifacts/space-pan-browser.json`；尚未进行真实桌面键鼠验证，不运行全量回归。

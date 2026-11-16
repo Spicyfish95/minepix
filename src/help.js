@@ -55,7 +55,7 @@ export function createHelp({desktop,modal,message,report}){
   find('error').hidden=state.status!=='error';find('error').textContent=state.error?text('原因：','Reason: ')+state.error.message:'';
   panel.querySelector('.update-notes').textContent=releaseNotesText(state.notes||'');
   find('hint').textContent=state.notice==='install-cancelled'?text('已取消安装，下载的更新已保留。','Installation cancelled. The downloaded update is kept.'):state.status==='downloaded'?text('点击“重启并更新”后，将先处理所有窗口的未保存项目。','Restart and update checks unsaved projects in every window first.'):text('下载期间可以继续使用软件。可前往 GitHub Release 手动下载。','You can keep working while downloading, or download manually from GitHub Release.');
-  find('release').textContent=text('前往 GitHub Release 下载','Download from GitHub Release');
+  find('release').textContent=text('手动下载','Manual download');
   const primary=find('primary');primary.hidden=['checking','downloading','cancelling','preparing','installing'].includes(state.status);
   primary.textContent=state.status==='error'?state.error.operation==='install'?text('重试安装','Retry installation'):text('重试','Retry'):state.status==='downloaded'?text('重启并更新','Restart and update'):state.status==='current'||state.status==='idle'?text('重新检查','Check again'):text('下载更新','Download update');
   find('cancel').hidden=!transferring;find('cancel').disabled=state.status==='cancelling';find('cancel').textContent=text('取消下载','Cancel download');
