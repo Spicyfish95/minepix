@@ -17,8 +17,10 @@ test('lock, visibility, playback and busy state block edits while allowing navig
   assert.equal(mode({playing:true,space:true}).cursor,'grab');
   assert.equal(mode({busy:true,space:true}).cursor,'wait');
 });
-test('zoom Alt shrinks, right drawing uses eraser cursor, active strokes retain erasing',()=>{
-  assert.equal(mode({tool:'zoom',alt:true}).cursor,'zoom-out');
+test('zoom Alt picks colors and restores zoom while drawing retains eraser cursors',()=>{
+  assert.equal(mode({tool:'zoom',alt:true}).cursor,'eyedropper');
+  assert.equal(mode({tool:'zoom'}).cursor,'zoom-in');
+  assert.equal(mode({tool:'zoom',alt:true,gesture:{kind:'eyedropper'}}).tool,'eyedropper');
   assert.equal(mode({button:2}).cursor,'eraser');
   assert.equal(mode({gesture:{kind:'line',color:0}}).cursor,'eraser');
   assert.equal(mode({tool:'move',button:2}).cursor,'move');

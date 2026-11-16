@@ -14,7 +14,7 @@ export const SHORTCUTS = [
   ['时间轴多选','点击帧头或 cel；Shift 连续范围，Ctrl / Cmd 离散多选；拖动帧头重排全部图层'],
   ['工具切换','B 铅笔 / E 橡皮 / G 填充 / I 吸管'],
   ['形状与选区','L 直线 / U 矩形 / O 椭圆 / K 曲线 / P 多边形 / C 轮廓 / M 选区 / V 移动'],
-  ['平移与缩放','H 平移 / Z 缩放；缩放工具按 Alt 缩小'],
+  ['平移与缩放','H 平移 / Z 缩放；右键缩小，Alt 临时取色'],
   ['临时工具','按住 Alt 吸色；按住空格或中键拖动平移'],
   ['网格选取','选区工具中按住 G 进入网格选取，松开恢复自由矩形；点击选中整格，拖动选择多格'],
   ['动画播放','点击时间轴播放 / 暂停按钮；空格仅用于临时平移'],
@@ -70,9 +70,9 @@ export function selectionCursor(kind) {
 export function pointerMode({tool,space=false,alt=false,gesture=null,button=0,busy=false,playing=false,locked=false,visible=true,rightButtonMode='erase',selectionKind='rect'}) {
   if(busy)return {tool,cursor:'wait',blocked:true};
   if(gesture?.kind==='pan')return {tool:'hand',cursor:'grabbing'};
-  const active=gesture?.kind || (space||button===1?'hand':alt&&tool!=='zoom'?'eyedropper':tool);
+  const active=gesture?.kind || (space||button===1?'hand':alt?'eyedropper':tool);
   if(active==='hand')return {tool:active,cursor:'grab'};
-  if(active==='zoom')return {tool:active,cursor:alt?'zoom-out':'zoom-in'};
+  if(active==='zoom')return {tool:active,cursor:'zoom-in'};
   const edits=!['select','slice','eyedropper'].includes(active);
   if(playing || (edits&&(locked||!visible)))return {tool:active,cursor:'not-allowed',blocked:true};
   const erasing=active==='eraser'||gesture?.erasing||(gesture?.erasing===undefined&&gesture?.color===0)||button===2&&rightButtonMode==='erase'&&['pencil','line','rect','ellipse','fill','curve','polygon','contour'].includes(active);

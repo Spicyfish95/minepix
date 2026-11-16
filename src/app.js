@@ -69,7 +69,8 @@ import { mergeDown, mergeVisible, flattenSprite } from './layer-commands.js';
 import { reframe, resizeCanvas, contentBounds, flipSprite, spriteSize } from './canvas-commands.js';
 import { loadPreviewSize, savePreviewSize, validatePreviewSize } from './preview-settings.js';
 import { validateGrid, loadGrid, saveGrid, gridLines } from './grid-settings.js';
-import { DEFAULT_TOLERANCE, replaceColorInDocument } from './color-replace.js';
+import {replaceColorInDocument} from './color-replace.js';
+import {replacementColorDialog} from './color-replace-dialog.js';
 import { isTileset, toTileset, toPixels, matchTiles, terrainZones } from './tilemap.js';
 import {createPreviewTerrain, resizePreviewTerrain, setPreviewCell, resolvePreviewCells, tintPaintedCells, rasterizePreviewTiles, previewRenderError, assertPreviewRenderSize} from './terrain-preview.js';
 import { initTilesetPanel, visibleBitTiles } from './tileset-panel.js';
@@ -228,7 +229,7 @@ function syncInteraction(){
   const effective=tools.find(t=>t[0]===mode.tool)||tools.find(t=>t[0]===tool);
   uiAll('#tools [data-tool]').forEach(b=>{b.classList.toggle('active',b.dataset.tool===(tool==='select'?selectionToolId():tool));b.classList.toggle('temporary',mode.tool!==tool&&b.dataset.tool===mode.tool);b.setAttribute('aria-pressed',String(b.dataset.tool===(tool==='select'?selectionToolId():tool)));});
   $('tool-name').textContent=tool==='select'&&modifiers.grid?'网格选取 · 临时':effective[2]+(mode.tool!==tool?' · 临时':'');
-  const hints={slice:'拖动建立切片 · 拖动内部移动 · 拖动边角缩放 · 双击属性 · Delete 删除',pencil:`左键绘画 · 右键${({erase:'擦除',background:'背景色',pan:'平移',eyedropper:'吸色'})[rightButtonMode]} · [ ] 笔刷大小`,eraser:'拖动擦除 · [ ] 笔刷大小',blur:'拖动以 3 × 3 邻域柔化像素 · 使用当前笔形和尺寸',text:'点击画布直接输入 · 拖动可拉出定宽文本框并自动换行 · Esc 取消 · Ctrl+Enter 或点击外部提交',gradient:'拖动定义前景色到背景色渐变 · 右键反向 · Shift 约束方向',fill:'点击填充连通区域 · 右键清空区域',eyedropper:'点击吸取合成后的可见颜色',line:'拖动绘制直线 · Shift 约束 45°',rect:'拖动绘制矩形 · Shift 绘制正方形',ellipse:'拖动绘制椭圆 · Shift 绘制圆形',curve:'拖出起终点，再移动鼠标调弯曲 · 点击 / Enter 确认 · Esc 取消',polygon:'逐点点击 · 双击 / Enter 闭合 · Esc 取消',contour:'自由拖出闭合轮廓 · 可选填充形状',select:'工具栏切换选区形状，上方切换集合操作 · 多边形 Enter 确认 · 方向键移动',move:'拖动移动像素 · Shift 锁定轴 · 方向键微调',hand:'拖动画布 · 松开临时按键后恢复原工具',zoom:modifiers.alt?'点击缩小 · 松开 Alt 恢复放大':'点击放大 · 按住 Alt 点击缩小'};
+  const hints={slice:'拖动建立切片 · 拖动内部移动 · 拖动边角缩放 · 双击属性 · Delete 删除',pencil:`左键绘画 · 右键${({erase:'擦除',background:'背景色',pan:'平移',eyedropper:'吸色'})[rightButtonMode]} · [ ] 笔刷大小`,eraser:'拖动擦除 · [ ] 笔刷大小',blur:'拖动以 3 × 3 邻域柔化像素 · 使用当前笔形和尺寸',text:'点击画布直接输入 · 拖动可拉出定宽文本框并自动换行 · Esc 取消 · Ctrl+Enter 或点击外部提交',gradient:'拖动定义前景色到背景色渐变 · 右键反向 · Shift 约束方向',fill:'点击填充连通区域 · 右键清空区域',eyedropper:'按住拖动连续吸取合成后的可见颜色',line:'拖动绘制直线 · Shift 约束 45°',rect:'拖动绘制矩形 · Shift 绘制正方形',ellipse:'拖动绘制椭圆 · Shift 绘制圆形',curve:'拖出起终点，再移动鼠标调弯曲 · 点击 / Enter 确认 · Esc 取消',polygon:'逐点点击 · 双击 / Enter 闭合 · Esc 取消',contour:'自由拖出闭合轮廓 · 可选填充形状',select:'工具栏切换选区形状，上方切换集合操作 · 多边形 Enter 确认 · 方向键移动',move:'拖动移动像素 · Shift 锁定轴 · 方向键微调',hand:'拖动画布 · 松开临时按键后恢复原工具',zoom:'点击放大 · 右键缩小 · 按住 Alt 取色'};
   $('tool-hint').textContent=mode.blocked?(busy?'正在处理文件…':playing?'动画播放中 · 点击暂停后编辑':doc.layers[li].locked?'图层已锁定 · 解锁后编辑':'图层已隐藏 · 显示后编辑'):tool==='select'&&modifiers.grid?`网格选取：点击选中整格 · 拖动选择多格 · 松开 ${(keymap.bindings['grid-select']||['G'])[0]} 恢复自由矩形`:hints[mode.tool];
   syncBrushControls();syncCommandStates();updateBrushPreview(mode);
   if(transformSession){viewport.dataset.cursor='transform';viewport.style.cursor=transformCursor(transformSession.state,transformSession.drag?.handle||transformSession.hover,!!transformSession.drag);}
@@ -332,7 +333,9 @@ function paletteTargetColor(){const index=paletteTargetIndex();return index===nu
 function syncPalettePanel(){const value=paletteTargetColor();$('hex').value=value.toUpperCase();colorAdjustments?.update(value);}
 function useForegroundForPattern(){if(brushSettings.shape!=='pattern'||brushSettings.patternMode==='brush')return;brushSettings.patternMode='brush';updateBrushControls();message('图案笔刷已切换为单色（前景色）；改回源对齐或落点对齐可恢复图案原色');}
 function setColor(value,index=null){if(modeOf(doc)==='indexed'){colorIndex=index??createMapper(doc,doc.layers[li])(colorValue(normalizeColor(value))).index;}else if(modeOf(doc)==='grayscale')value='#'+grayPixel(colorValue(normalizeColor(value))).toString(16).padStart(8,'0');const next=normalizeColor(value);if(next!==color)useForegroundForPattern();color=next;saveColorPreferences();renderColors();}
-function pickColor(value){const index=paletteTargetIndex();if(index!==null)setPaletteColor(index,value);setColor(value,index);}
+function pickColor(value){const index=paletteTargetIndex();if(index!==null)setPaletteColor(index,value,{live:gesture?.kind==='eyedropper'});setColor(value,index);}
+function beginColorPick(event,node){gesture={kind:'eyedropper',pointerId:event.pointerId,node,oldSelection:selection,foreground:color,colorIndex,...(paletteTargetIndex()!==null?{before:clone(doc)}:{})};node.setPointerCapture(event.pointerId);}
+function pickCanvasColor(event){const raw=point(event,false);if(!insideTiledCanvas(doc,raw,tiledMode))return;const p=tiledPoint(doc,raw.x,raw.y,tiledMode),c=composite(doc,fi),i=(p.y*doc.width+p.x)*4;if(c[i+3])pickColor(fromRgba({r:c[i],g:c[i+1],b:c[i+2],a:c[i+3]}));}
 function setBackground(value){const next=normalizeColor(value);if(next!==background)useForegroundForPattern();background=next;saveColorPreferences();renderColors();}
 function renderPalette(){
  syncPalettePresetButton();
@@ -599,13 +602,14 @@ function previewPaletteColor(index,value){
   if(swatch)swatch.style.background=color;
   $('hex').value=color.toUpperCase();
 }
-function setPaletteColor(index,value,{preserveAlpha=false}={}){
+function setPaletteColor(index,value,{preserveAlpha=false,live=false}={}){
   const old=doc.palette[index];if(old===undefined)return;
   let next=normalizeColor(value);
   if(preserveAlpha)next=normalizeColor(next.slice(0,7)+(old.length===9?old.slice(7):'ff'));
   if(modeOf(doc)==='grayscale')next='#'+grayPixel(colorValue(next)).toString(16).padStart(8,'0');
   if(next===old)return;
-  mutate(()=>{const colors=[...doc.palette];colors[index]=next;applyIndexedPalette(doc,colors,colors.map((_,i)=>i));},'已修改色板颜色',{colorsReady:true});
+  const apply=()=>{const colors=[...doc.palette];colors[index]=next;applyIndexedPalette(doc,colors,colors.map((_,i)=>i));};
+  if(live){apply();onionCache.clear();draw();}else mutate(apply,'已修改色板颜色',{colorsReady:true});
 }
 function insertPaletteColor(index,value=doc.palette[index]){
   if(doc.palette.length>=256)return message('色板最多 256 色');
@@ -1530,7 +1534,7 @@ viewport.addEventListener('pointerdown',event=>{
   // 有选区时右键专用于选区菜单；不改变选区，也不进入擦除/背景色/平移。
   if(event.button===2&&selection&&!shapeSession&&brushSettings.ink!=='shading')return;
   if(mode.tool==='hand'){gesture={kind:'pan',client:{x:event.clientX,y:event.clientY},pan:{...pan},pointerId:event.pointerId};viewport.setPointerCapture(event.pointerId);syncInteraction();return;}
-  if(mode.tool==='zoom'){const r=viewport.getBoundingClientRect();gesture={kind:'zoom',pointerId:event.pointerId,client:{x:event.clientX,y:event.clientY},anchor:{x:event.clientX-r.left,y:event.clientY-r.top},startZoom:zoom,startPan:{...pan},direction:event.altKey||event.button===2?-1:1,moved:false};viewport.setPointerCapture(event.pointerId);syncInteraction();return;}
+  if(mode.tool==='zoom'){const r=viewport.getBoundingClientRect();gesture={kind:'zoom',pointerId:event.pointerId,client:{x:event.clientX,y:event.clientY},anchor:{x:event.clientX-r.left,y:event.clientY-r.top},startZoom:zoom,startPan:{...pan},direction:event.button===2?-1:1,moved:false};viewport.setPointerCapture(event.pointerId);syncInteraction();return;}
   if(mode.tool==='slice'){if(!mode.blocked)beginSlicePointer(event);return;}
   if(!(PAINTING_TOOLS.has(mode.tool)||['select','eyedropper'].includes(mode.tool)?insideTiledCanvas(doc,raw,tiledMode):raw.x>=0&&raw.y>=0&&raw.x<doc.width&&raw.y<doc.height))return;
   if(mode.blocked){editable();syncInteraction();return;}
@@ -1541,7 +1545,7 @@ viewport.addEventListener('pointerdown',event=>{
     else{const last=shapeSession.vertices.at(-1);if(last.x!==p.x||last.y!==p.y)shapeSession.vertices.push(p);renderShapeSession(p);}
     return;
   }
-  if(active==='eyedropper'){Object.assign(p,tiledPoint(doc,raw.x,raw.y,tiledMode));const c=composite(doc,fi),i=(p.y*doc.width+p.x)*4;if(c[i+3])pickColor(fromRgba({r:c[i],g:c[i+1],b:c[i+2],a:c[i+3]}));return;}
+  if(active==='eyedropper'){beginColorPick(event,viewport);pickCanvasColor(event);return;}
   if(active==='text'){
     if(modeOf(doc)==='indexed')return message('索引颜色模式下不能使用文字工具');
     if(event.button!==0)return;
@@ -1602,6 +1606,7 @@ viewport.addEventListener('pointermove',event=>{
   }
   rememberPointer(event);const p=gesture?constrainCanvasPoint(gesture.kind,gesture.start||point(event),point(event),event.shiftKey&&!(gesture.kind==='select'&&(gesture.selectionKind==='lasso'||gesture.selectionKind==='grid'||keymap.profile==='aseprite')),doc.width,doc.height):point(event);$('coordinates').textContent=`X ${p.x}　Y ${p.y}`;if(shapeSession&&!gesture){renderShapeSession(p);return;}if(!gesture){if(modifiers.shift)drawOverlay();else syncInteraction();return;}if(gesture.pointerId!==event.pointerId)return;
   const g=gesture;
+  if(g.kind==='eyedropper'){pickCanvasColor(event);return;}
   if(g.kind==='slice'){const index=doc.slices.findIndex(s=>s.id===g.sliceId),bounds=g.handle==='create'?rect(g.start,p):dragSliceBounds(g.original.bounds,g.handle,g.rawStart,transformEventPoint(event),doc.width,doc.height);doc.slices[index]=setSliceKey(doc.slices[index],fi,g.handle==='move'?{...g.original,bounds}:resizedSliceGeometry(g.original,bounds));doc.requiredFeatures=[...new Set([...doc.requiredFeatures,'slice-keyframes'])];drawOverlay();return;}
   if(g.kind==='symmetry'){const r=viewport.getBoundingClientRect(),axes=doc.symmetryAxes||{x:doc.width/2,y:doc.height/2},value=g.axis==='x'?(event.clientX-r.left-pan.x)/zoom:(event.clientY-r.top-pan.y)/zoom;doc.symmetryAxes={...axes,[g.axis]:Math.max(0,Math.min(g.axis==='x'?doc.width:doc.height,Math.round(value*2)/2))};drawOverlay();return;}
   if(g.kind==='pan'){pan={x:g.pan.x+event.clientX-g.client.x,y:g.pan.y+event.clientY-g.client.y};place();drawOverlay();return;}
@@ -1616,12 +1621,13 @@ viewport.addEventListener('pointermove',event=>{
   else if(g.kind==='move'){doc.frames[fi].cels[li]=g.before.frames[fi].cels[li].slice();doc.frames[fi].celProperties=structuredClone(g.before.frames[fi].celProperties);if(g.baseIndices)doc.frames[fi].indices[li]=g.before.frames[fi].indices[li].slice();const dx=p.x-g.start.x,dy=p.y-g.start.y;clearRegion(doc,pixels(),g.oldSelection);pasteRegion(doc,pixels(),g.region,g.region.x+dx,g.region.y+dy,null,true);if(g.oldSelection)selection=translateSelection(doc,g.oldSelection,dx,dy);}
   draw();
 });
-function finishGesture(cancel=false){if(!gesture)return;const g=gesture;gesture=null;if(cancel){if(g.before)doc=g.before;if(g.kind==='pan')pan=g.pan;else if(g.kind==='zoom'){zoom=g.startZoom;pan=g.startPan;}else selection=g.oldSelection;}else if(g.kind==='zoom'&&!g.moved)scale(g.direction<0?.8:1.25,g.anchor);else if(g.before&&history.push(g.before,doc)){if(g.kind==='pencil'||g.kind==='eraser')lastStrokePoint={documentId,frame:fi,layer:li,tool:g.kind,point:g.last};changed();message('已绘制 · '+(tools.find(t=>t[0]===g.kind)?.[2]??(g.kind==='symmetry'?'对称轴':g.kind==='slice'?'切片':g.kind)));}if(g.pointerId!==undefined&&viewport.hasPointerCapture(g.pointerId))viewport.releasePointerCapture(g.pointerId);if(pendingTool){const value=pendingTool;pendingTool=null;setTool(value);}render();}
+function finishGesture(cancel=false){if(!gesture)return;const g=gesture;gesture=null;if(cancel){if(g.before)doc=g.before;if(g.kind==='pan')pan=g.pan;else if(g.kind==='zoom'){zoom=g.startZoom;pan=g.startPan;}else selection=g.oldSelection;if(g.kind==='eyedropper')setColor(g.foreground,g.colorIndex);}else if(g.kind==='zoom'&&!g.moved)scale(g.direction<0?.8:1.25,g.anchor);else if(g.before&&history.push(g.before,doc,{colorsReady:g.kind==='eyedropper'})){if(g.kind==='pencil'||g.kind==='eraser')lastStrokePoint={documentId,frame:fi,layer:li,tool:g.kind,point:g.last};changed();message('已绘制 · '+(tools.find(t=>t[0]===g.kind)?.[2]??(g.kind==='symmetry'?'对称轴':g.kind==='slice'?'切片':g.kind)));}const node=g.node||viewport;if(g.pointerId!==undefined&&node.hasPointerCapture(g.pointerId))node.releasePointerCapture(g.pointerId);if(pendingTool){const value=pendingTool;pendingTool=null;setTool(value);}render();}
 viewport.addEventListener('pointerup',e=>{
   if(transformSession){if(transformSession.drag?.pointerId===e.pointerId)finishTransformDrag();return;}
   if(textSession?.drag){if(textSession.drag.pointerId===e.pointerId)finishTextDrag();return;}
   rememberPointer(e);
   if(gesture?.pointerId===e.pointerId){
+    if(gesture.kind==='eyedropper')pickCanvasColor(e);
     if(gesture.kind==='curve'){
       const session=gesture;gesture=null;shapeSession=session;
       if(viewport.hasPointerCapture(e.pointerId))viewport.releasePointerCapture(e.pointerId);
@@ -1943,7 +1949,13 @@ function startBoardPointer(event,item,kind,corner){
   const panel=boardPanel(),board=panel.querySelector('.reference-board');
   if(event.button===1||space){startBoardPan(event);return;}
   if(event.button!==0)return;
-  if(tool==='eyedropper'||modifiers.alt&&kind==='move'){pickBoardColor(event,item);return;}
+  if(tool==='eyedropper'||modifiers.alt&&kind==='move'){
+    if(busy||gesture||shapeSession||playing)return;
+    const node=event.currentTarget;beginColorPick(event,node);pickBoardColor(event,item);
+    node.onpointermove=move=>{if(gesture?.kind==='eyedropper'&&gesture.pointerId===move.pointerId)pickBoardColor(move,item);};
+    const finish=cancel=>{node.onpointermove=node.onpointerup=node.onpointercancel=node.onlostpointercapture=null;if(gesture?.kind==='eyedropper'&&gesture.pointerId===event.pointerId)finishGesture(cancel);};
+    node.onpointerup=up=>{if(gesture?.pointerId!==up.pointerId)return;pickBoardColor(up,item);finish(false);};node.onpointercancel=()=>finish(true);node.onlostpointercapture=()=>finish(true);return;
+  }
   event.preventDefault();event.stopPropagation();
   const node=event.currentTarget,view=boardView(),start={x:item.x,y:item.y,scale:item.scale,clientX:event.clientX,clientY:event.clientY},direction=corner==='nw'||corner==='sw'?-1:1;
   node.setPointerCapture(event.pointerId);
@@ -2437,12 +2449,11 @@ async function canvasSizeDialog(){
 // 替换颜色：对应 Aseprite 编辑→替换颜色（Shift+R），容差 0-255 单值滑杆。
 async function replaceColorDialog(){
   if(!editable())return;
-  const values=await modal('替换颜色','<div class="sheet-fields"><label>原颜色 <input name="from" type="color" required></label><label>新颜色 <input name="to" type="color" required></label><label>容差 <input name="tolerance" type="number" min="0" max="255" value="'+DEFAULT_TOLERANCE+'" required></label><label>范围 <select name="scope"><option value="cel">当前 cel</option><option value="layer">当前层全部帧</option><option value="sprite">整个精灵</option></select></label></div><p>容差 0 表示必须完全相等，255 命中任意颜色，按 RGBA 四通道最大差值判定。索引色缺少目标色时自动加入色板（最多 256 色）。可撤销。</p>',form=>{form.elements.from.value=color.slice(0,7);form.elements.to.value=background.slice(0,7);},v=>{if(+v.tolerance<0||+v.tolerance>255)throw new Error('容差需在 0-255 之间');});
-  if(!values)return;
-  const options={from:values.from,to:values.to,tolerance:+values.tolerance,scope:values.scope,frame:fi,layer:li,selection};
+  const options=await replacementColorDialog({doc,modal,from:color,to:background,fromIndex:colorIndex,toIndex:modeOf(doc)==='indexed'?createMapper(doc,doc.layers[li])(colorValue(background)).index:0,frame:fi,layer:li,selection});
+  if(!options)return;
   const count=replaceColorInDocument(clone(doc),options);
   if(!count)return message('没有匹配的颜色');
-  mutate(()=>replaceColorInDocument(doc,options),'已替换 '+count+' 个像素');
+  mutate(()=>replaceColorInDocument(doc,options),'已替换 '+count+' 个像素',{colorsReady:modeOf(doc)==='indexed'});
 }
 // 图像大小：缩放全部图层与帧（Aseprite 精灵→图像大小，Ctrl+Alt+I），与只改画布的「画布」命令语义不同。
 async function spriteSizeDialog(){
@@ -2815,12 +2826,12 @@ async function runInteractionSmoke(check){
     setTool('pencil');setBrush(3);pointEvent('pointermove',4,4);check('笔刷范围跟随缩放',!brushPreview.hidden&&parseFloat(brushPreview.style.width)===3*zoom);setBrush(1);
     pixels()[4*16+4]=colorValue('#44766d');const oldHistory=history.undoStack.length;
     key('keydown','Alt','AltLeft',{altKey:true});check('Alt 显示临时吸管',viewport.dataset.cursor==='eyedropper'&&tool==='pencil');
-    pointEvent('pointerdown',4,4,{altKey:true});key('keyup','Alt','AltLeft');check('吸色后恢复原工具',color==='#44766d'&&viewport.dataset.cursor==='pencil'&&history.undoStack.length===oldHistory);
+    pointEvent('pointerdown',4,4,{altKey:true});pointEvent('pointerup',4,4);key('keyup','Alt','AltLeft');check('吸色后恢复原工具',color==='#44766d'&&viewport.dataset.cursor==='pencil'&&history.undoStack.length===oldHistory);
     pointEvent('pointerdown',4,4,{button:2});check('右键擦除光标',viewport.dataset.cursor==='eraser');pointEvent('pointerup',4,4,{button:2});check('右键实际擦除并恢复',pixels()[4*16+4]===0&&viewport.dataset.cursor==='pencil');
     const oldPan={...pan};key('keydown',' ','Space');pointEvent('pointerdown',2,2);check('平移拖动显示抓手',viewport.dataset.cursor==='grabbing');pointEvent('pointermove',3,3);pointEvent('pointerup',3,3);key('keyup',' ','Space');check('空格平移不触发播放',!playing&&pan.x!==oldPan.x&&viewport.dataset.cursor==='pencil');
     press(' ','Space');check('单按空格仅恢复画笔',!playing&&viewport.dataset.cursor==='pencil');$('play').click();check('播放按钮启动动画并禁止绘画',playing&&viewport.dataset.cursor==='not-allowed');press(' ','Space');check('空格不暂停动画',playing&&viewport.dataset.cursor==='not-allowed');$('play').click();check('暂停按钮恢复绘画',!playing&&viewport.dataset.cursor==='pencil');
     setTool('move');pointEvent('pointerdown',2,2,{button:1});pointEvent('pointermove',3,3,{button:1});pointEvent('pointerup',3,3,{button:1});check('中键平移恢复移动工具',tool==='move'&&viewport.dataset.cursor==='move');
-    setTool('zoom');const oldZoom=zoom;key('keydown','Alt','AltLeft',{altKey:true});pointEvent('pointerdown',2,2,{altKey:true});key('keyup','Alt','AltLeft');check('缩放工具 Alt 缩小',Math.abs(zoom-oldZoom*.8)<.001&&viewport.dataset.cursor==='zoom-in');
+    setTool('zoom');const oldZoom=zoom;key('keydown','Alt','AltLeft',{altKey:true});pointEvent('pointerdown',2,2,{altKey:true});key('keyup','Alt','AltLeft');pointEvent('pointerup',2,2);check('缩放工具 Alt 取色不缩放',zoom===oldZoom&&viewport.dataset.cursor==='zoom-in');pointEvent('pointerdown',2,2,{button:2});pointEvent('pointerup',2,2,{button:2});check('缩放工具右键缩小',Math.abs(zoom-oldZoom*.8)<.001);
     setTool('rect');pixels().fill(0);pointEvent('pointerdown',1,1,{shiftKey:true});pointEvent('pointermove',4,7,{shiftKey:true});pointEvent('pointerup',4,7);check('Shift 绘制正方形',pixels()[7*16+7]!==0&&pixels()[7*16+8]===0);
     setTool('pencil');pointEvent('pointerdown',0,0);const beforeWheel=zoom;viewport.dispatchEvent(new WheelEvent('wheel',{deltaY:-1,bubbles:true,cancelable:true}));press('e','KeyE');check('笔画中延迟切换且禁止缩放',tool==='pencil'&&pendingTool==='eraser'&&zoom===beforeWheel);pointEvent('pointerup',0,0);check('松开后切换到橡皮',tool==='eraser'&&viewport.dataset.cursor==='eraser');
     doc.layers[0].locked=true;syncInteraction();pointEvent('pointerdown',0,0);check('锁定图层禁止编辑',viewport.dataset.cursor==='not-allowed'&&gesture===null);doc.layers[0].locked=false;
@@ -4441,7 +4452,7 @@ window.runReferenceBoardSmoke=async()=>{
   check('松开 Alt 参考图光标恢复默认',pickCanvas.style.cursor==='');
   setColor('#000000');setTool('eyedropper');
   pickCanvas.setPointerCapture=()=>{};pickCanvas.hasPointerCapture=()=>false;
-  press(pickCanvas,'pointerdown',pickX,pickY);
+  press(pickCanvas,'pointerdown',pickX,pickY);press(pickCanvas,'pointerup',pickX,pickY);
   const want=rgba(fromRgba({r:pickPixels[pickIndex]>>>24,g:pickPixels[pickIndex]>>>16&255,b:pickPixels[pickIndex]>>>8&255,a:pickPixels[pickIndex]&255})),got=rgba(color);
   check('吸管可从参考图取色到前景色',pickIndex>=0&&got.r===want.r&&got.g===want.g&&got.b===want.b&&got.a===want.a);
   setTool('pencil');

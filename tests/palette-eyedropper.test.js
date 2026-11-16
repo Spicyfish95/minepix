@@ -13,7 +13,7 @@ function editor(mode='rgba'){
  const doc=createDocument(2,1,'eyedropper');doc.palette=['#00000000','#ff0000','#00ff00'];
  doc.frames[0].cels[0]=[0xff0000ff,0x00ff00ff];
  if(mode!=='rgba')convertColorMode(doc,mode,{palette:'current'});
- const context={doc,li:0,color:'#ff0000',colorIndex:1,paletteEditing:true,paletteActive:1,paletteSelection:new Set([1]),history:new History(),
+ const context={doc,li:0,gesture:null,color:'#ff0000',colorIndex:1,paletteEditing:true,paletteActive:1,paletteSelection:new Set([1]),history:new History(),
   normalizeColor,fromRgba,colorValue,modeOf,grayPixel,applyIndexedPalette,createMapper,
   saveColorPreferences:()=>{},renderColors:()=>{},useForegroundForPattern:()=>{}};
  context.mutate=(change,_,options)=>{const before=structuredClone(context.doc);change();context.history.push(before,context.doc,options);};

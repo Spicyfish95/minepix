@@ -275,7 +275,7 @@ export default {
 "形状与选区": "Shapes and selection",
 "L 直线 / U 矩形 / O 椭圆 / K 曲线 / P 多边形 / C 轮廓 / M 选区 / V 移动": "L line / U rectangle / O ellipse / K curve / P polygon / C contour / M select / V move",
 "平移与缩放": "Pan and zoom",
-"H 平移 / Z 缩放；缩放工具按 Alt 缩小": "H pan / Z zoom; hold Alt with the zoom tool to zoom out",
+"H 平移 / Z 缩放；右键缩小，Alt 临时取色": "H pan / Z zoom; right-click to zoom out, hold Alt to pick colors",
 "临时工具": "Temporary tools",
 "空格：仅临时平移，松开恢复原工具": "Space: temporary pan only; release to restore the previous tool",
 "按住 Alt 吸色；按住空格或中键拖动平移": "Hold Alt to pick a color; hold Space or the middle button to pan",
