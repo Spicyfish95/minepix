@@ -10,6 +10,7 @@ const packedBytes=state=>JSON.stringify(state.meta).length*2+state.cels.reduce((
 function samePreview(a,b){return a===b||!!a&&!!b&&a.layerId===b.layerId&&a.w===b.w&&a.h===b.h&&a.cells.length===b.cells.length&&a.cells.every((value,index)=>value===b.cells[index]);}
 const ownsPreview=(doc,preview)=>doc.layers.some(layer=>layer.id===preview.layerId&&isTileset(layer));
 function preservePreview(doc,entry,result){
+ if(entry.kind==='foreground')return result;
  const before=entry.kind==='snapshot'?entry.before.meta:entry.before,after=entry.kind==='snapshot'?entry.after.meta:entry.after;
  const stableOwner=!before.previewTerrain||ownsPreview(before,before.previewTerrain)===ownsPreview(after,before.previewTerrain);
  if(stableOwner&&samePreview(before.previewTerrain,after.previewTerrain)){
@@ -32,7 +33,7 @@ function difference(before,after){
  const beforeMeta=JSON.stringify(bm),afterMeta=JSON.stringify(am);if(!changes.length&&!indexChanges.length&&beforeMeta===afterMeta)return null;
  return{kind:'delta',before:copy(bm),after:copy(am),changes,indexChanges,bytes:beforeMeta.length*2+afterMeta.length*2+[...changes,...indexChanges].reduce((sum,c)=>sum+c.before.byteLength+c.after.byteLength+32,0)};
 }
-function apply(doc,entry,side){if(entry.kind==='snapshot')return unpack(entry[side]);const metadata=copy(entry[side]),indexTouched=new Set((entry.indexChanges||[]).map(c=>c.f+':'+c.l)),touched=new Set(entry.changes.map(c=>c.f+':'+c.l));metadata.frames=metadata.frames.map((frame,f)=>({...frame,...(doc.frames[f].indices?{indices:doc.frames[f].indices.map((cel,l)=>indexTouched.has(f+':'+l)?cel.slice():cel)}:{}),cels:doc.frames[f].cels.map((cel,l)=>touched.has(f+':'+l)?cel.slice():cel)}));for(const change of entry.changes){const cel=metadata.frames[change.f].cels[change.l],values=change[side];for(let i=0;i<values.length;i++)cel[change.start+i]=values[i];}for(const change of entry.indexChanges||[]){const values=change[side],cel=metadata.frames[change.f].indices[change.l];for(let i=0;i<values.length;i++)cel[change.start+i]=values[i];}return hydrateLinks(metadata);}
+function apply(doc,entry,side){if(entry.kind==='foreground')return doc;if(entry.kind==='snapshot')return unpack(entry[side]);const metadata=copy(entry[side]),indexTouched=new Set((entry.indexChanges||[]).map(c=>c.f+':'+c.l)),touched=new Set(entry.changes.map(c=>c.f+':'+c.l));metadata.frames=metadata.frames.map((frame,f)=>({...frame,...(doc.frames[f].indices?{indices:doc.frames[f].indices.map((cel,l)=>indexTouched.has(f+':'+l)?cel.slice():cel)}:{}),cels:doc.frames[f].cels.map((cel,l)=>touched.has(f+':'+l)?cel.slice():cel)}));for(const change of entry.changes){const cel=metadata.frames[change.f].cels[change.l],values=change[side];for(let i=0;i<values.length;i++)cel[change.start+i]=values[i];}for(const change of entry.indexChanges||[]){const values=change[side],cel=metadata.frames[change.f].indices[change.l];for(let i=0;i<values.length;i++)cel[change.start+i]=values[i];}return hydrateLinks(metadata);}
 export function snapshotCel(doc,frame,layer){const members=new Set(linkedMembers(doc,frame,layer)),copy=doc.frames[frame].cels[layer].slice(),indexCopy=doc.frames[frame].indices?.[layer]?.slice();return{...doc,frames:doc.frames.map((value,f)=>members.has(f)?{...value,...(value.indices?{indices:value.indices.map((pixels,l)=>l===layer?indexCopy:pixels)}:{}),cels:value.cels.map((pixels,l)=>l===layer?copy:pixels)}:value)};}
 export class History{
  constructor(max=40,budget=96*1024*1024){this.max=max;this.budget=budget;this.reset();}
@@ -40,6 +41,14 @@ export class History{
  get memoryBytes(){return[...this.undoStack,...this.redoStack].reduce((sum,entry)=>sum+entry.bytes,0);}
  trim(){while(this.memoryBytes>this.budget||this.undoStack.length+this.redoStack.length>this.max){if(this.undoStack.length)this.undoStack.shift();else if(this.redoStack.length)this.redoStack.shift();else break;}}
  push(before,after,{colorsReady=false}={}){if(after){finalizeBackground(after);if(!colorsReady)canonicalizeColors(after,{before});synchronizeLinks(before,after);}let entry;if(after)entry=difference(before,after);else{const state=packed(before);entry={kind:'pending',before:state,bytes:packedBytes(state)};}if(!entry)return false;entry.beforeRevision=this.revision;entry.afterRevision=this.nextRevision++;this.revision=entry.afterRevision;this.undoStack.push(entry);this.redoStack=[];this.trim();return true;}
+ pushColor(before,after,foreground,next){
+  const changed=before&&this.push(before,after,{colorsReady:true});
+  if(!changed){
+   if(foreground.color===next.color&&foreground.index===next.index)return false;
+   this.undoStack.push({kind:'foreground',bytes:128,beforeRevision:this.revision,afterRevision:this.revision});this.redoStack=[];
+  }
+  this.undoStack.at(-1).colorPick={before:foreground,after:next};this.trim();return true;
+ }
  undo(doc){
   let entry=this.undoStack.pop();
   if(!entry)return null;

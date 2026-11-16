@@ -73,3 +73,26 @@ test('reference picking uses same palette edit path and ignores transparent pixe
  pixel=0;context.pickBoardColor(event,item);
  assert.equal(context.doc.palette[1],'#12345680');assert.equal(context.history.undoStack.length,1);
 });
+
+test('foreground-only picks have independent undo steps and preserve document revision',()=>{
+ const doc=createDocument(1,1),history=new History(),initial=structuredClone(doc);
+ history.pushColor(null,doc,{color:'#000000',index:0},{color:'#ff0000',index:1});
+ history.pushColor(null,doc,{color:'#ff0000',index:1},{color:'#00ff00',index:2});
+ assert.equal(history.undoStack.length,2);assert.equal(history.revision,0);
+ assert.equal(history.undoStack.at(-1).colorPick.before.color,'#ff0000');
+ assert.deepEqual(history.undo(doc),initial);assert.deepEqual(history.undo(doc),initial);
+ assert.deepEqual(history.redo(doc),initial);assert.deepEqual(history.redo(doc),initial);
+ assert.equal(history.pushColor(null,doc,{color:'#00ff00',index:2},{color:'#00ff00',index:2}),false);
+ const before=structuredClone(doc);doc.frames[0].cels[0][0]=0xffffffff;history.push(before,doc);
+ assert.equal(history.revision,1);history.undo(doc);assert.equal(history.revision,0);
+});
+
+for(const mode of ['rgba','indexed','grayscale'])for(const editing of [false,true])test(`${mode}: two complete pick gestures, editing=${editing}`,()=>{
+ const context=editor(mode);Object.assign(context,{paletteEditing:editing,selection:null,pendingTool:null,onionCache:new Map(),draw:()=>{},viewport:{hasPointerCapture:()=>false},clone:structuredClone,changed:()=>{},message:()=>{},render:()=>{},tools:[['eyedropper',null,'鍙栬壊']]});
+ vm.runInContext(section('function finishGesture(','viewport.addEventListener(\'pointerup\''),context);
+ const node={setPointerCapture:()=>{},hasPointerCapture:()=>false},before=structuredClone(context.doc);
+ context.beginColorPick({pointerId:1},node);context.pickColor('#123456');context.finishGesture();
+ context.beginColorPick({pointerId:2},node);context.pickColor('#abcdef');context.finishGesture();
+ assert.equal(context.history.undoStack.length,2);assert.equal(context.history.undoStack[1].colorPick.before.color,mode==='grayscale'?context.history.undoStack[0].colorPick.after.color:'#123456');
+ if(!editing){assert.deepEqual(context.doc,before);assert.equal(context.history.revision,0);}
+});
