@@ -26,7 +26,7 @@ test('默认预设采用当前工作快捷键',()=>{
   assert.deepEqual(resolveShortcut({key:'r',code:'KeyR'},k),{action:'tool',tool:'blur'});
 });
 test('Aseprite 常用子集无冲突并保持精确选区修饰键',()=>{const keys=asepriteKeymap();assert.equal(resolveShortcut({key:'N',code:'KeyN',altKey:true},keys).action,'duplicate-frame');assert.equal(resolveShortcut({key:'U',code:'KeyU',shiftKey:true},keys).tool,'ellipse');assert.equal(selectionOperationFor('aseprite',{shiftKey:true}),'add');assert.equal(selectionOperationFor('aseprite',{shiftKey:true,altKey:true}),'subtract');assert.equal(selectionOperationFor('aseprite',{shiftKey:true,ctrlKey:true}),'intersect');assert.equal(selectionOperationFor('studio',{shiftKey:true},'replace'),'replace');});
-import {holdActionFor,HOLD_ACTIONS,DEFAULT_BINDINGS} from '../src/keymap-manager.js';
+import {holdActionFor,releasedHoldActionFor,HOLD_ACTIONS,DEFAULT_BINDINGS} from '../src/keymap-manager.js';
 test('按住动作与同键全局工具键共存且不占用单击解析',()=>{
   const k=defaultKeymap();
   assert.deepEqual(HOLD_ACTIONS,['grid-select']);
@@ -40,8 +40,38 @@ test('按住动作与同键全局工具键共存且不占用单击解析',()=>{
   assert.equal(holdActionFor({key:'g',code:'KeyG'},custom),null);
 });
 
+test('显式 Shift 按住绑定只匹配 Shift，普通绑定允许叠加 Shift',()=>{
+ const k=defaultKeymap();k.bindings['grid-select']=['Shift+J'];k.bindings.save=['J'];
+ assert.doesNotThrow(()=>validateKeymap(k));
+ assert.equal(holdActionFor({key:'j',code:'KeyJ'},k),null);
+ assert.equal(resolveShortcut({key:'j',code:'KeyJ'},k).action,'save');
+ assert.equal(holdActionFor({key:'J',code:'KeyJ',shiftKey:true},k),'grid-select');
+ k.bindings['grid-select']=['Ctrl+Alt+Shift+J'];
+ assert.equal(holdActionFor({key:'j',code:'KeyJ',ctrlKey:true,altKey:true},k),null);
+ assert.equal(holdActionFor({key:'J',code:'KeyJ',ctrlKey:true,altKey:true,shiftKey:true},k),'grid-select');
+});
+test('按住动作按实际 Shift 匹配范围检测冲突，保留同键工具切换',()=>{
+ for(const prefix of ['', 'Ctrl+', 'Alt+', 'Ctrl+Alt+']){
+  const k=defaultKeymap();k.bindings['grid-select']=[prefix+'J'];k.bindings.save=[prefix+'Shift+J'];
+  assert.throws(()=>validateKeymap(k),/冲突/);
+  k.bindings.save=['Ctrl+S'];k.bindings['tool:pencil']=[prefix+'Shift+J'];
+  assert.doesNotThrow(()=>validateKeymap(k));
+ }
+ const duplicate=defaultKeymap();duplicate.bindings['grid-select']=['J','Shift+J'];
+ assert.throws(()=>validateKeymap(duplicate),/冲突/);
+ assert.doesNotThrow(()=>validateKeymap(defaultKeymap()));assert.doesNotThrow(()=>validateKeymap(asepriteKeymap()));
+});
+test('按住主键释放不依赖当前修饰键，其他主键不触发释放',()=>{
+ for(const binding of ['J','Alt+J','Ctrl+J','Shift+J','Ctrl+Alt+Shift+J']){
+  const k=defaultKeymap();k.bindings['grid-select']=[binding];
+  assert.equal(releasedHoldActionFor({key:'j',code:'KeyJ'},k),'grid-select');
+  assert.equal(releasedHoldActionFor({key:'J',code:'KeyJ',ctrlKey:true,altKey:true,shiftKey:true},k),'grid-select');
+  assert.equal(releasedHoldActionFor({key:'h',code:'KeyH'},k),null);
+ }
+});
+
 test('新工具升级保留已有自定义冲突键，并迁移旧 Aseprite 切片键',()=>{
- const old=defaultKeymap();delete old.bindings['tool:gradient'];delete old.bindings['tool:slice'];old.bindings['replace-color']=['Shift+G'];const storage={getItem:()=>JSON.stringify(old)};const loaded=loadKeymap(storage);assert.deepEqual(loaded.bindings['replace-color'],['Shift+G']);assert.deepEqual(loaded.bindings['tool:gradient'],[]);
+ const old=defaultKeymap();old.bindings['grid-select']=[];delete old.bindings['tool:gradient'];delete old.bindings['tool:slice'];old.bindings['replace-color']=['Shift+G'];const storage={getItem:()=>JSON.stringify(old)};const loaded=loadKeymap(storage);assert.deepEqual(loaded.bindings['replace-color'],['Shift+G']);assert.deepEqual(loaded.bindings['tool:gradient'],[]);
  const legacy=asepriteKeymap();delete legacy.bindings['tool:slice'];legacy.bindings.slices=['Shift+C'];const migrated=loadKeymap({getItem:()=>JSON.stringify(legacy)});assert.deepEqual(migrated.bindings['tool:slice'],['Shift+C']);assert.deepEqual(migrated.bindings.slices,[]);
 });
 

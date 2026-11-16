@@ -38,7 +38,9 @@ npm run package
 
 ## 定向测试
 
-Space 临时平移修复范围：取消松开 Space 时播放／暂停动画的分支，仅保留按住平移与松开恢复原工具；验证单按、长按重复、拖动及不同释放顺序、失焦重置和动画按钮控制。执行 `node --test tests/space-pan.test.js tests/keymap.test.js tests/interaction.test.js`（28 项）及 `node scripts/test-space-pan-browser.mjs`（22 项），前端构建与仓库检查通过；浏览器首次启动因系统拒绝监听 5173 端口失败，改用 14212 后通过。两套预设没有重复全局绑定；专项另复现三项待修问题：面板分隔条方向键同时移动画布选区、自定义网格按住键忽略 Shift 导致冲突校验漏报、先释放 Alt 再释放自定义网格键使临时网格状态残留。浏览器专项使用隔离配置并输出到 `artifacts/space-pan-browser.json`；尚未进行真实桌面键鼠验证，不运行全量回归。
+快捷键冲突修复范围：全局快捷键尊重控件已处理的键盘事件；网格按住绑定显式配置 Shift 时必须按 Shift，未配置时仍允许 Shift 选区约束，并按实际匹配范围校验冲突；松开网格主键时忽略修饰键释放顺序。执行 `node --test tests/keymap.test.js tests/space-pan.test.js tests/interaction.test.js`（34 项）和 `node scripts/test-space-pan-browser.mjs`（72 项），覆盖面板分隔条／标签、画布方向键、两套预设、Alt／Ctrl／Shift 组合键及不同释放顺序；前端构建、生产资源及仓库检查通过。首次 Node 测试因新增模拟事件缺少 `preventDefault()` 失败，补齐后全部通过。浏览器结果仅存本地 `artifacts/space-pan-browser.json`；尚未进行真实桌面键鼠验证，不运行全量回归。
+
+Space 临时平移修复范围：取消松开 Space 时播放／暂停动画的分支，仅保留按住平移与松开恢复原工具；验证单按、长按重复、拖动及不同释放顺序、失焦重置和动画按钮控制。执行 `node --test tests/space-pan.test.js tests/keymap.test.js tests/interaction.test.js`（28 项）及 `node scripts/test-space-pan-browser.mjs`（22 项），前端构建与仓库检查通过；浏览器首次启动因系统拒绝监听 5173 端口失败，改用 14212 后通过。两套预设没有重复全局绑定；专项发现的面板方向键串扰、Shift 冲突漏报及自定义网格状态残留已在上述快捷键冲突修复中解决。浏览器专项使用隔离配置并输出到 `artifacts/space-pan-browser.json`；尚未进行真实桌面键鼠验证，不运行全量回归。
 
 标签关闭与色板异步粘贴的定向范围：cel 范围拖选期间禁止关闭文档，保存确认与关闭历史对应目标标签；剪贴板读取期间切换或关闭发起标签时取消色板粘贴，提示重新操作，不修改其他文档。运行文档异步、文档管理、色板剪贴板及索引色相关 Node 回归，核对正常粘贴与索引像素、关闭取消及关闭历史，并执行前端构建、生产资源和仓库检查。
 

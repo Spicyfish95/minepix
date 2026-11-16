@@ -5,9 +5,9 @@ import path from 'node:path';
 import {targets,connect} from './cdp.mjs';
 
 function runChecks(){
- const results=[],conflicts=[],check=(name,pass)=>{results.push({name,pass:!!pass});if(!pass)throw new Error(name);};
+ const results=[],check=(name,pass)=>{results.push({name,pass:!!pass});if(!pass)throw new Error(name);};
  const key=(type,value,code,extra={},target=document)=>target.dispatchEvent(new KeyboardEvent(type,{key:value,code,bubbles:true,cancelable:true,...extra}));
- const press=(value,code,extra={})=>{key('keydown',value,code,extra);key('keyup',value,code,extra);};
+ const press=(value,code,extra={},target=document)=>{key('keydown',value,code,extra,target);key('keyup',value,code,extra,target);};
  const pointEvent=(type,x,y,extra={})=>{const r=canvas.getBoundingClientRect();viewport.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,clientX:r.left+(x+.5)*zoom,clientY:r.top+(y+.5)*zoom,pointerId:3,button:0,...extra}));};
  const capture=viewport.setPointerCapture,originalKeymap=keymap;viewport.setPointerCapture=()=>{};
  try{
@@ -31,18 +31,44 @@ function runChecks(){
    press(' ','Space');check(preset.profile+' Space leaves playback running',playing&&viewport.dataset.cursor==='not-allowed');
    $('play').click();check(preset.profile+' button pauses and restores pencil',!playing&&viewport.dataset.cursor==='pencil');
   }
-  keymap=defaultKeymap();selection={x:1,y:1,w:2,h:2};
-  const separator=document.querySelector('.resize-left'),beforeX=selection.x;
-  separator.focus();key('keydown','ArrowRight','ArrowRight',{},separator);
-  conflicts.push({name:'dock separator arrows also move canvas selection',reproduced:selection.x!==beforeX});
-  const custom=defaultKeymap();custom.bindings['grid-select']=['Shift+J'];custom.bindings.save=['J'];
-  keymap=loadKeymap({getItem:()=>JSON.stringify(custom)});setTool('select');viewport.focus();press('j','KeyJ');
-  conflicts.push({name:'Shift-only hold also matches plain J and shadows Save',reproduced:keymap.bindings.save[0]==='J'&&modifiers.grid===false&&holdActionFor({key:'j',code:'KeyJ'},keymap)==='grid-select'});
-  custom.bindings['grid-select']=['Alt+J'];custom.bindings.save=['Ctrl+S'];keymap=loadKeymap({getItem:()=>JSON.stringify(custom)});
-  key('keydown','Alt','AltLeft',{altKey:true});key('keydown','j','KeyJ',{altKey:true});key('keyup','Alt','AltLeft');key('keyup','j','KeyJ');
-  conflicts.push({name:'releasing Alt before custom hold leaves grid mode active',reproduced:modifiers.grid});
-  return{ok:true,results,conflicts};
- }catch(error){return{ok:false,results,conflicts,error:error.stack};}
+  for(const preset of [defaultKeymap(),asepriteKeymap()]){
+   keymap=preset;setTool('pencil');selection={x:4,y:4,w:2,h:2};
+   const separator=document.querySelector('.resize-left'),beforeSize=window.workspaceLayout.state().sizes.left;
+   separator.focus();press('ArrowRight','ArrowRight',{},separator);
+   check(preset.profile+' separator resizes without moving selection',window.workspaceLayout.state().sizes.left>beforeSize&&selection.x===4&&selection.y===4);
+   for(const direction of ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown']){
+    press(direction,direction,{shiftKey:true},separator);
+    check(preset.profile+' separator consumes Shift+'+direction,selection.x===4&&selection.y===4);
+   }
+   window.workspaceLayout.dock('colors','left-top');window.workspaceLayout.dock('tools','left-top');
+   const tabs=[...document.querySelectorAll('.dock-left-top [role=tab]')];tabs[0].click();tabs[0].focus();
+   press('ArrowRight','ArrowRight',{},tabs[0]);
+   check(preset.profile+' dock tabs navigate without moving selection',document.activeElement===tabs[1]&&selection.x===4);
+   selection=null;doc.frames.push(structuredClone(doc.frames[0]));fi=0;render();
+   press('ArrowRight','ArrowRight',{},separator);
+   check(preset.profile+' separator does not change animation frame',fi===0);
+   tabs[0].focus();press('ArrowRight','ArrowRight',{},tabs[0]);
+   check(preset.profile+' tabs do not change animation frame',fi===0);
+   viewport.focus();press('ArrowRight','ArrowRight');check(preset.profile+' canvas arrows still change frames',fi===1);
+   selection={x:4,y:4,w:2,h:2};press('ArrowRight','ArrowRight');
+   check(preset.profile+' canvas arrows still nudge selection',selection.x===5);
+   const custom=structuredClone(preset);custom.bindings['grid-select']=['Shift+J'];custom.bindings['swap-colors']=['J'];
+   keymap=loadKeymap({getItem:()=>JSON.stringify(custom)});setTool('select');const beforeColor=color;press('j','KeyJ');
+   check(preset.profile+' plain J executes custom action instead of Shift+J hold',color!==beforeColor&&!modifiers.grid);
+   key('keydown','J','KeyJ',{shiftKey:true});check(preset.profile+' Shift+J activates grid mode',modifiers.grid);
+   key('keyup','Shift','ShiftLeft');key('keyup','j','KeyJ');check(preset.profile+' Shift-first release clears grid mode',!modifiers.grid);
+   for(const modifier of ['Alt','Ctrl','Shift'])for(const modifierFirst of [true,false]){
+    custom.bindings['grid-select']=[modifier+'+J'];keymap=loadKeymap({getItem:()=>JSON.stringify(custom)});
+    const flag={Alt:'altKey',Ctrl:'ctrlKey',Shift:'shiftKey'}[modifier],name=modifier==='Ctrl'?'Control':modifier;
+    key('keydown',name,name+'Left',{[flag]:true});key('keydown','j','KeyJ',{[flag]:true});
+    check(preset.profile+' custom '+modifier+' hold activates '+modifierFirst,modifiers.grid);
+    if(modifierFirst){key('keyup',name,name+'Left');key('keyup','j','KeyJ');}
+    else{key('keyup','j','KeyJ',{[flag]:true});key('keyup',name,name+'Left');}
+    check(preset.profile+' custom '+modifier+' hold releases '+modifierFirst,!modifiers.grid&&activeSelectionKind()===$('selection-kind').value);
+   }
+  }
+  return{ok:true,results};
+ }catch(error){return{ok:false,results,error:error.stack};}
  finally{keymap=originalKeymap;viewport.setPointerCapture=capture;resetInteraction();stop();}
 }
 

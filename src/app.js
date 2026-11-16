@@ -40,7 +40,7 @@ import {FrameCache} from './renderer.js';
 import {snapshotCel} from './history.js';
 import {DocumentStore} from './document-manager.js';
 import {INPUT_KEY,DEFAULT_INPUT,loadInput,validateInput,pointerTool,wheelIntent} from './input-preferences.js';
-import {asepriteKeymap,selectionOperationFor,holdActionFor,KEYMAP_KEY,defaultKeymap,loadKeymap,resolveShortcut} from './keymap-manager.js';
+import {asepriteKeymap,selectionOperationFor,holdActionFor,releasedHoldActionFor,KEYMAP_KEY,defaultKeymap,loadKeymap,resolveShortcut} from './keymap-manager.js';
 import {validateSlices,sliceAtFrame,sliceKeys,setSliceKey,deleteSliceKey} from './slices.js';
 import { atlasMetadata, drawAtlasFrame } from './formats/atlas.js';
 import { exportLayerPlan } from './export-layers.js';
@@ -2646,7 +2646,7 @@ window.desktop?.onCommand(action=>{
   dispatch(celRange&&$('timeline-grid').contains(uiActive())?({copy:'copy-cels',cut:'cut-cels',paste:'paste-cels',clear:'clear-cels'}[action]||action):action);
 });
 onUI('keydown',e=>{
-  if(e.isComposing||e.keyCode===229)return;
+  if(e.defaultPrevented||e.isComposing||e.keyCode===229)return;
   if(tool==='slice'&&e.key==='Delete'&&!$('modal').open&&!isTextTarget(e.target)){e.preventDefault();void actions['delete-active-slice']();return;}
   if(uiQuery('.context-popover:popover-open,.toolbar-popover:popover-open,.app-menu:popover-open'))return;
   if(e.target.closest?.('button')&&['Enter',' '].includes(e.key))return;
@@ -2696,7 +2696,7 @@ onUI('keydown',e=>{
 onUI('keyup',e=>{
   if(e.key==='Alt'&&!isTextTarget(e.target)&&!$('modal').open)e.preventDefault();
   modifiers.alt=e.altKey;modifiers.shift=e.shiftKey;
-  if(holdActionFor(e,keymap)==='grid-select')modifiers.grid=false;
+  if(releasedHoldActionFor(e,keymap)==='grid-select')modifiers.grid=false;
   if(e.code==='Space'||e.key===' ')space=false;
   if(e.key==='Shift')drawOverlay();else syncInteraction();
 });
