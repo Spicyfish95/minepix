@@ -63,7 +63,9 @@ async function runPaletteEyedropperChecks(){
   setTool('eyedropper');setPaletteEditing(true);paletteActive=1;paletteSelection=new Set([1]);const beforeBlur=JSON.stringify(doc.palette),colorBeforeBlur=color,box=canvas.getBoundingClientRect();viewport.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true,pointerId:26,button:0,clientX:box.left+2.5*zoom,clientY:box.top+.5*zoom}));window.dispatchEvent(new Event('blur'));check('blur cancels live palette sampling',!gesture&&JSON.stringify(doc.palette)===beforeBlur&&color===colorBeforeBlur);setPaletteEditing(false);
   const paletteBefore=JSON.stringify(doc.palette),replacing=replaceColorDialog(),form=$('modal-form');
   check('indexed dialog exposes palette source and destination slots',!!form.elements.fromIndex&&!!form.elements.toIndex&&!form.elements.tolerance);
-  form.elements.fromIndex.value='1';form.elements.toIndex.value='2';form.requestSubmit($('modal-submit'));await replacing;
+  form.elements.fromIndex.value='1';form.elements.toIndex.value='2';form.elements.toIndex.dispatchEvent(new Event('change',{bubbles:true}));
+  check('indexed dialog previews replacement on canvas without history',doc.frames[0].indices[0].join(',')==='2,2,3'&&history.undoStack.length===0&&form.elements.toIndex.style.background!=='');
+  form.requestSubmit($('modal-submit'));await replacing;
   check('indexed dialog replaces exact slot despite duplicate colors',doc.frames[0].indices[0].join(',')==='2,2,3'&&JSON.stringify(doc.palette)===paletteBefore&&history.undoStack.length===1);
   actions.undo();check('index-only replacement is undoable',doc.frames[0].indices[0].join(',')==='1,2,3');actions.redo();check('index-only replacement is redoable',doc.frames[0].indices[0].join(',')==='2,2,3');
   const rgbaDoc=createDocument(1,1,'replace-palette');rgbaDoc.palette=['#ff000080','#00ff0040'];rgbaDoc.frames[0].cels[0]=[0xff000080];replaceDocument(rgbaDoc,true);
@@ -71,7 +73,10 @@ async function runPaletteEyedropperChecks(){
   for(const [name,index] of [['fromPalette','0'],['toPalette','1']]){rgbaForm.elements[name].value=index;rgbaForm.elements[name].dispatchEvent(new Event('change'));}
   rgbaForm.requestSubmit($('modal-submit'));await replacingRgba;
   check('RGBA dialog palette choices preserve alpha',pixels()[0]===0x00ff0040);
-  const beforeCancel=JSON.stringify(doc),cancelled=replaceColorDialog();$('modal').close('cancel');await cancelled;check('cancelling replacement preserves document',JSON.stringify(doc)===beforeCancel);
+  const beforeCancel=JSON.stringify(doc),undoBeforeCancel=history.undoStack.length,cancelled=replaceColorDialog(),cancelForm=$('modal-form');
+  cancelForm.elements.fromPalette.value='1';cancelForm.elements.fromPalette.dispatchEvent(new Event('change',{bubbles:true}));cancelForm.elements.to.value='#0000ff';cancelForm.elements.to.dispatchEvent(new Event('input',{bubbles:true}));
+  check('RGBA dialog previews manual color live',pixels()[0]===0x0000ffff&&cancelForm.elements.fromPalette.style.background.includes('0, 255, 0')&&cancelForm.elements.toPalette.style.background==='');
+  $('modal').close('cancel');await cancelled;check('cancelling replacement restores preview and history',JSON.stringify(doc)===beforeCancel&&history.undoStack.length===undoBeforeCancel);
   return{ok:true,results};
  }catch(error){return{ok:false,results,error:error.stack};}
  finally{finishGesture(true);viewport.setPointerCapture=originalCapture;resetModifiers();setPaletteEditing(false);syncInteraction();}

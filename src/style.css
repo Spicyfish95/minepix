@@ -616,6 +616,8 @@ body :is(#dock-layout,#floating-root) .timeline-timing-actions .timeline-duratio
 
 #modal:has(.image-adjustment-fields){width:470px;margin:0;left:auto;right:20px;top:16vh;}
 #modal:has(.image-adjustment-fields)::backdrop{background:#080f1922;backdrop-filter:none;}
+#modal:has(.replace-color-fields){margin:0;left:auto;right:20px;top:16vh;}
+#modal:has(.replace-color-fields)::backdrop{background:#080f1922;backdrop-filter:none;}
 #modal-content .adjustment-channel{display:grid;grid-template-columns:90px minmax(80px,1fr) 60px;gap:10px;align-items:center;}
 #modal-content .adjustment-channel input{width:100%;min-width:0;}
 

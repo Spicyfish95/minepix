@@ -2490,7 +2490,10 @@ async function canvasSizeDialog(){
 // 替换颜色：对应 Aseprite 编辑→替换颜色（Shift+R），容差 0-255 单值滑杆。
 async function replaceColorDialog(){
   if(!editable())return;
-  const options=await replacementColorDialog({doc,modal,from:color,to:background,fromIndex:colorIndex,toIndex:modeOf(doc)==='indexed'?createMapper(doc,doc.layers[li])(colorValue(background)).index:0,frame:fi,layer:li,selection});
+  // 预览只替换 doc 引用并重绘画布，不进历史；关闭弹窗时恢复原文档，确定后再整步提交。
+  const original=doc,preview=options=>{doc=clone(original);replaceColorInDocument(doc,options);draw();},restore=()=>{doc=original;draw();};
+  const options=await replacementColorDialog({doc,modal,from:color,to:background,fromIndex:colorIndex,toIndex:modeOf(doc)==='indexed'?createMapper(doc,doc.layers[li])(colorValue(background)).index:0,frame:fi,layer:li,selection,preview,restore});
+  $('modal-form').oninput=$('modal-form').onchange=null;
   if(!options)return;
   const count=replaceColorInDocument(clone(doc),options);
   if(!count)return message('没有匹配的颜色');

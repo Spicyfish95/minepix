@@ -172,7 +172,7 @@ test('替换颜色可作为单步历史撤销', () => {
 
 function dialogForm(indexed) {
   const names = indexed ? ['fromIndex', 'toIndex'] : ['from', 'to', 'fromPalette', 'toPalette'];
-  return {elements: Object.fromEntries(names.map(name => [name, {value: ''}]))};
+  return {elements: Object.fromEntries(names.map(name => [name, {value: '', style: {}}]))};
 }
 
 test('RGBA 弹窗双向色板选择保留透明度，手动输入可退出色板选择', async () => {
