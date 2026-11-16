@@ -332,6 +332,7 @@ function paletteTargetColor(){const index=paletteTargetIndex();return index===nu
 function syncPalettePanel(){const value=paletteTargetColor();$('hex').value=value.toUpperCase();colorAdjustments?.update(value);}
 function useForegroundForPattern(){if(brushSettings.shape!=='pattern'||brushSettings.patternMode==='brush')return;brushSettings.patternMode='brush';updateBrushControls();message('图案笔刷已切换为单色（前景色）；改回源对齐或落点对齐可恢复图案原色');}
 function setColor(value,index=null){if(modeOf(doc)==='indexed'){colorIndex=index??createMapper(doc,doc.layers[li])(colorValue(normalizeColor(value))).index;}else if(modeOf(doc)==='grayscale')value='#'+grayPixel(colorValue(normalizeColor(value))).toString(16).padStart(8,'0');const next=normalizeColor(value);if(next!==color)useForegroundForPattern();color=next;saveColorPreferences();renderColors();}
+function pickColor(value){const index=paletteTargetIndex();if(index!==null)setPaletteColor(index,value);setColor(value,index);}
 function setBackground(value){const next=normalizeColor(value);if(next!==background)useForegroundForPattern();background=next;saveColorPreferences();renderColors();}
 function renderPalette(){
  syncPalettePresetButton();
@@ -1540,7 +1541,7 @@ viewport.addEventListener('pointerdown',event=>{
     else{const last=shapeSession.vertices.at(-1);if(last.x!==p.x||last.y!==p.y)shapeSession.vertices.push(p);renderShapeSession(p);}
     return;
   }
-  if(active==='eyedropper'){Object.assign(p,tiledPoint(doc,raw.x,raw.y,tiledMode));const c=composite(doc,fi),i=(p.y*doc.width+p.x)*4;if(c[i+3])setColor(fromRgba({r:c[i],g:c[i+1],b:c[i+2],a:c[i+3]}));return;}
+  if(active==='eyedropper'){Object.assign(p,tiledPoint(doc,raw.x,raw.y,tiledMode));const c=composite(doc,fi),i=(p.y*doc.width+p.x)*4;if(c[i+3])pickColor(fromRgba({r:c[i],g:c[i+1],b:c[i+2],a:c[i+3]}));return;}
   if(active==='text'){
     if(modeOf(doc)==='indexed')return message('索引颜色模式下不能使用文字工具');
     if(event.button!==0)return;
@@ -1928,7 +1929,7 @@ function pickBoardColor(event,item){
   if(x<0||y<0||x>=item.width||y>=item.height)return;
   const pixel=boardItemPixels(item)[y*item.width+x];
   if(!(pixel&255))return boardMessage('该位置是透明像素，未取色');
-  setColor(fromRgba({r:pixel>>>24,g:pixel>>>16&255,b:pixel>>>8&255,a:pixel&255}));
+  pickColor(fromRgba({r:pixel>>>24,g:pixel>>>16&255,b:pixel>>>8&255,a:pixel&255}));
   boardMessage('已从参考图取色 '+color.toUpperCase());
 }
 function boardEyedropper(){return tool==='eyedropper'||modifiers.alt;}
