@@ -49,15 +49,8 @@ try{
  await pause();
  check('取消原生打开对话框保留项目',JSON.stringify(await audit())===JSON.stringify(before));
  await menu('导入','import-aseprite');await dialog(fixture);
- await wait(`${modal}.open`);
- check('原生文件选择进入 ASE 导入预览',await session.evaluate("document.getElementById('modal-title').textContent==='导入 Aseprite · RGBA'"));
- await click(`document.querySelector('#modal [value="cancel"]')`);
- await wait(`!${modal}.open`);
- check('取消导入预览保留文档内容与保存状态',JSON.stringify(await audit())===JSON.stringify(before));
- await menu('导入','import-aseprite');await dialog(fixture);
- await wait(`${modal}.open`);
- await click("document.getElementById('modal-submit')");
  await wait(`window.documentWindowAudit().dirty&&window.documentWindowAudit().id!==${JSON.stringify(before.id)}&&!${modal}.open`);
+ check('原生文件选择直接打开 ASE，无导入确认弹窗',!await session.evaluate(`${modal}.open`));
  const imported=await audit();
  check('确认后成为未保存项目且恢复链接图像',imported.dirty&&!imported.path&&imported.linked&&imported.pixel===0xff0000ff);
  await rm(output,{force:true});
