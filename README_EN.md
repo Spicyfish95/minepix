@@ -4,7 +4,7 @@ A Windows desktop editor for pixel art, frame-by-frame animation and game assets
 
 [简体中文](README.md) · [User guide (Chinese)](docs/USER_GUIDE.md)
 
-**Free and open source · Windows x64 · Chinese / English · Source version 2.0.5**
+**Free and open source · Windows x64 · Chinese / English · Source version 2.0.6**
 
 [Download the Windows x64 installer](https://github.com/Spicyfish95/minepix/releases/latest)
 
@@ -14,7 +14,7 @@ A Windows desktop editor for pixel art, frame-by-frame animation and game assets
 
 ## MinePix highlights
 
-### An installer of about 1.99 MiB
+### A lightweight Windows installer
 
 Built with Tauri 2, Rust and system WebView2, with Rust handling file operations, project storage and format codecs. The installer reuses system WebView2 instead of bundling a separate browser runtime. See the matching release assets for its size; the installer is also cached for updates.
 
@@ -34,19 +34,21 @@ Export images, animations and sprite sheets, with presets for **Phaser 3 atlases
 
 *Inspect the normals and lighting before exporting a PNG with transparency. The [user guide](docs/USER_GUIDE.md) also illustrates engine atlas export settings.*
 
-### Save references with your artwork
+### Link references to your artwork
 
-Import multiple reference images, move and scale them, pick colors and change their stacking order. References are stored in the PIX project and stay out of exported artwork, ready for your next editing session.
+Import multiple reference images, move and scale them, pick colors and change their stacking order. PIX stores source paths and display transforms, then reloads the images when opened. References stay out of exported artwork, and missing files can be relinked. Legacy embedded references without paths are cleared on opening; the original file changes only when you save.
 
 ![Character and palette references beside the editable pixel canvas](docs/images/reference-board.png)
 
-*Keep character studies and palette samples beside the canvas without including them in exports. Try the [reference board example](examples/reference-board.pix).*
+*Keep character studies and palette samples beside the canvas without including them in exports. Import local images to try moving, scaling and picking colors.*
 
 ### Keep editable projects and export for each purpose
 
-Compressed binary **PIX** projects retain layers, frames, palettes and references. Use **ASE / Aseprite** for exchange with other editors, and export PNG, GIF, WebP, PNG sequences or engine atlases for delivery.
+Compressed binary **PIX** projects retain layers, frames, palettes and reference paths. Use **ASE / Aseprite** for exchange with other editors. The default save format also supports PNG, WebP, JPG, JPEG, SVG, ICO and GIF as a single image of the current visible frame; GIF saves one frame too. Separate exports support animation, PNG sequences and engine atlases.
 
 ### Capture and collect references
+
+Hold `Alt` to pick a screen color even when MinePix is in the background and the pointer is already outside its window. Click with the eyedropper cursor to sample, or release Alt or press Esc to cancel.
 
 Press `Ctrl+1` to enter capture mode on the monitor under the pointer. Drag a selection, then double-click inside it or press Enter to copy; double-click before selecting to capture the full monitor. Hover over the reference panel and press `Ctrl+V` to import clipboard images. Detached reference, preview and terrain preview windows can be pinned on top.
 
