@@ -1883,12 +1883,12 @@ function boardCanvas(dom,item){
   const canvas=dom.createElement('canvas');canvas.width=item.width;canvas.height=item.height;
   const context=canvas.getContext('2d');context.putImageData(new win.ImageData(rgba,item.width,item.height),0,0);
   if(item.missing){context.fillStyle='#888';context.font='14px sans-serif';context.fillText('参考图缺失 · 双击重新定位',8,20);}
-  boardCanvasCache(dom).set(boardCacheKey(item),canvas);
+  boardCanvasCache(dom).set(boardCacheKey(item),{canvas,data:item.data});
   return canvas;
 }
 function boardCachedCanvas(dom,item){
   const cached=boardCanvasCache(dom).get(boardCacheKey(item));
-  return cached&&cached.ownerDocument===dom?cached:boardCanvas(dom,item);
+  return cached&&cached.canvas.ownerDocument===dom&&cached.data===item.data?cached.canvas:boardCanvas(dom,item);
 }
 function boardPlace(node,item,view){node.style.left=(view.x+item.x*view.zoom)+'px';node.style.top=(view.y+item.y*view.zoom)+'px';node.style.width=(item.width*item.scale*view.zoom)+'px';node.style.height=(item.height*item.scale*view.zoom)+'px';}
 function boardSurface(board,items,view){
