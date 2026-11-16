@@ -30,6 +30,16 @@ async function runPaletteEyedropperChecks(){
    setPaletteEditing(false);const paletteBefore=JSON.stringify(doc.palette);key('keydown',{altKey:true});pick(0);key('keyup');
    check(mode+' non-edit pick preserves palette',JSON.stringify(doc.palette)===paletteBefore);
   }
+  for(const mode of ['rgba','indexed','grayscale']){
+   const next=createDocument(2,1,'successive-picks');next.palette=['#00000000','#ffff00','#ff0000','#00ff00'];next.frames[0].cels[0]=[0xff0000ff,0x00ff00ff];
+   if(mode!=='rgba')convertColorMode(next,mode,{palette:'current'});
+   replaceDocument(next,true);li=0;setTool('pencil');fit();setPaletteEditing(true);paletteActive=1;paletteSelection=new Set([1]);renderColors();
+   const original=doc.palette[1];setColor(original,1);key('keydown',{altKey:true});pick(0);const first=doc.palette[1];pick(1);key('keyup');const second=doc.palette[1];
+   check(mode+' two separate picks create two undo steps',history.undoStack.length===2&&first!==original&&second!==first);
+   actions.undo();check(mode+' first undo restores first picked swatch and HEX',doc.palette[1]===first&&colorValue(color)===colorValue(first)&&colorValue($('hex').value)===colorValue(first));
+   actions.undo();check(mode+' second undo restores original swatch and HEX',doc.palette[1]===original&&colorValue(color)===colorValue(original)&&colorValue($('hex').value)===colorValue(original));
+   actions.redo();actions.redo();check(mode+' two redos restore second pick and HEX',doc.palette[1]===second&&colorValue($('hex').value)===colorValue(second));
+  }
   replaceDocument(createDocument(2,1,'transparent-pick'),true);setTool('pencil');fit();setPaletteEditing(true);
   const before=JSON.stringify(doc.palette),foreground=color;key('keydown',{altKey:true});pick(0);key('keyup');
   check('transparent canvas pick leaves foreground palette and history unchanged',color===foreground&&JSON.stringify(doc.palette)===before&&history.undoStack.length===0);
@@ -56,6 +66,12 @@ async function runPaletteEyedropperChecks(){
    const node=boardPanel().querySelector('[data-reference-id="drag-reference"]');node.setPointerCapture=()=>{};node.hasPointerCapture=()=>false;
    const at=(type,x)=>{const r=node.getBoundingClientRect(),scale=item.scale*boardView().zoom;node.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,pointerId:22,button:0,buttons:type==='pointerup'?0:1,clientX:r.left+(x+.5)*scale,clientY:r.top+.5*scale}));};
    const count=history.undoStack.length;at('pointerdown',0);at('pointermove',1);check('reference dragging samples live',color==='#00ff00'&&doc.palette[1]==='#00ff00');at('pointerup',1);check('reference drag commits one history entry',!gesture&&history.undoStack.length===count+1);
+   const referenceBefore=doc.palette[1],steps=history.undoStack.length;
+   at('pointerdown',0);at('pointerup',0);at('pointerdown',1);at('pointerup',1);
+   check('two reference clicks create independent history steps',history.undoStack.length===steps+2);
+   actions.undo();check('reference first undo restores first sample and foreground',doc.palette[1]==='#ff0000'&&color==='#ff0000');
+   actions.undo();check('reference second undo restores original swatch and foreground',doc.palette[1]===referenceBefore&&color===referenceBefore);
+   actions.redo();actions.redo();check('reference two redos restore second sample',doc.palette[1]==='#00ff00'&&color==='#00ff00');
   }finally{viewport.setPointerCapture=capture;}
   setPaletteEditing(false);
   const indexed=createDocument(3,1,'replace-indices');indexed.palette=['#00000000','#ff0000','#ff0000','#00ff00'];indexed.frames[0].cels[0]=[0xff0000ff,0xff0000ff,0x00ff00ff];convertColorMode(indexed,'indexed',{palette:'current'});indexed.frames[0].indices[0]=[1,2,3];replaceDocument(indexed,true);
