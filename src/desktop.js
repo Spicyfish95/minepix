@@ -1,8 +1,15 @@
-import {invoke} from '@tauri-apps/api/core';
+﻿import {invoke} from '@tauri-apps/api/core';
 import {getCurrentWebviewWindow} from '@tauri-apps/api/webviewWindow';
 import {getCurrentWindow,Window} from '@tauri-apps/api/window';
 import {applicationMenu} from './application-menu.js';
 import {packProjectSave,unpackProjectRead,openedProject} from './project-transfer.js';
+
+// 拦截浏览器刷新快捷键，避免 WebView2 重载页面丢失所有文档状态。
+document.addEventListener('keydown',event=>{
+  if(event.defaultPrevented||event.isComposing||event.keyCode===229)return;
+  if((event.ctrlKey||event.metaKey)&&!event.altKey&&!event.shiftKey&&event.code==='KeyR'){event.preventDefault();return;}
+  if(event.code==='F5'){event.preventDefault();return;}
+},true);
 
 const handlers=new Map(),current=getCurrentWindow();
 const dispatch=(name,payload)=>{for(const callback of handlers.get(name)||[])callback(payload);};
