@@ -19,7 +19,7 @@ export async function inputGuide({modal,keys,input,saveData,openKeymap}){
  <label>滚轮<select name="mouse.wheel"><option value="zoom">缩放</option><option value="pan">平移</option><option value="frames">切帧</option><option value="brush">笔刷大小</option></select></label>
  <label>反向滚动<input name="mouse.invert" type="checkbox" role="switch"></label><label>中键平移<input name="mouse.middlePan" type="checkbox" role="switch"></label>
  <label>缩放步长<input name="mouse.zoomStep" type="number" min="1.05" max="2" step=".05" required></label><label>平移速度<input name="mouse.panSpeed" type="number" min=".25" max="4" step=".25" required></label>
- <div class="input-gestures"><h3>固定交互</h3><p>空格：仅临时平移，松开恢复原工具<br>Alt：临时吸色<br>选区工具按住 G：网格选取，松开恢复自由矩形<br>Ctrl / Cmd + 滚轮：缩放<br>平移滚轮 + Shift：水平平移<br>Shift / Ctrl：时间轴范围 / 离散选择<br>Esc：取消当前操作；方向键：微调/导航</p><p>固定交互不参与自定义绑定。Aseprite 预设的选区修饰键以其操作约定为准。</p></div></section></div>`;
+ <div class="input-gestures"><h3>固定交互</h3><p>空格：仅临时平移，松开恢复原工具<br>Alt：临时吸色<br>Ctrl / Cmd + 滚轮：缩放<br>平移滚轮 + Shift：水平平移<br>Shift / Ctrl：时间轴范围 / 离散选择<br>Esc：取消当前操作；方向键：微调/导航</p><p>固定交互不参与自定义绑定。Aseprite 预设的选区修饰键以其操作约定为准。</p></div></section></div>`;
  const readMouse=()=>{for(const key of Object.keys(DEFAULT_INPUT)){const field=form.elements['mouse.'+key];mouse[key]=field.type==='checkbox'?field.checked:field.type==='number'?+field.value:field.value;}return validateInput(mouse);};
  const fillMouse=()=>{for(const [key,value]of Object.entries(mouse)){const field=form.elements['mouse.'+key];if(field.type==='checkbox')field.checked=value;else field.value=value;}};
  const result=await modal('快捷键与鼠标操作',html,current=>{

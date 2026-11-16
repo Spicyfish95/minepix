@@ -52,6 +52,7 @@ function runChecks(){
    viewport.focus();press('ArrowRight','ArrowRight');check(preset.profile+' canvas arrows still change frames',fi===1);
    selection={x:4,y:4,w:2,h:2};press('ArrowRight','ArrowRight');
    check(preset.profile+' canvas arrows still nudge selection',selection.x===5);
+   for(const kind of ['rect','ellipse','lasso','polygon','wand']){setTool('select');$('selection-kind').value=kind;press('g','KeyG');check(preset.profile+' G switches from '+kind+' selection to fill',tool==='fill'&&!modifiers.grid);}
    const custom=structuredClone(preset);custom.bindings['grid-select']=['Shift+J'];custom.bindings['swap-colors']=['J'];
    keymap=loadKeymap({getItem:()=>JSON.stringify(custom)});setTool('select');const beforeColor=color;press('j','KeyJ');
    check(preset.profile+' plain J executes custom action instead of Shift+J hold',color!==beforeColor&&!modifiers.grid);

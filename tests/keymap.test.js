@@ -30,16 +30,24 @@ import {holdActionFor,releasedHoldActionFor,HOLD_ACTIONS,DEFAULT_BINDINGS} from 
 test('按住动作与同键全局工具键共存且不占用单击解析',()=>{
   const k=defaultKeymap();
   assert.deepEqual(HOLD_ACTIONS,['grid-select']);
-  assert.deepEqual(DEFAULT_BINDINGS['grid-select'],['G']);
+  assert.deepEqual(DEFAULT_BINDINGS['grid-select'],[]);
   assert.equal(resolveShortcut({key:'g',code:'KeyG'},k).tool,'fill');
-  assert.equal(holdActionFor({key:'g',code:'KeyG'},k),'grid-select');
-  assert.equal(holdActionFor({key:'G',code:'KeyG',shiftKey:true},k),'grid-select');
+  assert.equal(holdActionFor({key:'g',code:'KeyG'},k),null);
+  assert.equal(holdActionFor({key:'G',code:'KeyG',shiftKey:true},k),null);
   assert.equal(holdActionFor({key:'g',code:'KeyG',ctrlKey:true},k),null);
   const custom=defaultKeymap();custom.bindings['grid-select']=['Alt+H'];
   assert.equal(holdActionFor({key:'h',code:'KeyH',altKey:true},custom),'grid-select');
   assert.equal(holdActionFor({key:'g',code:'KeyG'},custom),null);
 });
 
+test('旧默认 G 按住绑定迁移为空，其他自定义及新版显式 G 保留',()=>{
+ for(const preset of [defaultKeymap,asepriteKeymap]){
+  const old=preset();delete old.defaultsRevision;old.bindings['grid-select']=['G'];
+  assert.deepEqual(loadKeymap({getItem:()=>JSON.stringify(old)}).bindings['grid-select'],[]);
+  old.bindings['grid-select']=['Alt+J'];assert.deepEqual(loadKeymap({getItem:()=>JSON.stringify(old)}).bindings['grid-select'],['Alt+J']);
+  const custom=preset();custom.bindings['grid-select']=['G'];assert.deepEqual(loadKeymap({getItem:()=>JSON.stringify(custom)}).bindings['grid-select'],['G']);
+ }
+});
 test('显式 Shift 按住绑定只匹配 Shift，普通绑定允许叠加 Shift',()=>{
  const k=defaultKeymap();k.bindings['grid-select']=['Shift+J'];k.bindings.save=['J'];
  assert.doesNotThrow(()=>validateKeymap(k));

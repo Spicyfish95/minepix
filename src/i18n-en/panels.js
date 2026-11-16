@@ -21,7 +21,7 @@ export default {
 "项目自动恢复、临时写入与覆盖备份始终启用。": "Automatic project recovery, temporary writes and overwrite backups are always enabled.",
 "时间轴切换 cel 矩形；拖动或 Shift 选矩形，方向键导航 / Shift 扩展；聚焦时间轴时 Ctrl+C/X/V 与 Delete 操作 cel": "Timeline switches cel rectangles; drag or Shift to select a rectangle, arrows to navigate and Shift to extend; Ctrl+C/X/V and Delete act on cels while the timeline is focused",
 "点击帧头或 cel；Shift 连续范围，Ctrl / Cmd 离散多选；拖动帧头重排全部图层": "Click a frame header or cel; Shift for a range, Ctrl / Cmd for scattered picks; drag headers to reorder every layer",
-"选区工具中按住 G 进入网格选取，松开恢复自由矩形；点击选中整格，拖动选择多格": "Hold G with a selection tool for grid select and release to return to free rectangles; click a cell or drag across cells",
+"网格选取默认未绑定，可在快捷键设置中配置按住键；点击选中整格，拖动选择多格": "Grid select is unbound by default; configure a hold key in Shortcuts, then click a cell or drag across cells",
 "Shift：直线按 45°、矩形 / 椭圆 / 选区等宽高、移动锁定轴": "Shift: 45 degree lines, equal width and height for rectangles / ellipses / selections, axis-locked moves",
 "滚轮以鼠标为中心缩放；绘画工具右键擦除": "The wheel zooms around the pointer; right-click erases with paint tools",
 "[ 缩小 / ] 放大；X 交换前景色与背景色": "[ shrinks / ] grows the brush; X swaps foreground and background",
