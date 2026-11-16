@@ -32,7 +32,7 @@ export default {
 "点击缩小 · 松开 Alt 恢复放大": "Click to zoom out · release Alt to zoom in again",
 "点击放大 · 按住 Alt 点击缩小": "Click to zoom in · hold Alt and click to zoom out",
 "正在处理文件…": "Processing file…",
-"动画播放中 · 空格暂停后编辑": "Animation is playing · press space to pause before editing",
+"动画播放中 · 点击暂停后编辑": "Animation is playing · click pause before editing",
 "图层已锁定 · 解锁后编辑": "Layer locked · unlock to edit",
 "图层已隐藏 · 显示后编辑": "Layer hidden · show it to edit",
 "网格选取：点击选中整格 · 拖动选择多格 · 松开": "Grid select: click to pick a cell · drag to select several · release",
