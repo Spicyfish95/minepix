@@ -44,6 +44,20 @@ async function runChecks(){
   let savedPath='C:/saved.ase';window.desktop=new Proxy({saveProject:async()=>savedPath?{filePath:savedPath,name:'saved'}:null},{get:(target,key)=>key in target?target[key]:original[key]});
   await saveProject(true);check('successful ASE save updates default file type',readSaveFormat(localStorage)==='ase');savedPath=null;await saveProject(true);check('cancelled save keeps previous default',readSaveFormat(localStorage)==='ase');
   if(existingSettings===null)localStorage.removeItem(APP_SETTINGS_KEY);else localStorage.setItem(APP_SETTINGS_KEY,existingSettings);
+  const {encodeSingleImage}=await import('/single-image-save.js');
+  const flattened=createDocument(2,1,'single-image');flattened.frames[0].cels[0]=[0xff0000ff,0xff0000ff];flattened.frames.push({duration:100,cels:[[0x00ff00ff,0]]});
+  flattened.layers.push({id:2,name:'hidden',visible:false,locked:false,opacity:100},{id:3,name:'reference',visible:true,locked:false,opacity:100,type:'reference',reference:{...encodeReference(2,1,new Uint8Array([255,0,255,255,255,0,255,255]))}});
+  for(const frame of flattened.frames)frame.cels.push([0x0000ffff,0x0000ffff],[0,0]);
+  for(const format of ['png','webp','jpg','jpeg','svg','ico','gif']){
+   const encoded=encodeSingleImage(flattened,1,format);let base64=encoded.data,mime=({jpg:'image/jpeg',jpeg:'image/jpeg',webp:'image/webp',svg:'image/svg+xml',ico:'image/x-icon'})[format]||'image/png';
+   if(format==='svg'){check('SVG save contains current frame only',encoded.data.includes('#00ff00')&&!encoded.data.includes('#ff0000')&&!encoded.data.includes('#0000ff'));base64=btoa(encoded.data);}
+   if(format==='ico')check('ICO save writes icon header',atob(encoded.data).charCodeAt(2)===1);
+   const loaded=new Image();loaded.src='data:'+mime+';base64,'+base64;await loaded.decode();check(format+' single image preserves dimensions',loaded.width===2&&loaded.height===1);
+   const view=document.createElement('canvas');view.width=2;view.height=1;const context=view.getContext('2d');context.drawImage(loaded,0,0);const pixel=context.getImageData(0,0,2,1).data;check(format+' saves visible current frame rather than first hidden or reference layers',pixel[1]>pixel[0]+60&&pixel[1]>pixel[2]+60);
+   if(['png','svg','ico','gif'].includes(format))check(format+' single image retains transparent pixel',pixel[7]===0);
+   if(['jpg','jpeg'].includes(format))check(format+' single image flattens alpha onto white',pixel[7]===255&&pixel[5]>200);
+  }
+  let oversized=false;try{encodeSingleImage({...flattened,width:512},1,'ico');}catch{oversized=true;}check('oversize ICO fails before writing',oversized);
   const invalid=client.pack({format:'invalid'},'invalid');let rejected=false;try{await invalid;}catch{rejected=true;}check('invalid worker payload rejects without hanging',rejected);check('worker recovers after validation error',(await client.pack(createDocument(1,1,'retry'),'retry')).byteLength>0);
   return{ok:true,results,performance:{size,coldMs,warmMs,coldTicks,maxPackingMainThreadGapMs:packingGap,maxMainThreadGapMs:maxGap,totalMs:performance.now()-started}};
  }catch(error){return{ok:false,results,error:error.stack};}

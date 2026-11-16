@@ -1,5 +1,6 @@
 pub mod aseprite;
 mod diagnostics;
+mod document_save;
 pub mod differential;
 mod drop_paths;
 mod files;
@@ -363,7 +364,7 @@ async fn desktop_call(
                 _ => dialog(&state).add_filter(
                     "MinePix / Images",
                     &[
-                        "pix", "json", "png", "jpg", "jpeg", "webp", "bmp", "gif", "ase",
+                        "pix", "json", "png", "jpg", "jpeg", "webp", "bmp", "gif", "svg", "ico", "ase",
                         "aseprite",
                     ],
                 ),
@@ -405,6 +406,34 @@ async fn desktop_call(
             } else {
                 Ok(documents.remove(0))
             }
+        }
+        "chooseProjectPath" => {
+            let options = args.first().ok_or("缺少保存选项")?;
+            let previous = options["filePath"].as_str();
+            let target = if previous.is_some() && options["saveAs"] != true {
+                PathBuf::from(previous.unwrap())
+            } else {
+                let format = options["defaultFormat"].as_str().filter(|value| document_save::FORMATS.contains(value)).unwrap_or("pix");
+                let name = previous.or_else(|| options["name"].as_str()).unwrap_or("untitled");
+                let default = std::path::Path::new(name).with_extension(format);
+                let mut picker = dialog(&state).add_filter(format, &[format]);
+                for extension in document_save::FORMATS { if *extension != format { picker = picker.add_filter(*extension, &[*extension]); } }
+                let Some(chosen) = picker.set_file_name(default.to_string_lossy()).save_file().await else { return Ok(Value::Null) };
+                chosen.path().to_path_buf()
+            };
+            let format = document_save::format(&target).map_err(io_error)?;
+            Ok(json!({"filePath":target,"format":format}))
+        }
+        "saveImageProject" => {
+            use base64::Engine;
+            let options = args.first().ok_or("缺少图像保存选项")?;
+            let target = PathBuf::from(options["filePath"].as_str().ok_or("缺少图像保存路径")?);
+            let encoded = options["data"].as_str().ok_or("缺少图像数据")?;
+            let bytes = if options["binary"] == false { encoded.as_bytes().to_vec() }
+                else { base64::engine::general_purpose::STANDARD.decode(encoded).map_err(|error| error.to_string())? };
+            let result = state.files.lock().unwrap().save_image(window.label(), &target, &bytes).map_err(io_error)?;
+            state.recovery.lock().unwrap().clear_saved(&target.to_string_lossy()).map_err(io_error)?;
+            Ok(result)
         }
         "saveProject" => {
             let data = text(&args, 0);

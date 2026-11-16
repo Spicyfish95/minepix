@@ -1,4 +1,6 @@
-﻿import {readSaveFormat} from './save-format.js';
+﻿import {createDocumentSaver} from './document-save.js';
+import {encodeSingleImage} from './single-image-save.js';
+import {readSaveFormat} from './save-format.js';
 import {encodeReference} from './layer-types.js';
 import {loadReferenceFiles} from './reference-files.js';
 import {invoke} from '@tauri-apps/api/core';
@@ -98,13 +100,19 @@ export async function initializeDesktop(){
   if(!path)throw new Error('最近文件条目已失效');
   return call('openRecent',path);
  };
- bridge.saveProject=async(data,name,saveAs=false,filePath=null)=>invokeBackend('save_project_packed',await projectSaveClient.pack(data,name,saveAs,{filePath,defaultFormat:readSaveFormat(localStorage)}));
+ bridge.saveProject=createDocumentSaver({
+  getDefaultFormat:()=>readSaveFormat(localStorage),choosePath:options=>call('chooseProjectPath',options),encodeImage:encodeSingleImage,
+  savePacked:async(data,name,filePath)=>invokeBackend('save_project_packed',await projectSaveClient.pack(data,name,false,{filePath})),
+  saveImage:(filePath,encoded)=>call('saveImageProject',{filePath,...encoded})
+ });
  window.addEventListener('unload',()=>projectSaveClient.dispose(),{once:true});
  bridge.recentThumbs=async()=>{
   const {composite}=await import('./model.js'),entries=await call('recentFiles'),size=32,thumbnails=[];
   for(const {path}of entries){
-   const doc=await readProject(path,false);
-   const source=composite(doc,0),pixels=new Uint8Array(size*size*4),bytes=new Uint8Array(source.buffer,source.byteOffset,source.byteLength);
+   let doc,bytes;
+   if(/\.(pix|ase|aseprite)$/i.test(path)){doc=await readProject(path,false);const source=composite(doc,0);bytes=new Uint8Array(source.buffer,source.byteOffset,source.byteLength);}
+   else{doc=await readReference(path);bytes=Uint8Array.from(atob(doc.data),value=>value.charCodeAt(0));}
+   const pixels=new Uint8Array(size*size*4);
    for(let y=0;y<size;y++)for(let x=0;x<size;x++){const from=(Math.min(doc.height-1,Math.floor(y*doc.height/size))*doc.width+Math.min(doc.width-1,Math.floor(x*doc.width/size)))*4;pixels.set(bytes.subarray(from,from+4),(y*size+x)*4);}
    thumbnails.push({path,width:doc.width,height:doc.height,size,pixels:btoa(String.fromCharCode(...pixels))});
   }

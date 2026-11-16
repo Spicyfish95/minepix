@@ -1829,16 +1829,16 @@ const projectSaves=new Map();
 async function saveProject(saveAs=false){
   if(projectSaves.has(documentId))return projectSaves.get(documentId);
   if(busy||gesture)return false;stop();
-  const target=documentId,revision=history.revision,referenceRevision=boardRevision,snapshot=snapshotProject(doc),path=filePath;
+  const target=documentId,revision=history.revision,referenceRevision=boardRevision,snapshot=snapshotProject(doc),path=filePath,frameIndex=fi;
   const pending=(async()=>{
    try{
     message('正在后台保存项目…');
-    const result=window.desktop?await window.desktop.saveProject(snapshot,snapshot.name,saveAs,path):await saveData(JSON.stringify(snapshot),'project',snapshot.name);
+    const result=window.desktop?await window.desktop.saveProject(snapshot,snapshot.name,saveAs,path,frameIndex):await saveData(JSON.stringify(snapshot),'project',snapshot.name);
     if(!result){message('已取消保存');return false;}
     if(window.desktop)rememberSaveFormat(localStorage,result.filePath);
     if(documentId===target){
      if(window.desktop){filePath=result.filePath;doc.name=result.name;window.desktop.activateDocument(filePath);}
-     saved=revision;savedBoardRevision=referenceRevision;changed();render();await flushRecovery();message(dirty?'项目已保存，仍有新的未保存更改':'项目已保存');
+     saved=revision;savedBoardRevision=referenceRevision;changed();render();await flushRecovery();message(result.singleImage?(dirty?'当前帧图像已保存，仍有新的未保存更改':'当前帧图像已保存'):(dirty?'项目已保存，仍有新的未保存更改':'项目已保存'));
     }else{
      const state=documentTabs.items.find(item=>item.id===target)?.state;
      if(state){
@@ -1846,7 +1846,7 @@ async function saveProject(saveAs=false){
       state.saved=revision;state.savedBoardRevision=referenceRevision;state.dirty=state.historyState.revision!==revision||state.boardRevision!==referenceRevision;
       renderDocumentTabs();window.desktop?.setDirty(dirty||documentTabs.items.some(item=>item.state.dirty));await flushRecovery(state);
      }
-     message(snapshot.name+' · 项目已保存');
+     message(snapshot.name+' · '+(result.singleImage?'当前帧图像已保存':'项目已保存'));
     }
     return true;
    }catch(error){showError('保存失败：'+error.message);return false;}

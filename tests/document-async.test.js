@@ -15,7 +15,7 @@ function editor(){
  const documentTabs=new DocumentStore(),doc=createDocument(2,2,'A');
  const state={documentId:'a',doc,boardRevision:0,savedBoardRevision:0,dirty:false,filePath:'a.pix',saved:0,historyState:{revision:0}};
  documentTabs.add(state);
- const context={...state,documentTabs,projectSaves:new Map(),snapshotProject,rememberSaveFormat:()=>{},localStorage:{},busy:false,gesture:null,shapeSession:null,space:false,tool:'pencil',modifiers:{alt:false},history:{revision:0},crypto,
+ const context={...state,documentTabs,projectSaves:new Map(),snapshotProject,fi:0,rememberSaveFormat:()=>{},localStorage:{},busy:false,gesture:null,shapeSession:null,space:false,tool:'pencil',modifiers:{alt:false},history:{revision:0},crypto,
   encodeReference,addReference,moveReference,resizeReference,stop:()=>{},message:()=>{},render:()=>{},renderDocumentTabs:()=>{},renderReferenceBoard:()=>{},boardMessage:()=>{},scheduleRecovery:()=>{},flushRecovery:async()=>{},showError:()=>{},boardPanel:()=>({querySelector:()=>({})}),boardView:()=>({zoom:1}),boardApplyView:()=>{}};
  context.setBusy=value=>context.busy=value;
  context.setDirty=value=>context.dirty=value;
@@ -184,4 +184,10 @@ test('桌面桥接按路径打开时直接传递路径，不重新查询列表�
  const context={bridge:{},call:async(method,...args)=>{calls.push([method,...args]);return{filePath:args[0]};}};
  vm.createContext(context);vm.runInContext(desktop.slice(desktop.indexOf('bridge.openRecent=async'),desktop.indexOf('bridge.saveProject=')),context);
  assert.equal((await context.bridge.openRecent('a.pix')).filePath,'a.pix');assert.deepEqual(calls,[['openRecent','a.pix']]);
+});
+
+test('单图保存绑定发起时当前帧，等待选择路径时切帧不会改写目标帧',async()=>{
+ const context=editor(),pending=deferred();context.doc.frames.push(structuredClone(context.doc.frames[0]));context.fi=1;let frame;
+ context.window.desktop.saveProject=async(_snapshot,_name,_saveAs,_path,index)=>{frame=index;return pending.promise;};
+ const saving=context.saveProject(true);context.fi=0;pending.resolve({filePath:'current.png',name:'current',singleImage:true});assert.equal(await saving,true);assert.equal(frame,1);assert.equal(context.filePath,'current.png');
 });

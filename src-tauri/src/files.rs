@@ -55,7 +55,7 @@ pub fn launch_paths(arguments: &[String], cwd: &Path) -> Vec<PathBuf> {
             let path = cwd.join(arg);
             let extension = path.extension()?.to_str()?.to_ascii_lowercase();
             if ![
-                "pix", "json", "png", "jpg", "jpeg", "webp", "bmp", "gif", "ase", "aseprite",
+                "pix", "json", "png", "jpg", "jpeg", "webp", "bmp", "gif", "svg", "ico", "ase", "aseprite",
             ]
             .contains(&extension.as_str())
             {
@@ -78,6 +78,8 @@ pub fn decode_bytes(name: &str, bytes: &[u8], file_path: Option<&str>) -> io::Re
         "webp" => Some("image/webp"),
         "bmp" => Some("image/bmp"),
         "gif" => Some("image/gif"),
+        "svg" => Some("image/svg+xml"),
+        "ico" => Some("image/x-icon"),
         _ => None,
     };
     if let Some(mime) = mime {
@@ -178,7 +180,7 @@ impl Files {
             Path::new(&entry.path).is_file()
                 && Path::new(&entry.path)
                     .extension()
-                    .is_some_and(|value| ["pix", "aseprite", "ase"].iter().any(|extension| value.eq_ignore_ascii_case(extension)))
+                    .is_some_and(|value| crate::document_save::FORMATS.iter().any(|extension| value.eq_ignore_ascii_case(extension)))
         });
         self.persist_recent()?;
         Ok(self.recent.clone())
@@ -307,6 +309,17 @@ impl Files {
         result
     }
 
+    pub fn save_image(&mut self, window: &str, target: &Path, encoded: &[u8]) -> io::Result<Value> {
+        let format = crate::document_save::format(target)?;
+        let bytes = crate::document_save::image_bytes(&format, encoded)?;
+        let name = target.file_stem().unwrap_or_default().to_string_lossy();
+        let previous = self.active.get(window).cloned();
+        let result = self.save_encoded(window, target, &name, &bytes);
+        if let Some(path) = previous { self.active.insert(window.into(), path); } else { self.active.remove(window); }
+        let mut result = result?;
+        result["singleImage"] = json!(true);result["format"] = json!(format);Ok(result)
+    }
+
     fn save_encoded(&mut self, window: &str, target: &Path, name: &str, bytes: &[u8]) -> io::Result<Value> {
         write_atomic(target, bytes)?;
         let text = target.to_string_lossy().into_owned();
@@ -320,6 +333,16 @@ impl Files {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn single_image_save_preserves_other_active_document_and_registers_recent_path() {
+        let root = tempfile::tempdir().unwrap();let mut files = Files::new(root.path().join("settings")).unwrap();
+        files.active.insert("main".into(), "another.pix".into());
+        let path = root.path().join("single.png");let bytes = include_bytes!("../../tests/fixtures/gif-frame.png");
+        let result = files.save_image("main", &path, bytes).unwrap();assert_eq!(result["singleImage"],true);
+        assert_eq!(fs::read(&path).unwrap(),bytes);assert_eq!(files.active["main"],"another.pix");assert_eq!(files.recent().unwrap().len(),1);
+        let failed = root.path().join("invalid.gif");assert!(files.save_image("main",&failed,b"not png").is_err());assert!(!failed.exists());assert_eq!(files.active["main"],"another.pix");
+    }
 
     #[test]
     fn packed_save_uses_real_ase_encoding_and_reopens_with_path() {
