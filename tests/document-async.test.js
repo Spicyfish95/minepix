@@ -15,7 +15,7 @@ function editor(){
  const documentTabs=new DocumentStore(),doc=createDocument(2,2,'A');
  const state={documentId:'a',doc,boardRevision:0,savedBoardRevision:0,dirty:false,filePath:'a.pix',saved:0,historyState:{revision:0}};
  documentTabs.add(state);
- const context={...state,documentTabs,projectSaves:new Map(),snapshotProject,busy:false,gesture:null,shapeSession:null,space:false,tool:'pencil',modifiers:{alt:false},history:{revision:0},crypto,
+ const context={...state,documentTabs,projectSaves:new Map(),snapshotProject,rememberSaveFormat:()=>{},localStorage:{},busy:false,gesture:null,shapeSession:null,space:false,tool:'pencil',modifiers:{alt:false},history:{revision:0},crypto,
   encodeReference,addReference,moveReference,resizeReference,stop:()=>{},message:()=>{},render:()=>{},renderDocumentTabs:()=>{},renderReferenceBoard:()=>{},boardMessage:()=>{},scheduleRecovery:()=>{},flushRecovery:async()=>{},showError:()=>{},boardPanel:()=>({querySelector:()=>({})}),boardView:()=>({zoom:1}),boardApplyView:()=>{}};
  context.setBusy=value=>context.busy=value;
  context.setDirty=value=>context.dirty=value;

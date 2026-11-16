@@ -1,4 +1,5 @@
 export default {
+"默认保存文件格式": "Default save file format",
 "常规与显示": "General and display",
 "主题": "Theme",
 "外观": "Appearance",

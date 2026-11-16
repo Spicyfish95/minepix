@@ -89,7 +89,7 @@ pub fn decode_bytes(name: &str, bytes: &[u8], file_path: Option<&str>) -> io::Re
         let mut imported = crate::aseprite::decode(bytes, name)?;
         imported["type"] = json!("aseprite");
         imported["name"] = json!(name);
-        imported["filePath"] = Value::Null;
+        imported["filePath"] = json!(file_path);
         return Ok(imported);
     }
     if extension != "pix" {
@@ -178,7 +178,7 @@ impl Files {
             Path::new(&entry.path).is_file()
                 && Path::new(&entry.path)
                     .extension()
-                    .is_some_and(|value| value.eq_ignore_ascii_case("pix"))
+                    .is_some_and(|value| ["pix", "aseprite", "ase"].iter().any(|extension| value.eq_ignore_ascii_case(extension)))
         });
         self.persist_recent()?;
         Ok(self.recent.clone())
@@ -220,7 +220,13 @@ impl Files {
 
     pub fn read_project_transfer(&mut self, path: &Path, record: bool) -> io::Result<Vec<u8>> {
         let path = fs::canonicalize(path)?;
-        let bytes = crate::project::read_transfer(&read_file(&path)?)?;
+        let source = read_file(&path)?;
+        let encoded;
+        let source = if path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("ase") || extension.eq_ignore_ascii_case("aseprite")) {
+            encoded = crate::project::encode(&crate::aseprite::decode(&source, &basename(&path))?["doc"])?;
+            encoded.as_slice()
+        } else { source.as_slice() };
+        let bytes = crate::project::read_transfer(source)?;
         if record {
             let text = path.to_string_lossy().trim_start_matches("\\\\?\\").to_owned();
             self.selected.insert(text);
@@ -247,7 +253,7 @@ impl Files {
             .trim_start_matches("\\\\?\\")
             .to_owned();
         let value = decode_bytes(&basename(&path), &read_file(&path)?, Some(&text))?;
-        if value["type"] == "project" {
+        if value["type"] == "project" || value["type"] == "aseprite" {
             self.selected.insert(text);
             self.add_recent(&path)?;
         }
@@ -285,7 +291,12 @@ impl Files {
 
     pub fn save_packed(&mut self, window: &str, target: &Path, packed: &crate::project::PackedSave<'_>) -> io::Result<Value> {
         let name = target.file_stem().unwrap_or_default().to_string_lossy().into_owned();
-        let bytes = packed.encode_cached(&name, &mut self.reference_chunks)?;
+        let extension = target.extension().unwrap_or_default().to_string_lossy().to_ascii_lowercase();
+        let bytes = match extension.as_str() {
+            "pix" => packed.encode_cached(&name, &mut self.reference_chunks)?,
+            "ase" | "aseprite" => crate::aseprite::encode(&packed.document(&name)?)?,
+            _ => return Err(error("项目保存仅支持 PIX / ASE / ASEPRITE")),
+        };
         let previous = self.active.get(window).cloned();
         let result = self.save_encoded(window, target, &name, &bytes);
         // Snapshot saves may finish after this window switched to another document.
@@ -309,6 +320,23 @@ impl Files {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn packed_save_uses_real_ase_encoding_and_reopens_with_path() {
+        let root = tempfile::tempdir().unwrap();let mut files = Files::new(root.path().join("settings")).unwrap();
+        let imported = crate::aseprite::decode(include_bytes!("../../tests/fixtures/rgba-linked.aseprite"), "sprite").unwrap();
+        let metadata = serde_json::to_vec(&json!({"document":imported["doc"],"blocks":[],"name":"sprite","saveAs":true,"target":{"filePath":null,"defaultFormat":"ase"}})).unwrap();
+        let mut wire = b"MPXSAVE1".to_vec();wire.extend_from_slice(&(metadata.len() as u32).to_le_bytes());wire.extend_from_slice(&metadata);
+        let packed = crate::project::PackedSave::parse(&wire).unwrap();assert_eq!(packed.default_format(), "ase");
+        for extension in ["ase", "aseprite"] {
+            let target = root.path().join(format!("sprite.{extension}"));files.save_packed("main", &target, &packed).unwrap();
+            let bytes = fs::read(&target).unwrap();assert_eq!(&bytes[4..6], &[0xe0, 0xa5]);
+            let opened = files.open(&target).unwrap();assert_eq!(opened["type"], "aseprite");assert!(opened["filePath"].as_str().unwrap().ends_with(extension));
+            assert_eq!(opened["doc"]["frames"].as_array().unwrap().len(), 2);
+            let count = files.recent().unwrap().len();assert_eq!(&files.read_project_transfer(&target, false).unwrap()[..8], b"MPXREAD1");assert_eq!(files.recent().unwrap().len(), count);
+        }
+        assert_eq!(files.recent().unwrap().len(), 2);
+    }
 
     #[test]
     fn external_reference_save_stores_paths_without_image_data() {
@@ -406,19 +434,19 @@ mod tests {
     }
 
     #[test]
-    fn ase_import_returns_document_without_project_path() {
+    fn ase_import_preserves_project_path() {
         let bytes = include_bytes!("../../tests/fixtures/rgba-linked.aseprite");
         let imported = decode_bytes("动画.ase", bytes, Some("C:/动画.ase")).unwrap();
         assert_eq!(imported["type"], "aseprite");
-        assert!(imported["filePath"].is_null());
+        assert_eq!(imported["filePath"], "C:/动画.ase");
         assert_eq!(imported["doc"]["frames"].as_array().unwrap().len(), 2);
         let root = tempfile::tempdir().unwrap();
         let mut files = Files::new(root.path().join("settings")).unwrap();
         let path = root.path().join("动画.aseprite");
         fs::write(&path, bytes).unwrap();
         assert_eq!(files.open(&path).unwrap()["type"], "aseprite");
-        assert!(files.recent().unwrap().is_empty());
-        assert!(files.selected.is_empty());
+        assert_eq!(files.recent().unwrap().len(), 1);
+        assert_eq!(files.selected.len(), 1);
     }
 
     #[test]

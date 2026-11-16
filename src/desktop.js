@@ -1,4 +1,5 @@
-﻿import {encodeReference} from './layer-types.js';
+﻿import {readSaveFormat} from './save-format.js';
+import {encodeReference} from './layer-types.js';
 import {loadReferenceFiles} from './reference-files.js';
 import {invoke} from '@tauri-apps/api/core';
 import {getCurrentWebviewWindow} from '@tauri-apps/api/webviewWindow';
@@ -93,7 +94,7 @@ export async function initializeDesktop(){
   if(!path)throw new Error('最近文件条目已失效');
   return call('openRecent',path);
  };
- bridge.saveProject=async(data,name,saveAs=false,filePath=null)=>invokeBackend('save_project_packed',await projectSaveClient.pack(data,name,saveAs,{filePath}));
+ bridge.saveProject=async(data,name,saveAs=false,filePath=null)=>invokeBackend('save_project_packed',await projectSaveClient.pack(data,name,saveAs,{filePath,defaultFormat:readSaveFormat(localStorage)}));
  window.addEventListener('unload',()=>projectSaveClient.dispose(),{once:true});
  bridge.recentThumbs=async()=>{
   const {composite}=await import('./model.js'),entries=await call('recentFiles'),size=32,thumbnails=[];

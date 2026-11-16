@@ -190,7 +190,7 @@ impl ReferenceChunkCache {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SaveTarget { file_path: Option<String> }
+struct SaveTarget { file_path: Option<String>, default_format: Option<String> }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -227,6 +227,31 @@ impl<'a> PackedSave<'a> {
     pub fn name(&self) -> &str { &self.metadata.name }
     pub fn save_as(&self) -> bool { self.metadata.save_as }
     pub fn target(&self) -> Option<&Option<String>> { self.metadata.target.as_ref().map(|target| &target.file_path) }
+
+    pub fn default_format(&self) -> &str {
+        self.metadata.target.as_ref().and_then(|target| target.default_format.as_deref()).filter(|format| ["pix", "aseprite", "ase"].contains(format)).unwrap_or("pix")
+    }
+
+    pub fn document(&self, name: &str) -> io::Result<Value> {
+        let mut document = self.metadata.document.clone();document["name"] = json!(name);
+        let mut cursor = 0usize;
+        for block in &self.metadata.blocks {
+            let width = match block.kind.as_str() { "u32" => 4, "u8" | "base64" => 1, _ => return Err(invalid("项目块类型无效")) };
+            let size = block.count.checked_mul(width).ok_or_else(|| invalid("项目块长度溢出"))?;
+            let end = cursor.checked_add(size).ok_or_else(|| invalid("项目块长度溢出"))?;
+            let raw = self.payload.get(cursor..end).ok_or_else(|| invalid("项目像素截断"))?;
+            let target = document.pointer_mut(&block.path).ok_or_else(|| invalid("项目块映射无效"))?;
+            if !target.is_null() { return Err(invalid("项目块覆盖元数据")); }
+            *target = match block.kind.as_str() {
+                "u32" => Value::Array(raw.chunks_exact(4).map(|bytes| json!(u32::from_le_bytes(bytes.try_into().unwrap()))).collect()),
+                "u8" => json!(raw),
+                _ => json!(STANDARD.encode(raw)),
+            };
+            cursor = end;
+        }
+        if cursor != self.payload.len() { return Err(invalid("项目保存包含多余像素")); }
+        Ok(document)
+    }
 
     pub fn encode(&self, name: &str) -> io::Result<Vec<u8>> {
         self.encode_cached(name, &mut ReferenceChunkCache::default())

@@ -60,10 +60,11 @@ async fn save_project_packed(
     let packed = project::PackedSave::parse(bytes).map_err(|error| error.to_string())?;
     let previous = packed.target().cloned().unwrap_or_else(|| state.files.lock().unwrap().active.get(window.label()).cloned());
     let target = if previous.is_none() || packed.save_as() {
-        let default = previous.unwrap_or_else(|| format!("{}.pix", std::path::Path::new(packed.name())
-            .file_stem().unwrap_or_default().to_string_lossy()));
-        let Some(chosen) = dialog(&state).add_filter("MinePix", &["pix"])
-            .set_file_name(default).save_file().await else { return Ok(Value::Null) };
+        let format = packed.default_format();
+        let default = std::path::Path::new(previous.as_deref().unwrap_or(packed.name())).with_extension(format);
+        let mut picker = dialog(&state).add_filter(format, &[format]);
+        for extension in ["pix", "aseprite", "ase"] { if extension != format { picker = picker.add_filter(extension, &[extension]); } }
+        let Some(chosen) = picker.set_file_name(default.to_string_lossy()).save_file().await else { return Ok(Value::Null) };
         chosen.path().to_path_buf()
     } else { PathBuf::from(previous.unwrap()) };
     let result = state.files.lock().unwrap().save_packed(window.label(), &target, &packed)
