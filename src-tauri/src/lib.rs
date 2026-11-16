@@ -58,7 +58,7 @@ async fn save_project_packed(
         return Err("项目保存需要原始字节".into());
     };
     let packed = project::PackedSave::parse(bytes).map_err(|error| error.to_string())?;
-    let previous = state.files.lock().unwrap().active.get(window.label()).cloned();
+    let previous = packed.target().cloned().unwrap_or_else(|| state.files.lock().unwrap().active.get(window.label()).cloned());
     let target = if previous.is_none() || packed.save_as() {
         let default = previous.unwrap_or_else(|| format!("{}.pix", std::path::Path::new(packed.name())
             .file_stem().unwrap_or_default().to_string_lossy()));

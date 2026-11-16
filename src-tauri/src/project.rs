@@ -154,6 +154,41 @@ fn finish(metadata: &[u8], data_chunks: &[u8], block_count: usize) -> io::Result
     Ok(output)
 }
 
+// Cache exact source bytes as well as encoded DATA chunks: no checksum collision can reuse stale pixels.
+#[derive(Default)]
+pub struct ReferenceChunkCache {
+    entries: std::collections::VecDeque<(Vec<u8>, Vec<u8>)>,
+    bytes: usize,
+}
+impl ReferenceChunkCache {
+    fn append(&mut self, raw: &[u8], output: &mut Vec<u8>) -> io::Result<()> {
+        const BUDGET: usize = 96 * 1024 * 1024;
+        if let Some(index) = self.entries.iter().position(|(source, _)| source == raw) {
+            let entry = self.entries.remove(index).unwrap();
+            output.extend_from_slice(&entry.1);
+            self.entries.push_back(entry);
+            return Ok(());
+        }
+        let mut encoded = Vec::new();
+        chunk(b"DATA", raw, &mut encoded)?;
+        output.extend_from_slice(&encoded);
+        let cost = raw.len() + encoded.len();
+        if cost <= BUDGET {
+            while self.bytes + cost > BUDGET {
+                let (source, value) = self.entries.pop_front().unwrap();
+                self.bytes -= source.len() + value.len();
+            }
+            self.bytes += cost;
+            self.entries.push_back((raw.to_vec(), encoded));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveTarget { file_path: Option<String> }
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SaveMetadata {
@@ -161,6 +196,7 @@ struct SaveMetadata {
     blocks: Vec<Block>,
     name: String,
     save_as: bool,
+    target: Option<SaveTarget>,
 }
 
 pub struct PackedSave<'a> {
@@ -187,8 +223,13 @@ impl<'a> PackedSave<'a> {
 
     pub fn name(&self) -> &str { &self.metadata.name }
     pub fn save_as(&self) -> bool { self.metadata.save_as }
+    pub fn target(&self) -> Option<&Option<String>> { self.metadata.target.as_ref().map(|target| &target.file_path) }
 
     pub fn encode(&self, name: &str) -> io::Result<Vec<u8>> {
+        self.encode_cached(name, &mut ReferenceChunkCache::default())
+    }
+
+    pub fn encode_cached(&self, name: &str, cache: &mut ReferenceChunkCache) -> io::Result<Vec<u8>> {
         let mut document = self.metadata.document.clone();
         document["name"] = json!(name);
         let mut cursor = 0usize;
@@ -208,7 +249,8 @@ impl<'a> PackedSave<'a> {
             let len = block.count.checked_mul(width).ok_or_else(|| invalid("项目块长度溢出"))?;
             let end = cursor.checked_add(len).ok_or_else(|| invalid("项目块长度溢出"))?;
             let raw = self.payload.get(cursor..end).ok_or_else(|| invalid("项目像素数据截断"))?;
-            chunk(b"DATA", raw, &mut data_chunks)?;
+            if block.kind == "base64" { cache.append(raw, &mut data_chunks)?; }
+            else { chunk(b"DATA", raw, &mut data_chunks)?; }
             cursor = end;
         }
         if cursor != self.payload.len() { return Err(invalid("项目保存包含多余像素数据")); }
@@ -401,6 +443,37 @@ mod tests {
         let output = packed.encode("目标名称").unwrap();
         assert_eq!(output, encode(&document).unwrap());
         assert_eq!(decode(&output).unwrap(), document);
+    }
+
+    #[test]
+    fn packed_reference_cache_reuses_exact_chunks_without_changing_container() {
+        let input = include_bytes!("../../tests/fixtures/project-transfer/fixture.bin");
+        let packed = PackedSave::parse(input).unwrap();
+        let mut cache = ReferenceChunkCache::default();
+        let first = packed.encode_cached("cache", &mut cache).unwrap();
+        let count = cache.entries.len();
+        assert!(count > 0);
+        let second = packed.encode_cached("cache", &mut cache).unwrap();
+        assert_eq!(cache.entries.len(), count);
+        assert_eq!(first, second);
+        assert_eq!(first, packed.encode("cache").unwrap());
+        let mut different = Vec::new();
+        cache.append(&[19, 20, 21, 22], &mut different).unwrap();
+        let mut expected = Vec::new();
+        chunk(b"DATA", &[19, 20, 21, 22], &mut expected).unwrap();
+        assert_eq!(different, expected);
+        assert_eq!(cache.entries.len(), count + 1);
+    }
+
+    #[test]
+    fn snapshot_target_distinguishes_unsaved_document_from_legacy_active_path() {
+        for target in [json!(null), json!({"filePath":null}), json!({"filePath":"a.pix"})] {
+            let metadata = serde_json::to_vec(&json!({"document":{"format":"pixel-studio","frames":[]},"blocks":[],"name":"A","saveAs":false,"target":target})).unwrap();
+            let wire = [b"MPXSAVE1".as_slice(), &(metadata.len() as u32).to_le_bytes(), &metadata].concat();
+            let packed = PackedSave::parse(&wire).unwrap();
+            if target.is_null() { assert!(packed.target().is_none()); }
+            else { assert_eq!(packed.target().unwrap().as_deref(), target["filePath"].as_str()); }
+        }
     }
 
     #[test]

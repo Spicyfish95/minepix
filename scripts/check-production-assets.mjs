@@ -13,6 +13,10 @@ const files=await inventory('dist');
 assert.ok(!files.some(file=>file.name.includes('-smoke-')),'发行资源不含历史 smoke chunk');
 const app=files.find(file=>/^app-.*\.js$/.test(path.basename(file.name)));
 const source=await readFile(app.name,'utf8');
+const saveWorker=files.find(file=>/^project-save-worker-.*\.js$/.test(path.basename(file.name)));
+const saveClient=files.find(file=>/^project-save-client-.*\.js$/.test(path.basename(file.name)));
+assert.ok(saveWorker&&saveClient,'发行资源包含项目保存 Worker 和客户端');
+assert.ok((await readFile(saveClient.name,'utf8')).includes(path.basename(saveWorker.name)),'保存客户端引用构建后的 Worker 路径');
 for(const name of ['runTilemapSmoke','runSettingsSmoke','runParitySmoke','prepareUpdateSmoke','runPaletteWorkflowSmoke']){
  assert.ok(!source.includes(name),'发行主包不含 '+name);
 }

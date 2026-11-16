@@ -6,6 +6,7 @@ import {createDocument} from '../src/model.js';
 import {DocumentStore} from '../src/document-manager.js';
 import {addReference,moveReference,resizeReference} from '../src/reference-board.js';
 import {encodeReference} from '../src/layer-types.js';
+import {snapshotProject} from '../src/project-save-client.js';
 
 const source=readFileSync(new URL('../src/app.js',import.meta.url),'utf8');
 const section=(start,end)=>source.slice(source.indexOf(start),source.indexOf(end,source.indexOf(start)));
@@ -14,14 +15,14 @@ function editor(){
  const documentTabs=new DocumentStore(),doc=createDocument(2,2,'A');
  const state={documentId:'a',doc,boardRevision:0,savedBoardRevision:0,dirty:false,filePath:'a.pix',saved:0,historyState:{revision:0}};
  documentTabs.add(state);
- const context={...state,documentTabs,busy:false,gesture:null,space:false,tool:'pencil',modifiers:{alt:false},history:{revision:0},crypto,
+ const context={...state,documentTabs,projectSaves:new Map(),snapshotProject,busy:false,gesture:null,shapeSession:null,space:false,tool:'pencil',modifiers:{alt:false},history:{revision:0},crypto,
   encodeReference,addReference,moveReference,resizeReference,stop:()=>{},message:()=>{},render:()=>{},renderDocumentTabs:()=>{},renderReferenceBoard:()=>{},boardMessage:()=>{},scheduleRecovery:()=>{},flushRecovery:async()=>{},showError:()=>{},boardPanel:()=>({querySelector:()=>({})}),boardView:()=>({zoom:1}),boardApplyView:()=>{}};
  context.setBusy=value=>context.busy=value;
  context.setDirty=value=>context.dirty=value;
  context.boardDirty=()=>context.boardRevision!==context.savedBoardRevision;
  context.changed=()=>context.setDirty(context.history.revision!==context.saved||context.boardDirty());
  context.boardItems=()=>context.doc.references||[];
- context.window={desktop:{setDirty:()=>{}}};
+ context.window={desktop:{setDirty:()=>{},activateDocument:()=>{}}};
  vm.createContext(context);
  vm.runInContext(source.match(/^function boardChanged\(.*$/m)[0]+'\n'+section('async function saveProject(','// ── 参考面板')+'\n'+section('function startBoardPointer(','// ── 地形预览')+'\n'+section('async function addBoardImage(','async function referenceBoardImport('),context);
  return context;
@@ -40,6 +41,26 @@ test('保存期间拖动参考图后保留未保存标记，再保存才更新�
  context.window.desktop.saveProject=async doc=>{persisted=structuredClone(doc);return{filePath:'a.pix',name:'A'};};
  assert.equal(await context.saveProject(),true);assert.equal(context.dirty,false);assert.equal(persisted.references[0].x,100);
 });
+test('保存快照期间不设置busy，后续像素编辑不会写入旧快照或清除脏标记',async()=>{
+ const context=editor(),pending=deferred();let snapshot,path;
+ context.window.desktop.saveProject=async(value,_name,_saveAs,targetPath)=>{snapshot=value;path=targetPath;return pending.promise;};
+ const saving=context.saveProject();assert.equal(context.busy,false);assert.equal(path,'a.pix');
+ context.doc.frames[0].cels[0][0]=0xff0000ff;context.history.revision=1;context.changed();
+ assert.equal(snapshot.frames[0].cels[0][0],0);pending.resolve({filePath:'a.pix',name:'A'});assert.equal(await saving,true);
+ assert.equal(context.saved,0);assert.equal(context.dirty,true);assert.equal(context.doc.frames[0].cels[0][0],0xff0000ff);
+});
+test('同一文档保存去重，完成后可再次保存新版本',async()=>{
+ const context=editor(),pending=deferred();let calls=0;context.window.desktop.saveProject=async()=>{calls++;return pending.promise;};
+ const first=context.saveProject(),second=context.saveProject(true);assert.equal(calls,1);pending.resolve({filePath:'a.pix',name:'A'});assert.equal(await first,true);assert.equal(await second,true);
+ context.window.desktop.saveProject=async()=>{calls++;return{filePath:'a.pix',name:'A'};};await context.saveProject();assert.equal(calls,2);
+});
+for(const closed of [false,true])test('保存完成只更新发起文档，不修改前台标签'+(closed?'（原标签已关闭）':''),async()=>{
+ const context=editor(),pending=deferred();context.window.desktop.saveProject=async()=>pending.promise;const saving=context.saveProject();switchToB(context);
+ if(closed)context.documentTabs.remove('a');else{const original=context.documentTabs.get('a');original.doc.frames[0].cels[0][0]=17;original.historyState.revision=1;original.dirty=true;}
+ const foreground=context.doc;pending.resolve({filePath:'renamed.pix',name:'renamed'});assert.equal(await saving,true);
+ assert.equal(context.doc,foreground);assert.equal(context.doc.name,'B');assert.equal(context.dirty,false);assert.equal(context.saved,0);
+ if(!closed){const original=context.documentTabs.get('a');assert.equal(original.filePath,'renamed.pix');assert.equal(original.doc.name,'renamed');assert.equal(original.dirty,true);assert.equal(original.doc.frames[0].cels[0][0],17);}
+});
 for(const outcome of ['cancel','error'])test(`保存${outcome}不改变原保存点`,async()=>{
  const context=editor();context.boardRevision=2;context.dirty=true;
  context.window.desktop.saveProject=async()=>{if(outcome==='error')throw new Error('磁盘写入失败');return null;};
@@ -47,7 +68,7 @@ for(const outcome of ['cancel','error'])test(`保存${outcome}不改变原保存
 });
 function switchToB(context){
  context.documentTabs.save({documentId:'a',doc:context.doc,boardRevision:context.boardRevision,savedBoardRevision:0,dirty:context.dirty,saved:0,historyState:{revision:0},filePath:'a.pix'});
- context.doc=createDocument(2,2,'B');context.documentId='b';context.boardRevision=0;context.dirty=false;
+ context.doc=createDocument(2,2,'B');context.documentId='b';context.filePath='b.pix';context.boardRevision=0;context.dirty=false;
  context.documentTabs.add({documentId:'b',doc:context.doc,boardRevision:0,savedBoardRevision:0,dirty:false,saved:0,historyState:{revision:0},filePath:'b.pix'});
 }
 test('参考图解码期间切换标签后仍加入发起文档并标脏',async()=>{
@@ -112,7 +133,7 @@ function tabEditor(){
  const documentTabs=new DocumentStore();
  documentTabs.add({documentId:'b',doc:{name:'B'},dirty:true});
  documentTabs.add({documentId:'a',doc:{name:'A'},dirty:false});
- const confirmations=[],context={...documentTabs.get('a'),documentTabs,filePath:null,busy:false,gesture:null,shapeSession:null,celGesture:null,closedDocuments:[],
+ const confirmations=[],context={...documentTabs.get('a'),documentTabs,projectSaves:new Map(),filePath:null,busy:false,gesture:null,shapeSession:null,celGesture:null,closedDocuments:[],
   $:()=>({open:false}),message:()=>{},flushRecovery:async()=>{},captureDocumentState:()=>({documentId:context.documentId,doc:context.doc,dirty:context.dirty}),
   restoreDocumentState:state=>{Object.assign(context,state);documentTabs.active=state.documentId;},enterEmptyState:()=>{throw new Error('不应关闭全部标签');},
   modal:async()=>{confirmations.push(context.documentId);return context.answer;},setDirty:value=>{context.dirty=value;}};
@@ -121,6 +142,23 @@ function tabEditor(){
  vm.runInContext(section('async function confirmDiscard(','function captureDocumentState(')+'\n'+section('function switchDocument(','function reopenDocument('),context);
  return{context,confirmations};
 }
+test('关闭窗口也等待干净文档的另存任务，避免提前终止保存Worker',async()=>{
+ const {context}=tabEditor(),pending=deferred();context.documentTabs.remove('b');context.closePending=false;let closed=false;
+ context.window.desktop.closeConfirmed=()=>{closed=true;};context.projectSaves.set('a',pending.promise);pending.promise.then(()=>context.projectSaves.delete('a'));
+ vm.runInContext(section('async function requestClose(','async function openDocument('),context);
+ const closing=context.requestClose();await Promise.resolve();assert.equal(closed,false);pending.resolve(true);assert.equal(await closing,true);assert.equal(closed,true);
+});
+test('保存后关闭期间产生新编辑时不关闭标签',async()=>{
+ const {context}=tabEditor(),pending=deferred();context.answer={};context.dirty=true;context.documentTabs.get('a').dirty=true;
+ context.saveProject=async()=>pending.promise;
+ const closing=context.closeDocumentTab('a');await Promise.resolve();context.dirty=true;pending.resolve(true);await closing;
+ assert.equal(context.documentTabs.items.length,2);assert.equal(context.closedDocuments.length,0);
+});
+test('关闭正在保存的标签会等待保存，再确认后续编辑',async()=>{
+ const {context,confirmations}=tabEditor(),pending=deferred();context.dirty=true;context.answer=null;context.projectSaves.set('a',pending.promise);
+ const closing=context.closeDocumentTab('a');await Promise.resolve();assert.equal(context.documentTabs.items.length,2);assert.equal(confirmations.length,0);
+ pending.resolve(true);await closing;assert.deepEqual(confirmations,['a']);assert.equal(context.closedDocuments.length,0);
+});
 test('cel 范围拖选期间不能关闭其他未保存标签，也不写入关闭历史',async()=>{
  const {context,confirmations}=tabEditor();context.celGesture={pointerId:1};
  await context.closeDocumentTab('b');

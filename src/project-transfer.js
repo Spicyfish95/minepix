@@ -1,5 +1,20 @@
 const MAX_BYTES=512*1024*1024;
 const magic=new TextEncoder().encode('MPXSAVE1');
+const referenceBytes=new Map();
+const REFERENCE_CACHE_BYTES=96*1024*1024;
+let referenceCacheBytes=0;
+function referencePayload(data){
+ let bytes=referenceBytes.get(data);
+ if(bytes){referenceBytes.delete(data);referenceBytes.set(data,bytes);return bytes;}
+ const decoded=atob(data);bytes=new Uint8Array(decoded.length);
+ for(let i=0;i<decoded.length;i++)bytes[i]=decoded.charCodeAt(i);
+ const cost=bytes.length+data.length*2;
+ if(cost<=REFERENCE_CACHE_BYTES){
+  while(referenceCacheBytes+cost>REFERENCE_CACHE_BYTES){const [key,value]=referenceBytes.entries().next().value;referenceCacheBytes-=value.length+key.length*2;referenceBytes.delete(key);}
+  referenceBytes.set(data,bytes);referenceCacheBytes+=cost;
+ }
+ return bytes;
+}
 
 export function unpackProjectRead(input){
  const bytes=input instanceof Uint8Array?input:new Uint8Array(input);
@@ -44,7 +59,7 @@ export function openedProject(file,document){
 }
 
 // Only the IPC representation changes. Rust still writes the native compressed PIX v1.
-export function packProjectSave(data,name,saveAs=false){
+export function packProjectSave(data,name,saveAs=false,target){
  const document=typeof data==='string'?JSON.parse(data):data;
  if(document.format!=='pixel-studio'||!Array.isArray(document.frames))throw new Error('不是有效的 MinePix 项目');
  const blocks=[],payloads=[];let rawBytes=0;
@@ -71,12 +86,12 @@ export function packProjectSave(data,name,saveAs=false){
  })};
  if(Array.isArray(document.references))metadata.references=document.references.map((reference,i)=>{
   if(typeof reference.data!=='string')throw new Error('参考图片数据无效');
-  const decoded=atob(reference.data),bytes=Uint8Array.from(decoded,char=>char.charCodeAt(0));rawBytes+=bytes.length;
+  const bytes=referencePayload(reference.data);rawBytes+=bytes.length;
   if(rawBytes>MAX_BYTES)throw new Error('项目解压后超过 512 MiB');
   blocks.push({path:`/references/${i}/data`,kind:'base64',count:bytes.length});payloads.push(bytes);
   return{...reference,data:null};
  });
- const json=new TextEncoder().encode(JSON.stringify({document:metadata,blocks,name,saveAs}));
+ const json=new TextEncoder().encode(JSON.stringify({document:metadata,blocks,name,saveAs,...(target?{target}:{})}));
  if(rawBytes+json.length>MAX_BYTES)throw new Error('项目解压后超过 512 MiB');
  const output=new Uint8Array(12+json.length+rawBytes);output.set(magic);new DataView(output.buffer).setUint32(8,json.length,true);output.set(json,12);
  let offset=12+json.length;for(const bytes of payloads){output.set(bytes,offset);offset+=bytes.length;}

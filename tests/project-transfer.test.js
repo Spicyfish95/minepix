@@ -26,6 +26,21 @@ test('原始保存字节保留u32索引边界、空cel、参考和未知元数�
  assert.equal(restored.blocks.length,6);
 });
 
+test('不变参考图复用解码字节，移动或重排命中，替换同长度数据不复用旧像素',()=>{
+ const originalAtob=globalThis.atob;let decodes=0;globalThis.atob=value=>{decodes++;return originalAtob(value);};
+ try{
+  const doc={format:'pixel-studio',frames:[],references:[{id:'cached',data:'ERITFA==',x:0}]};
+  assert.deepEqual(unpack(packProjectSave(doc,'cached')).document,doc);assert.equal(decodes,1);
+  doc.references[0].x=42;doc.references[0].id='reordered';assert.deepEqual(unpack(packProjectSave(structuredClone(doc),'cached')).document,doc);assert.equal(decodes,1);
+  doc.references[0].data='ISIjJA==';assert.deepEqual(unpack(packProjectSave(doc,'changed')).document,doc);assert.equal(decodes,2);
+ }finally{globalThis.atob=originalAtob;}
+});
+test('保存快照显式绑定发起路径，未保存项目保持null而非沿用活动标签',()=>{
+ const doc={format:'pixel-studio',frames:[]};
+ assert.deepEqual(unpack(packProjectSave(doc,'A',false,{filePath:'a.pix'})).target,{filePath:'a.pix'});
+ assert.deepEqual(unpack(packProjectSave(doc,'new',false,{filePath:null})).target,{filePath:null});
+});
+
 test('可选payload字段null、缺省和空frames保留',()=>{
  for(const document of [{format:'pixel-studio',frames:[{cels:null,indices:[]},{cels:[],custom:42}],references:null},{format:'pixel-studio',frames:[]}]){
   const wire=unpack(packProjectSave(JSON.stringify(document),'test'));

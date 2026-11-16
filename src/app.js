@@ -1,5 +1,6 @@
 import {assertProjectCapacity,celPixelCount,sourcePixelCount} from './project-capacity.js';
 import {initFormLayout} from './form-layout.js';
+import {snapshotProject} from './project-save-client.js';
 import {showCelProperties} from './cel-property-popover.js';
 import {showFrameFps} from './frame-fps-popover.js';
 import {createHelp} from './help.js';
@@ -1656,11 +1657,13 @@ function modal(title,html,setup=null,validate=null,options={}){
   return new Promise(resolve=>{const submit=event=>{if(event.submitter?.value==='cancel')return;const values=Object.fromEntries(new FormData(form));try{validate?.(values);}catch(error){event.preventDefault();$('modal-error').textContent=error.message;}};form.addEventListener('submit',submit);$('modal').addEventListener('close',()=>{form.removeEventListener('submit',submit);discard?.remove();resolve($('modal').returnValue==='discard'?{discard:true}:$('modal').returnValue==='ok'?Object.fromEntries(new FormData(form)):null);},{once:true});if(options.modeless)$('modal').show();else $('modal').showModal();syncInteraction();});
 }
 async function confirmDiscard(closing=false){
+  const target=documentId;
+  if(projectSaves.has(target)){await projectSaves.get(target);if(documentId!==target||gesture||shapeSession)return false;}
   if(!dirty)return true;
   const answer=await modal('保存当前项目？',`<p>当前项目有未保存的更改。可以保存后${closing?'关闭':'继续'}、不保存，或取消操作。</p>`,null,null,{confirm:closing?'保存后关闭':'保存后继续',discard:true});
-  if(!answer)return false;
+  if(!answer||documentId!==target)return false;
   if(answer.discard){if(filePath)await window.desktop?.discardRecovery(filePath);setDirty(false);return true;}
-  return await saveProject();
+  return await saveProject()&&documentId===target&&!dirty&&!gesture&&!shapeSession;
 }
 function captureDocumentState(){return{documentId,doc,fi,li,selection,previousSelection,zoom,pan:{...pan},dirty,saved,boardRevision,savedBoardRevision,filePath,historyState:history.capture(),paletteUI:capturePaletteUI(),frameSelection:new Set(frameSelection),frameAnchor,celRange,celAnchor:{...celAnchor},view:{viewport:{w:viewport.clientWidth,h:viewport.clientHeight},grid:$('grid').checked,onion:$('onion').checked,range:$('play-range').value,direction:$('play-direction').value,once:$('play-once').checked,timeline:$('timeline-mode').value}};}
 let documentOverflowObserver,lastDocumentTabActive;
@@ -1730,7 +1733,7 @@ function enterEmptyState(){
 }
 function restoreDocumentState(state){activeSliceId=null;stopPreview();stop();onionCache.clear();frameCache.clear();referenceCache.clear();({documentId,doc,fi,li,selection,previousSelection,zoom,pan,dirty,saved,boardRevision,savedBoardRevision,filePath,frameSelection,frameAnchor,celRange,celAnchor}=state);if(state.view.viewport)pan={x:pan.x+(viewport.clientWidth-state.view.viewport.w)/2,y:pan.y+(viewport.clientHeight-state.view.viewport.h)/2};history.restore(state.historyState);restorePaletteUI(state.paletteUI);documentTabs.active=documentId;window.desktop?.activateDocument(filePath);$('grid').checked=state.view.grid;$('onion').checked=state.view.onion;$('timeline-mode').value=state.view.timeline;setDirty(dirty);render();$('play-range').value=state.view.range;$('play-direction').value=state.view.direction;$('play-once').checked=state.view.once;place();draw();}
 function switchDocument(id){if(id===documentId)return;if(busy||gesture||shapeSession||celGesture||$('modal').open){message('请先完成当前操作');return;}documentTabs.save(captureDocumentState());if(dirty)void flushRecovery();restoreDocumentState(documentTabs.get(id));}
-async function closeDocumentTab(id=documentId){if(busy||gesture||shapeSession||celGesture||$('modal').open)return;switchDocument(id);if(documentId!==id||!await confirmDiscard(true))return;await flushRecovery();closedDocuments.push(captureDocumentState());if(closedDocuments.length>10)closedDocuments.shift();const next=documentTabs.remove(id);if(next)restoreDocumentState(next);else enterEmptyState();}
+async function closeDocumentTab(id=documentId){if(busy||gesture||shapeSession||celGesture||$('modal').open)return;switchDocument(id);if(documentId!==id||!await confirmDiscard(true)||documentId!==id)return;await flushRecovery();if(documentId!==id||dirty||gesture||shapeSession||projectSaves.has(id))return;closedDocuments.push(captureDocumentState());if(closedDocuments.length>10)closedDocuments.shift();const next=documentTabs.remove(id);if(next)restoreDocumentState(next);else enterEmptyState();}
 function reopenDocument(){const state=closedDocuments.pop();if(!state)return message('没有可重开的文档');documentTabs.save(captureDocumentState());documentTabs.add(state);restoreDocumentState(state);message('已重开关闭文档');}
 async function recentDialog(){
  if(!window.desktop)return message('最近文件请使用桌面版');
@@ -1764,7 +1767,7 @@ async function requestClose(closeWindow=true){
   if(closePending)return;
   if(busy||gesture||shapeSession||celGesture||$('modal').open){message('请先完成当前操作再关闭');return;}
   closePending=true;
-  try{documentTabs.save(captureDocumentState());for(const item of [...documentTabs.items]){if(!item.state.dirty)continue;switchDocument(item.id);if(!await confirmDiscard(true))return false;await flushRecovery();}if(closeWindow)window.desktop.closeConfirmed();return true;}finally{closePending=false;}
+  try{await Promise.all(projectSaves.values());if(busy||gesture||shapeSession||celGesture)return false;documentTabs.save(captureDocumentState());for(const item of [...documentTabs.items]){if(!item.state.dirty)continue;switchDocument(item.id);if(!await confirmDiscard(true))return false;await flushRecovery();}documentTabs.save(captureDocumentState());if(gesture||shapeSession||projectSaves.size||documentTabs.items.some(item=>item.state.dirty))return false;if(closeWindow)window.desktop.closeConfirmed();return true;}finally{closePending=false;}
 }
 async function openDocument(mode=null){try{if(window.desktop){const file=await window.desktop.open(mode);if(file)await importFile(file,true);}else{if((mode?.startsWith('sequence')||mode==='sheet-manifest')){message('PNG 序列和精灵表 JSON 导入请使用桌面应用');return;}$('file-input').accept=mode==='gif'?'.gif':'.pix,.json,.png,.jpg,.jpeg,.webp,.bmp,.gif';$('file-input').click();}}catch(error){showError('打开失败：'+error.message);}}
 async function importPngSequence(source,newTab=false){
@@ -1809,15 +1812,33 @@ async function importFile(file,newTab=false){
   const next=await rasterImportDocument(file,{modal,$,showError});if(next){replaceDocument(next,false,null,crypto.randomUUID(),newTab);message(`已导入 ${next.frames.length} 帧`);}
 }
 async function saveData(data,kind,name,binary=['bmp','gif','ico','jpeg','jpg','png','webp'].includes(kind),destination){if(window.desktop)return window.desktop.save(data,kind,name,binary,...(destination?[destination]:[]));const blob=new Blob([binary?Uint8Array.from(atob(data),c=>c.charCodeAt(0)):data]);const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name+'.'+(kind==='project'?'pix':kind);a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return true;}
+const projectSaves=new Map();
 async function saveProject(saveAs=false){
-  if(busy||gesture)return false;setBusy(true);stop();
-  const revision=history.revision,referenceRevision=boardRevision;
-  try{
-    const result=window.desktop?await window.desktop.saveProject(doc,doc.name,saveAs):await saveData(JSON.stringify(doc),'project',doc.name);
+  if(projectSaves.has(documentId))return projectSaves.get(documentId);
+  if(busy||gesture)return false;stop();
+  const target=documentId,revision=history.revision,referenceRevision=boardRevision,snapshot=snapshotProject(doc),path=filePath;
+  const pending=(async()=>{
+   try{
+    message('正在后台保存项目…');
+    const result=window.desktop?await window.desktop.saveProject(snapshot,snapshot.name,saveAs,path):await saveData(JSON.stringify(snapshot),'project',snapshot.name);
     if(!result){message('已取消保存');return false;}
-    if(window.desktop){filePath=result.filePath;doc.name=result.name;}
-    saved=revision;savedBoardRevision=referenceRevision;changed();render();await flushRecovery();message(dirty?'项目已保存，仍有新的未保存更改':'项目已保存');return true;
-  }catch(error){showError('保存失败：'+error.message);return false;}finally{setBusy(false);}
+    if(documentId===target){
+     if(window.desktop){filePath=result.filePath;doc.name=result.name;window.desktop.activateDocument(filePath);}
+     saved=revision;savedBoardRevision=referenceRevision;changed();render();await flushRecovery();message(dirty?'项目已保存，仍有新的未保存更改':'项目已保存');
+    }else{
+     const state=documentTabs.items.find(item=>item.id===target)?.state;
+     if(state){
+      if(window.desktop){state.filePath=result.filePath;state.doc.name=result.name;}
+      state.saved=revision;state.savedBoardRevision=referenceRevision;state.dirty=state.historyState.revision!==revision||state.boardRevision!==referenceRevision;
+      renderDocumentTabs();window.desktop?.setDirty(dirty||documentTabs.items.some(item=>item.state.dirty));await flushRecovery(state);
+     }
+     message(snapshot.name+' · 项目已保存');
+    }
+    return true;
+   }catch(error){showError('保存失败：'+error.message);return false;}
+  })();
+  projectSaves.set(target,pending);
+  try{return await pending;}finally{projectSaves.delete(target);}
 }
 // ── 参考面板：独立于绘制内容的图片参考板（不进合成 / 导出 / 历史栈）──
 // canvas 缓存按所属 document 分桶：面板被拖成独立窗口后不会复用另一个窗口的节点。
@@ -2824,7 +2845,7 @@ async function recover(){
 function wireDocumentState(state){return{...state,frameSelection:[...state.frameSelection]};}
 window.desktop?.onDocumentRequest(async(operation,data)=>{
  if(operation==='take-all'){if($('modal').open){$('modal').close('cancel');await new Promise(resolve=>setTimeout(resolve,0));}resetInteraction('关闭独立窗口');}
- if(busy||gesture||shapeSession||celGesture||$('modal').open)throw new Error('请先完成文档中的当前操作');
+ if(busy||gesture||shapeSession||celGesture||$('modal').open||projectSaves.size&&operation!=='close-check')throw new Error('请先完成文档中的当前操作或等待保存完成');
  documentTabs.save(captureDocumentState());
  if(operation==='close-check')return requestClose(false);
  if(operation==='take')return wireDocumentState(documentTabs.get(data.id));

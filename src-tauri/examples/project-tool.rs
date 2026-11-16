@@ -40,6 +40,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let decode_ms=started.elapsed().as_secs_f64()*1000.0/f64::from(count);
             println!("{}",serde_json::to_string_pretty(&serde_json::json!({"profile":if cfg!(debug_assertions){"debug"}else{"release"},"iterations":count,"json_bytes":json_bytes.len(),"binary_bytes":bytes.len(),"ratio":bytes.len()as f64/json_bytes.len()as f64,"encode_ms":encode_ms,"decode_ms":decode_ms}))?);
         }
+        Some("profile-save") if arguments.len() == 3 => {
+            let input = fs::read(&arguments[1])?;
+            let mut samples = Vec::new();
+            let mut cache = project::ReferenceChunkCache::default();
+            for _ in 0..3 {
+                let started = Instant::now();
+                let packed = project::PackedSave::parse(&input)?;
+                let parse_ms = started.elapsed().as_secs_f64() * 1000.0;
+                let started = Instant::now();
+                let bytes = packed.encode_cached("save-profile", &mut cache)?;
+                let encode_ms = started.elapsed().as_secs_f64() * 1000.0;
+                let started = Instant::now();
+                fs::write(&arguments[2], &bytes)?;
+                samples.push(serde_json::json!({"parseMs":parse_ms,"encodeMs":encode_ms,"writeMs":started.elapsed().as_secs_f64()*1000.0,"bytes":bytes.len()}));
+            }
+            println!("{}", serde_json::to_string_pretty(&serde_json::json!({"profile":if cfg!(debug_assertions){"debug"}else{"release"},"samples":samples}))?);
+        }
         Some("profile") if arguments.len() == 2 => {
             let input = fs::read(&arguments[1])?;
             let mut samples = Vec::new();
@@ -63,7 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             println!("{}", serde_json::to_string_pretty(&serde_json::json!({"profile":if cfg!(debug_assertions){"debug"}else{"release"},"warmups":1,"samples":samples}))?);
         }
-        _=>return Err(io::Error::new(io::ErrorKind::InvalidInput,"project-tool encode <memory-model.json> <output.pix> | inspect <file.pix> | read-transfer <file.pix> <output.bin> | bench <memory-model.json> | profile <memory-model.json>").into())
+        _=>return Err(io::Error::new(io::ErrorKind::InvalidInput,"project-tool encode <memory-model.json> <output.pix> | inspect <file.pix> | read-transfer <file.pix> <output.bin> | bench <memory-model.json> | profile <memory-model.json> | profile-save <packed-save.bin> <output.pix>").into())
     }
     Ok(())
 }

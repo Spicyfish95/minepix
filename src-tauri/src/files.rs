@@ -23,6 +23,7 @@ pub struct Files {
     pub startup: Vec<PathBuf>,
     startup_ready: bool,
     recent: Vec<RecentFile>,
+    reference_chunks: crate::project::ReferenceChunkCache,
 }
 
 fn error(message: &str) -> io::Error {
@@ -123,6 +124,7 @@ impl Files {
             startup,
             startup_ready: false,
             recent,
+            reference_chunks: crate::project::ReferenceChunkCache::default(),
         })
     }
 
@@ -261,7 +263,15 @@ impl Files {
 
     pub fn save_packed(&mut self, window: &str, target: &Path, packed: &crate::project::PackedSave<'_>) -> io::Result<Value> {
         let name = target.file_stem().unwrap_or_default().to_string_lossy().into_owned();
-        self.save_encoded(window, target, &name, &packed.encode(&name)?)
+        let bytes = packed.encode_cached(&name, &mut self.reference_chunks)?;
+        let previous = self.active.get(window).cloned();
+        let result = self.save_encoded(window, target, &name, &bytes);
+        // Snapshot saves may finish after this window switched to another document.
+        if packed.target().is_some() {
+            if let Some(path) = previous { self.active.insert(window.into(), path); }
+            else { self.active.remove(window); }
+        }
+        result
     }
 
     fn save_encoded(&mut self, window: &str, target: &Path, name: &str, bytes: &[u8]) -> io::Result<Value> {
@@ -389,6 +399,19 @@ mod tests {
             1
         );
         assert!(files.clear_recent().unwrap().is_empty());
+    }
+
+    #[test]
+    fn snapshot_save_does_not_replace_another_active_document_path() {
+        let metadata = serde_json::to_vec(&json!({"document":{"format":"pixel-studio","frames":[]},"blocks":[],"name":"A","saveAs":false,"target":{"filePath":"a.pix"}})).unwrap();
+        let wire = [b"MPXSAVE1".as_slice(), &(metadata.len() as u32).to_le_bytes(), &metadata].concat();
+        let root = tempfile::tempdir().unwrap();
+        let mut files = Files::new(root.path().join("settings")).unwrap();
+        let target = root.path().join("a.pix");
+        files.active.insert("main".into(), "b.pix".into());
+        files.save_packed("main", &target, &crate::project::PackedSave::parse(&wire).unwrap()).unwrap();
+        assert_eq!(files.active["main"], "b.pix");
+        assert_eq!(crate::project::decode(&fs::read(target).unwrap()).unwrap()["name"], "a");
     }
 
     #[test]

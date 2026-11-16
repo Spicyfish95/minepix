@@ -2,7 +2,8 @@
 import {getCurrentWebviewWindow} from '@tauri-apps/api/webviewWindow';
 import {getCurrentWindow,Window} from '@tauri-apps/api/window';
 import {applicationMenu} from './application-menu.js';
-import {packProjectSave,unpackProjectRead,openedProject} from './project-transfer.js';
+import {unpackProjectRead,openedProject} from './project-transfer.js';
+import {createProjectSaveClient} from './project-save-client.js';
 
 // 拦截 WebView2 原生浏览器快捷键，防止刷新/查找/打印/源码/缩放重置等操作破坏编辑器状态。
 document.addEventListener('keydown',event=>{
@@ -74,7 +75,7 @@ function windowBridge(target){
 }
 
 export async function initializeDesktop(){
- const bridge={testing:false,secondary:current.label!=='main'};
+ const bridge={testing:false,secondary:current.label!=='main'},projectSaveClient=createProjectSaveClient();
  const methods=['captureScreen','clipboardImages','openRepository','appInfo','editorInfo','editorReady','detachDocument','moveDocument','recordInputAudit','testNotification','recentFiles','recentThumbs','removeRecent','clearRecent','openRecent','startupFiles','openKeymap','openPalette','open','exportAseprite','pickExportDirectory','exportSheetMetadata','exportSheet','exportAnimation','save','saveProject','activateDocument','setDirty','checkUpdates','installUpdate','downloadUpdate','cancelUpdate','updateState','openUpdateRelease','setAutoUpdate','setLocale'];
  for(const method of methods)bridge[method]=(...args)=>call(method,...args);
  // Internal smoke helpers may select a fresh entry by index; IPC always receives its path.
@@ -83,7 +84,8 @@ export async function initializeDesktop(){
   if(!path)throw new Error('最近文件条目已失效');
   return call('openRecent',path);
  };
- bridge.saveProject=(data,name,saveAs=false)=>invokeBackend('save_project_packed',packProjectSave(data,name,saveAs));
+ bridge.saveProject=async(data,name,saveAs=false,filePath=null)=>invokeBackend('save_project_packed',await projectSaveClient.pack(data,name,saveAs,{filePath}));
+ window.addEventListener('unload',()=>projectSaveClient.dispose(),{once:true});
  bridge.recentThumbs=async()=>{
   const {composite}=await import('./model.js'),entries=await call('recentFiles'),size=32,thumbnails=[];
   for(const {path}of entries){
