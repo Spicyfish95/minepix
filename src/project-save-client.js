@@ -1,4 +1,5 @@
-export function snapshotProject(document){return structuredClone(document);}
+import {projectForSave} from './reference-files.js';
+export function snapshotProject(document){return structuredClone(projectForSave(document));}
 
 export function createProjectSaveClient({createWorker=()=>new Worker(new URL('./project-save-worker.js',import.meta.url),{type:'module'})}={}){
  let worker=null,nextId=0;

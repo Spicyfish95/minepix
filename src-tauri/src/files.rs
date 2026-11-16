@@ -82,7 +82,7 @@ pub fn decode_bytes(name: &str, bytes: &[u8], file_path: Option<&str>) -> io::Re
     };
     if let Some(mime) = mime {
         return Ok(
-            json!({"name": name, "filePath": null, "type": if extension == "gif" { "gif" } else { "image" }, "mime": mime, "data": STANDARD.encode(bytes)}),
+            json!({"name": name, "filePath": null, "type": if extension == "gif" { "gif" } else { "image" }, "mime": mime, "sourcePath": file_path, "data": STANDARD.encode(bytes)}),
         );
     }
     if extension == "ase" || extension == "aseprite" {
@@ -102,6 +102,13 @@ pub fn decode_bytes(name: &str, bytes: &[u8], file_path: Option<&str>) -> io::Re
     Ok(
         json!({"name": name, "filePath": file_path, "type": "project", "data": serde_json::to_string(&document)?}),
     )
+}
+
+pub fn read_reference(path: &Path) -> io::Result<Value> {
+    let text = path.to_string_lossy();
+    let file = decode_bytes(&basename(path), &read_file(path)?, Some(&text))?;
+    if file["mime"].as_str().is_none() { return Err(error("参考文件必须是图片")); }
+    Ok(file)
 }
 
 impl Files {
@@ -258,6 +265,21 @@ impl Files {
             .to_string_lossy()
             .into_owned();
         document["name"] = json!(name);
+        for reference in document["references"].as_array_mut().into_iter().flatten() {
+            let object = reference.as_object_mut().ok_or_else(|| error("参考图片无效"))?;
+            if object.get("path").and_then(Value::as_str).is_none_or(str::is_empty) { return Err(error("参考图缺少源文件路径")); }
+            object.remove("data");object.remove("missing");
+        }
+        if let Some(layers) = document["layers"].as_array_mut() {
+            for layer in layers {
+                if let Some(reference) = layer.get_mut("reference").and_then(Value::as_object_mut) {
+                    if reference.contains_key("data") {
+                        if reference.get("path").and_then(Value::as_str).is_none_or(str::is_empty) { return Err(error("参考图缺少源文件路径")); }
+                        reference.remove("data");reference.remove("missing");
+                    }
+                }
+            }
+        }
         self.save_encoded(window, target, &name, &crate::project::encode(&document)?)
     }
 
@@ -287,6 +309,32 @@ impl Files {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn external_reference_save_stores_paths_without_image_data() {
+        let root = tempfile::tempdir().unwrap();
+        let mut files = Files::new(root.path().join("settings")).unwrap();
+        let target = root.path().join("external.pix");
+        let document = json!({"format":"pixel-studio","frames":[],"references":[{"path":"C:/reference.png","data":"AQIDBA==","x":8,"missing":"stale"}],"layers":[{"reference":{"path":"D:/layer.png","data":"AQIDBA=="}}]});
+        files.save_project("main", &target, &document.to_string()).unwrap();
+        let decoded = crate::project::decode(&fs::read(&target).unwrap()).unwrap();
+        assert_eq!(decoded["references"][0]["path"], "C:/reference.png");
+        assert!(decoded["references"][0].get("data").is_none());
+        assert!(decoded["references"][0].get("missing").is_none());
+        assert!(decoded["layers"][0]["reference"].get("data").is_none());
+    }
+
+    #[test]
+    fn external_reference_read_retains_real_path_and_missing_file_errors() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("reference.png");
+        fs::write(&path, b"image-file-bytes").unwrap();
+        let image = read_reference(&path).unwrap();
+        assert_eq!(image["sourcePath"], path.to_string_lossy().as_ref());
+        assert_eq!(image["data"], STANDARD.encode(b"image-file-bytes"));
+        fs::remove_file(&path).unwrap();assert!(read_reference(&path).is_err());
+    }
+
 
     #[test]
     fn recent_paths_do_not_shift_after_removal_or_reordering() {

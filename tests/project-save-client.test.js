@@ -7,7 +7,7 @@ function harness(){
  return{client,workers};
 }
 test('save snapshot isolates pixels references and metadata while retaining linked cel sharing',()=>{
- const doc=createDocument(2,1,'snapshot');doc.frames.push(doc.frames[0]);doc.references=[{data:'AQIDBA==',x:0}];
+ const doc=createDocument(2,1,'snapshot');doc.frames.push(doc.frames[0]);doc.references=[{data:'AQIDBA==',path:'C:/reference.png',x:0}];
  const snapshot=snapshotProject(doc);doc.frames[0].cels[0][0]=123;doc.references[0].x=42;doc.name='edited';
  assert.equal(snapshot.name,'snapshot');assert.equal(snapshot.frames[0].cels[0][0],0);assert.equal(snapshot.references[0].x,0);assert.equal(snapshot.frames[0],snapshot.frames[1]);
 });

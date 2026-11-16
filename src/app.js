@@ -1851,7 +1851,7 @@ const PREVIEW_VIEWS=new Map();
 // 地形预览面板的 DOM（面板可拖成独立窗口，节点统一用 panel.ownerDocument 创建）。
 let previewUI=null;
 const boardItems=()=>doc.references||[];
-const boardCacheKey=item=>item.id+'|'+item.width+'x'+item.height+'|'+item.data.length;
+const boardCacheKey=item=>item.id+'|'+item.width+'x'+item.height+'|'+(item.data?.length||0)+'|'+(item.path||'');
 const boardPanel=()=>$('reference-panel');
 function boardCanvasCache(dom){let cache=BOARD_CANVASES.get(dom);if(!cache){cache=new Map();BOARD_CANVASES.set(dom,cache);}return cache;}
 function boardForget(item){for(const dom of [document,boardPanel()?.ownerDocument])if(dom)boardCanvasCache(dom).delete(boardCacheKey(item));}
@@ -1867,7 +1867,8 @@ function boardCanvas(dom,item){
   const win=dom.defaultView,pixels=boardItemPixels(item),rgba=new Uint8ClampedArray(item.width*item.height*4);
   for(let i=0;i<pixels.length;i++){const pixel=pixels[i];rgba[i*4]=pixel>>>24;rgba[i*4+1]=pixel>>>16&255;rgba[i*4+2]=pixel>>>8&255;rgba[i*4+3]=pixel&255;}
   const canvas=dom.createElement('canvas');canvas.width=item.width;canvas.height=item.height;
-  canvas.getContext('2d').putImageData(new win.ImageData(rgba,item.width,item.height),0,0);
+  const context=canvas.getContext('2d');context.putImageData(new win.ImageData(rgba,item.width,item.height),0,0);
+  if(item.missing){context.fillStyle='#888';context.font='14px sans-serif';context.fillText('参考图缺失 · 双击重新定位',8,20);}
   boardCanvasCache(dom).set(boardCacheKey(item),canvas);
   return canvas;
 }
@@ -1895,7 +1896,8 @@ function boardItemNodes(dom,item,view){
   const canvas=boardCachedCanvas(dom,item);
   canvas.className='reference-image';canvas.tabIndex=0;canvas.dataset.referenceId=item.id;
   canvas.setAttribute('aria-label','参考图 '+item.name);
-  canvas.title=item.name+' · '+item.width+' × '+item.height+' · '+Math.round(item.scale*100)+'%';
+  canvas.ondblclick=()=>void relinkBoardItem(item.id);
+  canvas.title=(item.missing?'参考图缺失 · 双击重新定位 · ':'')+(item.path||item.name)+' · '+item.width+' × '+item.height+' · '+Math.round(item.scale*100)+'%';
   canvas.onpointerdown=event=>startBoardPointer(event,item,'move');
   canvas.oncontextmenu=event=>{event.preventDefault();event.stopPropagation();openBoardMenu(event.clientX,event.clientY,item.id);};
   canvas.onkeydown=event=>{if(!['Delete','Backspace'].includes(event.key))return;event.preventDefault();event.stopPropagation();void deleteBoardItem(item.id,false);};
@@ -2186,6 +2188,7 @@ function resetBoardItem(id){resetReferencePosition(doc,id);boardChanged('已重�
 function openBoardMenu(x,y,id){
   const panel=boardPanel();if(!panel)return;
   openContextMenu(x,y,'参考图操作',[
+    ['重新定位图片…',()=>void relinkBoardItem(id)],
     ['适应内容',()=>fitBoardContent()],
     ['缩放到 100%',()=>setBoardZoom(1)],
     ['重置位置与缩放',()=>resetBoardItem(id)],
@@ -2196,6 +2199,15 @@ function openBoardMenu(x,y,id){
     ['删除',()=>void deleteBoardItem(id)]
   ],'context-menu',panel);
 }
+async function relinkBoardItem(id){
+ const targetId=documentId;
+ try{const files=await window.desktop.open('reference');if(!files?.length)return;
+ const image=await window.desktop.readReference(files[0].sourcePath);
+ const state=targetId===documentId?null:documentTabs.get(targetId),target=state?.doc||(targetId===documentId?doc:null),item=target?.references?.find(item=>item.id===id);if(!item)return;
+ assertProjectCapacity(target,{sources:sourcePixelCount(target)-item.width*item.height+image.width*image.height});boardForget(item);Object.assign(item,image,{path:files[0].sourcePath});delete item.missing;
+ if(state){state.boardRevision++;state.dirty=true;renderDocumentTabs();void flushRecovery(state);}else boardChanged('已重新定位参考图');
+ }catch(error){showError('重新定位失败：'+error.message);}
+}
 async function decodeBoardPng(base64,mime='image/png'){
   const panel=boardPanel(),dom=panel.ownerDocument,win=dom.defaultView,image=new win.Image();
   image.src='data:'+(mime||'image/png')+';base64,'+base64;
@@ -2204,12 +2216,14 @@ async function decodeBoardPng(base64,mime='image/png'){
   const context=canvas.getContext('2d');context.drawImage(image,0,0);
   return{width:image.width,height:image.height,data:context.getImageData(0,0,image.width,image.height).data};
 }
-async function addBoardImage(base64,name,mime,targetId=documentId){
+async function addBoardImage(base64,name,mime,targetId=documentId,path=null){
+  if(!path){if(!window.desktop)return boardMessage('参考图需要本地文件路径');const saved=await window.desktop.saveReference(base64,name,mime);if(!saved)return;path=saved.sourcePath;}
   const image=await decodeBoardPng(base64,mime);
   const state=targetId===documentId&&documentTabs.items.length?null:documentTabs.get(targetId);
+  if(targetId!==documentId&&!state)return;
   const target=state?state.doc:doc,items=target.references||[],reference=encodeReference(image.width,image.height,image.data);
   const x=items.length?Math.ceil(Math.max(...items.map(item=>item.x+item.width*item.scale)))+16:16;
-  const item=addReference(target,{...reference,id:crypto.randomUUID(),name:String(name||'参考图').slice(0,120),x,y:16});
+  const item=addReference(target,{...reference,path,id:crypto.randomUUID(),name:String(name||'参考图').slice(0,120),x,y:16});
   if(state){
     state.boardRevision++;state.dirty=true;renderDocumentTabs();setDirty(dirty);void flushRecovery(state);
   }else boardChanged('已导入参考图 '+item.name);
@@ -2224,7 +2238,7 @@ function ensureReferenceDocument(targetId){
 async function importBoardImages(files,targetId){
   if(!files?.length)return;
   targetId=ensureReferenceDocument(targetId);
-  for(const file of files)await addBoardImage(file.data,file.name,file.mime,targetId);
+  for(const file of files)await addBoardImage(file.data,file.name,file.mime,targetId,file.sourcePath);
   if(targetId===documentId)boardMessage('已导入 '+files.length+' 张参考图');
 }
 async function referenceBoardImport(){
@@ -2233,12 +2247,11 @@ async function referenceBoardImport(){
   try{await importBoardImages(await window.desktop.open('reference'),targetId);}catch(error){boardMessage('参考图片导入失败：'+error.message);}
 }
 async function dropReferenceFiles(files){
-  const win=boardPanel().ownerDocument.defaultView;
   let targetId=referenceImportTarget();
   for(const file of files)try{
-    const base64=await new Promise((resolve,reject)=>{const reader=new win.FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(new Error('无法读取图片文件'));reader.readAsDataURL(file);});
+    const opened=await window.desktop.openDroppedFile(file);
     targetId=ensureReferenceDocument(targetId);
-    await addBoardImage(base64,file.name,file.type,targetId);
+    await addBoardImage(opened.data,opened.name,opened.mime,targetId,opened.sourcePath);
   }catch(error){boardMessage('参考图片导入失败：'+error.message);}
 }
 function fitBoardContent(){
@@ -2330,7 +2343,8 @@ function initReferenceBoard(){
   viewport.addEventListener('contextmenu',event=>{
     event.preventDefault();
     openContextMenu(event.clientX,event.clientY,'参考面板',[
-      ['适应内容',()=>fitBoardContent()],
+      ['重新定位图片…',()=>void relinkBoardItem(id)],
+    ['适应内容',()=>fitBoardContent()],
       ['缩放到 100%',()=>setBoardZoom(1)],
       ['清空参考面板',()=>void clearBoard()]
     ],'context-menu',panel);
@@ -2670,8 +2684,8 @@ const actions={
   'flip-y':()=>{if(editable())mutate(()=>{selection=flipRegion(doc,pixels(),selection,'y');},'已垂直翻转');},
   deselect:()=>{if(selection)previousSelection=selection;selection=null;drawOverlay();syncCommandStates();}
 };
-async function importReferenceImage(){if(!window.desktop)return message('参考图片导入请使用桌面版');try{const [file]=await window.desktop.open('reference');if(!file)return;const image=new Image();image.src='data:'+(file.mime||'image/png')+';base64,'+file.data;await image.decode();const source=document.createElement('canvas');source.width=image.width;source.height=image.height;const context=source.getContext('2d');context.drawImage(image,0,0);const reference=encodeReference(source.width,source.height,context.getImageData(0,0,source.width,source.height).data);assertProjectCapacity(doc,{layers:doc.layers.length+1,pixels:celPixelCount(doc)+doc.width*doc.height*doc.frames.length,sources:sourcePixelCount(doc)+source.width*source.height});mutate(()=>{li=addLayer(doc,li);doc.layers[li].name=file.name;doc.layers[li].type='reference';doc.layers[li].reference=reference;doc.requiredFeatures=[...new Set([...doc.requiredFeatures,'layer-types'])];},'已导入参考图片（仅编辑视图显示）');}catch(error){showError('参考图片导入失败：'+error.message);}}
-async function referenceSettings(){if(!isReference(doc.layers[li]))return message('请先选择参考图层');const ref=doc.layers[li].reference,values=await modal('参考图层位置','<label>X<input name="x" type="number" min="-16384" max="16384" step=".125" required></label><label>Y<input name="y" type="number" min="-16384" max="16384" step=".125" required></label><label>显示倍率<input name="scale" type="number" min=".125" max="16" step=".125" required></label><p>参考仅在暂停编辑视图显示；预览、洋葱皮、PNG / 动画 / ASE 不含参考。原始图像保存在项目内；转普通层按当前画布栅格化，超出部分会裁剪。</p>',form=>{for(const key of ['x','y','scale'])form.elements[key].value=ref[key];});if(values)mutate(()=>{doc.layers[li].reference={...ref,x:+values.x,y:+values.y,scale:+values.scale};},'已调整参考图层位置');}
+async function importReferenceImage(){if(!window.desktop)return message('参考图片导入请使用桌面版');try{const [file]=await window.desktop.open('reference');if(!file)return;const image=new Image();image.src='data:'+(file.mime||'image/png')+';base64,'+file.data;await image.decode();const source=document.createElement('canvas');source.width=image.width;source.height=image.height;const context=source.getContext('2d');context.drawImage(image,0,0);const reference={...encodeReference(source.width,source.height,context.getImageData(0,0,source.width,source.height).data),path:file.sourcePath};assertProjectCapacity(doc,{layers:doc.layers.length+1,pixels:celPixelCount(doc)+doc.width*doc.height*doc.frames.length,sources:sourcePixelCount(doc)+source.width*source.height});mutate(()=>{li=addLayer(doc,li);doc.layers[li].name=file.name;doc.layers[li].type='reference';doc.layers[li].reference=reference;doc.requiredFeatures=[...new Set([...doc.requiredFeatures,'layer-types'])];},'已导入参考图片（仅编辑视图显示）');}catch(error){showError('参考图片导入失败：'+error.message);}}
+async function referenceSettings(){if(!isReference(doc.layers[li]))return message('请先选择参考图层');const ref=doc.layers[li].reference,values=await modal('参考图层位置','<label>X<input name="x" type="number" min="-16384" max="16384" step=".125" required></label><label>Y<input name="y" type="number" min="-16384" max="16384" step=".125" required></label><label>显示倍率<input name="scale" type="number" min=".125" max="16" step=".125" required></label><p>参考仅在暂停编辑视图显示；预览、洋葱皮、PNG / 动画 / ASE 不含参考。项目只保存源图片路径，打开时重新读取；转普通层按当前画布栅格化，超出部分会裁剪。</p>',form=>{for(const key of ['x','y','scale'])form.elements[key].value=ref[key];});if(values)mutate(()=>{doc.layers[li].reference={...ref,x:+values.x,y:+values.y,scale:+values.scale};},'已调整参考图层位置');}
 async function layerParentDialog(){const current=doc.layers[li],values=await modal('移动到图层组','<label>目标组<select name="parent"></select></label><p>将当前图层或整组移动到目标组顶端。</p>',form=>{form.elements.parent.replaceChildren(new Option('最外层',''),...doc.layers.filter(layer=>isGroup(layer)&&layer.id!==current.id).map(layer=>new Option(layer.name,String(layer.id))));form.elements.parent.value=current.parentId||'';});if(values)mutate(()=>{li=reparentLayer(doc,li,values.parent?+values.parent:undefined);},'已移动图层组归属');}
 function reorderLayer(delta){mutate(()=>{li=moveLayerSibling(doc,li,delta);});}
 function nudge(direction,step){

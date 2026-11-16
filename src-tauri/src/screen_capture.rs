@@ -569,7 +569,7 @@ mod native {
                     }
                     let bytes = crate::storage::read_file(&path).map_err(|e| e.to_string())?;
                     files.push(
-                        crate::files::decode_bytes(&crate::files::basename(&path), &bytes, None)
+                        crate::files::decode_bytes(&crate::files::basename(&path), &bytes, Some(&path.to_string_lossy()))
                             .map_err(|e| e.to_string())?,
                     );
                 }

@@ -29,7 +29,7 @@ function editor(){
 }
 test('保存期间拖动参考图后保留未保存标记，再保存才更新保存点',async()=>{
  const context=editor(),pending=deferred();let persisted;
- addReference(context.doc,{...encodeReference(1,1,new Uint8Array([255,0,0,255])),id:'ref',name:'ref'});
+ addReference(context.doc,{...encodeReference(1,1,new Uint8Array([255,0,0,255])),id:'ref',name:'ref',path:'C:/ref.png'});
  context.window.desktop.saveProject=async doc=>{persisted=structuredClone(doc);return pending.promise;};
  const saving=context.saveProject();
  const node={setPointerCapture:()=>{},hasPointerCapture:()=>false,focus:()=>{}};
@@ -74,7 +74,7 @@ function switchToB(context){
 test('参考图解码期间切换标签后仍加入发起文档并标脏',async()=>{
  const context=editor(),pending=deferred();
  context.decodeBoardPng=()=>pending.promise;
- const importing=context.addBoardImage('','ref','image/png','a');switchToB(context);
+ const importing=context.addBoardImage('','ref','image/png','a','C:/ref.png');switchToB(context);
  pending.resolve({width:1,height:1,data:new Uint8Array([255,0,0,255])});await importing;
  const original=context.documentTabs.get('a');
  assert.equal(original.doc.references.length,1);assert.equal(original.dirty,true);assert.equal(original.boardRevision,1);
@@ -82,14 +82,14 @@ test('参考图解码期间切换标签后仍加入发起文档并标脏',async(
 });
 test('参考图解码期间关闭原文档时停止导入，不写入其他项目',async()=>{
  const context=editor(),pending=deferred();context.decodeBoardPng=()=>pending.promise;
- const importing=context.addBoardImage('','ref','image/png','a');switchToB(context);context.documentTabs.remove('a');
+ const importing=context.addBoardImage('','ref','image/png','a','C:/ref.png');switchToB(context);context.documentTabs.remove('a');
  pending.resolve({width:1,height:1,data:new Uint8Array([255,0,0,255])});
  await assert.rejects(importing,/关闭/);assert.equal(context.doc.references,undefined);
 });
 test('批量参考图在多次解码间切换标签仍全部加入同一原文档',async()=>{
  const context=editor(),pending=deferred();let decoded=0;
  context.decodeBoardPng=async()=>{if(++decoded===2)await pending.promise;return{width:1,height:1,data:new Uint8Array([255,0,0,255])};};
- const importing=context.importBoardImages([{data:'',name:'first'},{data:'',name:'second'}],'a');
+ const importing=context.importBoardImages([{data:'',name:'first',sourcePath:'C:/first.png'},{data:'',name:'second',sourcePath:'C:/second.png'}],'a');
  await Promise.resolve();await Promise.resolve();await Promise.resolve();
  switchToB(context);pending.resolve();await importing;
  assert.equal(context.documentTabs.get('a').doc.references.length,2);assert.equal(context.doc.references,undefined);
@@ -99,16 +99,15 @@ test('文件选择期间切换标签仍向原文档导入',async()=>{
  context.decodeBoardPng=async()=>({width:1,height:1,data:new Uint8Array([255,0,0,255])});
  vm.runInContext(section('async function referenceBoardImport(','async function dropReferenceFiles('),context);
  const importing=context.referenceBoardImport();switchToB(context);
- pending.resolve([{data:'',name:'picked'}]);await importing;
+ pending.resolve([{data:'',name:'picked',sourcePath:'C:/picked.png'}]);await importing;
  assert.equal(context.documentTabs.get('a').doc.references.length,1);assert.equal(context.doc.references,undefined);
 });
 test('拖入文件读取期间切换标签仍向原文档导入',async()=>{
- const context=editor();let reader;
- context.boardPanel=()=>({ownerDocument:{defaultView:{FileReader:class{constructor(){reader=this;}readAsDataURL(){}}}}});
+ const context=editor(),pending=deferred();context.window.desktop.openDroppedFile=()=>pending.promise;
  context.decodeBoardPng=async()=>({width:1,height:1,data:new Uint8Array([255,0,0,255])});
  vm.runInContext(section('async function dropReferenceFiles(','function fitBoardContent('),context);
  const importing=context.dropReferenceFiles([{name:'dropped',type:'image/png'}]);switchToB(context);
- reader.result='data:image/png;base64,';reader.onload();await importing;
+ pending.resolve({name:'dropped',mime:'image/png',data:'',sourcePath:'C:/dropped.png'});await importing;
  assert.equal(context.documentTabs.get('a').doc.references.length,1);assert.equal(context.doc.references,undefined);
 });
 test('后台文档恢复写入使用其自身路径和内容，不清除前台恢复定时器',async()=>{

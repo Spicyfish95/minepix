@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {packProjectSave,unpackProjectRead,openedProject} from '../src/project-transfer.js';
+import {projectForSave} from '../src/reference-files.js';
 import {createDocument,addFrame} from '../src/model.js';
 import {linkCels} from '../src/cel-links.js';
 
@@ -20,19 +21,16 @@ function unpack(bytes){
 }
 
 test('原始保存字节保留u32索引边界、空cel、参考和未知元数据',()=>{
- const document={format:'pixel-studio',width:2,height:1,frames:[{duration:75,cels:[null,[],[0,0xffffffff,0x11223344]],indices:[null,[],[0,255]],custom:{data:'保留'}}],references:[{data:'AQIDBA==',note:'参考'}, {data:'',note:'空'}],custom:{cels:[1,2]}};
+ const document={format:'pixel-studio',width:2,height:1,frames:[{duration:75,cels:[null,[],[0,0xffffffff,0x11223344]],indices:[null,[],[0,255]],custom:{data:'保留'}}],references:[{data:'AQIDBA==',path:'C:/参考.png',note:'参考'}, {data:'',path:'C:/empty.png',note:'空'}],custom:{cels:[1,2]}};
  const original=JSON.stringify(document),wire=packProjectSave(original,'中文 保存',true),restored=unpack(wire);
- assert.deepEqual(restored.document,document);assert.equal(restored.name,'中文 保存');assert.equal(restored.saveAs,true);assert.equal(JSON.stringify(document),original);
- assert.equal(restored.blocks.length,6);
+ assert.deepEqual(restored.document,JSON.parse(JSON.stringify(projectForSave(document))));assert.equal(restored.name,'中文 保存');assert.equal(restored.saveAs,true);assert.equal(JSON.stringify(document),original);
+ assert.equal(restored.blocks.length,4);
 });
 
-test('不变参考图复用解码字节，移动或重排命中，替换同长度数据不复用旧像素',()=>{
- const originalAtob=globalThis.atob;let decodes=0;globalThis.atob=value=>{decodes++;return originalAtob(value);};
- try{
-  const doc={format:'pixel-studio',frames:[],references:[{id:'cached',data:'ERITFA==',x:0}]};
-  assert.deepEqual(unpack(packProjectSave(doc,'cached')).document,doc);assert.equal(decodes,1);
-  doc.references[0].x=42;doc.references[0].id='reordered';assert.deepEqual(unpack(packProjectSave(structuredClone(doc),'cached')).document,doc);assert.equal(decodes,1);
-  doc.references[0].data='ISIjJA==';assert.deepEqual(unpack(packProjectSave(doc,'changed')).document,doc);assert.equal(decodes,2);
+test('参考图只传输路径，不解码或传输原始数据',()=>{
+ const originalAtob=globalThis.atob;globalThis.atob=()=>{throw Error('must not decode reference data');};
+ try{const doc={format:'pixel-studio',frames:[],references:[{path:'D:/reference.png',data:'huge data',x:42}]};
+ const packed=unpack(packProjectSave(doc,'external'));assert.deepEqual(packed.document.references,[{path:'D:/reference.png',x:42}]);assert.equal(packed.blocks.length,0);
  }finally{globalThis.atob=originalAtob;}
 });
 test('保存快照显式绑定发起路径，未保存项目保持null而非沿用活动标签',()=>{
@@ -65,7 +63,7 @@ test('大块重复像素使用定长原始字节而不保留数字JSON',()=>{
 test('直接文档打包与字符串字节相同，不修改冻结文档或链接共享',()=>{
  const document=createDocument(2,1,'直接保存');document.frames[0].cels[0]=[0xffffffff,0x11223344];
  addFrame(document,0,true);linkCels(document,0,[0,1]);
- document.references=[{id:'reference',data:'AQIDBA==',width:1,height:1}];
+ document.references=[{id:'reference',data:'AQIDBA==',path:'C:/reference.png',width:1,height:1}];
  document.custom={unknown:['保留',null,{enabled:true}]};
  const original=JSON.stringify(document),pixels=document.frames[0].cels[0];
  assert.equal(document.frames[1].cels[0],pixels);
@@ -73,7 +71,7 @@ test('直接文档打包与字符串字节相同，不修改冻结文档或链�
  freeze(document);
  const bytes=packProjectSave(document,'中文 直接',true);
  assert.deepEqual(bytes,packProjectSave(original,'中文 直接',true));
- assert.deepEqual(unpack(bytes).document,JSON.parse(original));
+ assert.deepEqual(unpack(bytes).document,JSON.parse(JSON.stringify(projectForSave(document))));
  assert.equal(JSON.stringify(document),original);assert.equal(document.frames[1].cels[0],pixels);
 });
 
@@ -86,9 +84,9 @@ test('Rust真实原始读取fixture保留全部像素、索引、参考与未知
 });
 
 test('原始读取保留可选null和空字段，较大参考使用分块Base64',()=>{
- for(const document of [{format:'pixel-studio',frames:[{cels:null,indices:[]},{cels:[null,[]]}],references:null},{format:'pixel-studio',frames:[]},{format:'pixel-studio',frames:[],references:[{data:Buffer.alloc(65537,0xaf).toString('base64')}]}]){
+ for(const document of [{format:'pixel-studio',frames:[{cels:null,indices:[]},{cels:[null,[]]}],references:null},{format:'pixel-studio',frames:[]},{format:'pixel-studio',frames:[],references:[{path:'C:/reference.png',data:Buffer.alloc(65537,0xaf).toString('base64')}]}]){
   const wire=packProjectSave(document,'test');wire.set(new TextEncoder().encode('MPXREAD1'));
-  assert.deepEqual(unpackProjectRead(wire.buffer),document);
+  assert.deepEqual(unpackProjectRead(wire.buffer),JSON.parse(JSON.stringify(projectForSave(document))));
  }
 });
 

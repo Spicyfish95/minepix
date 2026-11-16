@@ -7,10 +7,10 @@ export function validateBoardItem(item){
   if(typeof item.id!=='string'||!item.id||item.id.length>ID_LIMIT)throw new Error('参考图片 id 无效');
   if(typeof item.name!=='string'||!item.name.trim()||item.name.length>NAME_LIMIT)throw new Error('参考图片名称无效');
   if(!Number.isInteger(item.width)||!Number.isInteger(item.height)||item.width<1||item.height<1)throw new Error('参考图片尺寸无效');
-  validateImageData(item.width,item.height,item.data);
+  if(item.data!==undefined)validateImageData(item.width,item.height,item.data);else if(!item.path)throw new Error('参考图片缺少路径');
   if(!Number.isFinite(item.x)||!Number.isFinite(item.y)||Math.abs(item.x)>POSITION_LIMIT||Math.abs(item.y)>POSITION_LIMIT)throw new Error('参考图片位置无效');
   if(!Number.isFinite(item.scale)||item.scale<MIN_SCALE||item.scale>MAX_SCALE)throw new Error('参考图片缩放无效');
-  return{id:item.id,name:item.name,width:item.width,height:item.height,data:item.data,x:item.x,y:item.y,scale:item.scale};
+  return{id:item.id,name:item.name,width:item.width,height:item.height,...(item.data!==undefined?{data:item.data}:{}),...(item.path?{path:item.path}:{}),...(item.missing?{missing:item.missing}:{}),x:item.x,y:item.y,scale:item.scale};
 }
 export function validateReferences(list){
   if(!Array.isArray(list))throw new Error('参考图片列表必须是数组');

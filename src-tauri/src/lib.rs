@@ -129,6 +129,16 @@ async fn desktop_call(
             }
         }
         "clipboardImages" => screen_capture::clipboard(),
+        "readReference" => files::read_reference(std::path::Path::new(text(&args, 0))).map_err(io_error),
+        "saveReference" => {
+            use base64::Engine;
+            let bytes = base64::engine::general_purpose::STANDARD.decode(text(&args, 0)).map_err(|error| error.to_string())?;
+            let extension = match text(&args, 2) { "image/jpeg" => "jpg", "image/webp" => "webp", "image/gif" => "gif", "image/bmp" => "bmp", _ => "png" };
+            let name = std::path::Path::new(text(&args, 1)).file_stem().unwrap_or_default().to_string_lossy();
+            let Some(chosen) = dialog(&state).add_filter("Reference image", &[extension]).set_file_name(format!("{name}.{extension}")).save_file().await else { return Ok(Value::Null) };
+            storage::write_atomic(chosen.path(), &bytes).map_err(io_error)?;
+            Ok(json!({"sourcePath":chosen.path()}))
+        }
         "editorInfo" => Ok(json!({"id": window.label(), "detached": window.label() != "main"})),
         "editorReady" => {
             state.windows.mark_ready(window.label());

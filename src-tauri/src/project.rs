@@ -106,6 +106,9 @@ pub fn encode(document: &Value) -> io::Result<Vec<u8>> {
     if let Some(references) = document.get("references").and_then(Value::as_array) {
         let mut reference_metadata = Vec::with_capacity(references.len());
         for (index, reference) in references.iter().enumerate() {
+            if reference["path"].as_str().is_some_and(|path| !path.is_empty()) && reference.get("data").is_none() {
+                reference_metadata.push(reference.clone());continue;
+            }
             let data = reference["data"]
                 .as_str()
                 .ok_or_else(|| invalid("参考图片数据无效"))?;

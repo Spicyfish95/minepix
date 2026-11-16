@@ -1,4 +1,6 @@
-﻿import {invoke} from '@tauri-apps/api/core';
+﻿import {encodeReference} from './layer-types.js';
+import {loadReferenceFiles} from './reference-files.js';
+import {invoke} from '@tauri-apps/api/core';
 import {getCurrentWebviewWindow} from '@tauri-apps/api/webviewWindow';
 import {getCurrentWindow,Window} from '@tauri-apps/api/window';
 import {applicationMenu} from './application-menu.js';
@@ -22,7 +24,13 @@ const handlers=new Map(),current=getCurrentWindow();
 const dispatch=(name,payload)=>{for(const callback of handlers.get(name)||[])callback(payload);};
 const subscribe=(name,callback)=>{if(!handlers.has(name))handlers.set(name,new Set());handlers.get(name).add(callback);return()=>handlers.get(name).delete(callback);};
 const invokeBackend=(command,args)=>invoke(command,args).catch(error=>{throw error instanceof Error?error:new Error(String(error));});
-const readProject=async(filePath,record=true)=>unpackProjectRead(await invokeBackend('read_project_packed',{filePath,record}));
+const readProject=async(filePath,record=true)=>loadReferenceFiles(unpackProjectRead(await invokeBackend('read_project_packed',{filePath,record})),path=>readReference(path));
+async function readReference(path){
+ const file=await call('readReference',path),image=new Image();image.src='data:'+file.mime+';base64,'+file.data;await image.decode();
+ if(image.width*image.height>32*1024*1024)throw new Error('参考图片超过32M像素');
+ const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;const context=canvas.getContext('2d');context.drawImage(image,0,0);
+ const {width,height,data}=encodeReference(image.width,image.height,context.getImageData(0,0,image.width,image.height).data);return{width,height,data};
+}
 async function resolveOpened(value){
  if(Array.isArray(value)){const files=[];for(const file of value)files.push(await resolveOpened(file));return files;}
  return value?.type==='project'&&value.rawProject?openedProject(value,await readProject(value.filePath)):value;
@@ -76,8 +84,9 @@ function windowBridge(target){
 
 export async function initializeDesktop(){
  const bridge={testing:false,secondary:current.label!=='main'},projectSaveClient=createProjectSaveClient();
- const methods=['captureScreen','clipboardImages','openRepository','appInfo','editorInfo','editorReady','detachDocument','moveDocument','recordInputAudit','testNotification','recentFiles','recentThumbs','removeRecent','clearRecent','openRecent','startupFiles','openKeymap','openPalette','open','exportAseprite','pickExportDirectory','exportSheetMetadata','exportSheet','exportAnimation','save','saveProject','activateDocument','setDirty','checkUpdates','installUpdate','downloadUpdate','cancelUpdate','updateState','openUpdateRelease','setAutoUpdate','setLocale'];
+ const methods=['readReference','saveReference','captureScreen','clipboardImages','openRepository','appInfo','editorInfo','editorReady','detachDocument','moveDocument','recordInputAudit','testNotification','recentFiles','recentThumbs','removeRecent','clearRecent','openRecent','startupFiles','openKeymap','openPalette','open','exportAseprite','pickExportDirectory','exportSheetMetadata','exportSheet','exportAnimation','save','saveProject','activateDocument','setDirty','checkUpdates','installUpdate','downloadUpdate','cancelUpdate','updateState','openUpdateRelease','setAutoUpdate','setLocale'];
  for(const method of methods)bridge[method]=(...args)=>call(method,...args);
+ bridge.readReference=readReference;
  // Internal smoke helpers may select a fresh entry by index; IPC always receives its path.
  bridge.openRecent=async entry=>{
   const path=typeof entry==='number'?(await call('recentFiles'))[entry]?.path:entry;
