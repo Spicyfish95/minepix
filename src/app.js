@@ -1,3 +1,4 @@
+import {ReferenceCanvasCache} from './reference-canvas-cache.js';
 import {snapshotDocument} from './document-snapshot.js';
 import {invalidateHistoryCaches} from './render-invalidation.js';
 import {layerThumbnailPixels} from './thumbnails.js';
@@ -1763,7 +1764,7 @@ function enterEmptyState(){
 }
 function restoreDocumentState(state){activeSliceId=null;stopPreview();stop();onionCache.clear();frameCache.clear();referenceCache.clear();({documentId,doc,fi,li,selection,previousSelection,zoom,pan,dirty,saved,boardRevision,savedBoardRevision,filePath,frameSelection,frameAnchor,celRange,celAnchor}=state);if(state.view.viewport)pan={x:pan.x+(viewport.clientWidth-state.view.viewport.w)/2,y:pan.y+(viewport.clientHeight-state.view.viewport.h)/2};history.restore(state.historyState);restorePaletteUI(state.paletteUI);documentTabs.active=documentId;window.desktop?.activateDocument(filePath);$('grid').checked=state.view.grid;$('onion').checked=state.view.onion;$('timeline-mode').value=state.view.timeline;setDirty(dirty);render();$('play-range').value=state.view.range;$('play-direction').value=state.view.direction;$('play-once').checked=state.view.once;place();draw();}
 function switchDocument(id){if(id===documentId)return;if(busy||gesture||shapeSession||celGesture||$('modal').open){message('请先完成当前操作');return;}documentTabs.save(captureDocumentState());if(dirty)void flushRecovery();restoreDocumentState(documentTabs.get(id));}
-async function closeDocumentTab(id=documentId){if(busy||gesture||shapeSession||celGesture||$('modal').open)return;switchDocument(id);if(documentId!==id||!await confirmDiscard(true)||documentId!==id)return;await flushRecovery();if(documentId!==id||dirty||gesture||shapeSession||projectSaves.has(id))return;closedDocuments.push(captureDocumentState());if(closedDocuments.length>10)closedDocuments.shift();const next=documentTabs.remove(id);if(next)restoreDocumentState(next);else enterEmptyState();}
+async function closeDocumentTab(id=documentId){if(busy||gesture||shapeSession||celGesture||$('modal').open)return;switchDocument(id);if(documentId!==id||!await confirmDiscard(true)||documentId!==id)return;await flushRecovery();if(documentId!==id||dirty||gesture||shapeSession||projectSaves.has(id))return;closedDocuments.push(captureDocumentState());if(closedDocuments.length>10)closedDocuments.shift();const next=documentTabs.remove(id);if(next)restoreDocumentState(next);else enterEmptyState();pruneDocumentCaches();}
 function reopenDocument(){const state=closedDocuments.pop();if(!state)return message('没有可重开的文档');documentTabs.save(captureDocumentState());documentTabs.add(state);restoreDocumentState(state);message('已重开关闭文档');}
 async function recentDialog(){
  if(!window.desktop)return message('最近文件请使用桌面版');
@@ -1791,7 +1792,7 @@ function replaceDocument(value,isSaved=true,nextPath=null,id=crypto.randomUUID()
   if(textSession)cancelTextSession();
   if(newTab)documentTabs.save(captureDocumentState());
   if(dirty)void flushRecovery();
-  stopPreview();stop();onionCache.clear();frameCache.clear();referenceCache.clear();restorePaletteUI(paletteUI||{id:listPaletteLibrary().find(entry=>entry.colors.length===value.palette.length&&entry.colors.every((color,index)=>normalizeColor(color)===normalizeColor(value.palette[index])))?.id||'',remap:null});doc=value;documentId=id;filePath=nextPath;window.desktop?.activateDocument(filePath);fi=0;li=doc.layers.length-1;selection=null;previousSelection=null;frameSelection=new Set([0]);frameAnchor=0;celRange=null;celAnchor={frame:0,layer:li};$('timeline-mode').value='frames';$('play-range').value='all';$('play-direction').value='tag';$('play-once').checked=false;history.reset();boardRevision=0;savedBoardRevision=0;saved=isSaved?history.revision:-1;setDirty(!isSaved);if(newTab)documentTabs.add(captureDocumentState());else documentTabs.replace(captureDocumentState());render();fit();scheduleRecovery();
+  stopPreview();stop();onionCache.clear();frameCache.clear();referenceCache.clear();restorePaletteUI(paletteUI||{id:listPaletteLibrary().find(entry=>entry.colors.length===value.palette.length&&entry.colors.every((color,index)=>normalizeColor(color)===normalizeColor(value.palette[index])))?.id||'',remap:null});doc=value;documentId=id;filePath=nextPath;window.desktop?.activateDocument(filePath);fi=0;li=doc.layers.length-1;selection=null;previousSelection=null;frameSelection=new Set([0]);frameAnchor=0;celRange=null;celAnchor={frame:0,layer:li};$('timeline-mode').value='frames';$('play-range').value='all';$('play-direction').value='tag';$('play-once').checked=false;history.reset();boardRevision=0;savedBoardRevision=0;saved=isSaved?history.revision:-1;setDirty(!isSaved);if(newTab)documentTabs.add(captureDocumentState());else documentTabs.replace(captureDocumentState());pruneDocumentCaches();render();fit();scheduleRecovery();
 }
 async function requestClose(closeWindow=true){
   if(closePending)return;
@@ -1884,7 +1885,12 @@ let previewUI=null;
 const boardItems=()=>doc.references||[];
 const boardCacheKey=item=>item.id+'|'+item.width+'x'+item.height+'|'+(item.data?.length||0)+'|'+(item.path||'');
 const boardPanel=()=>$('reference-panel');
-function boardCanvasCache(dom){let cache=BOARD_CANVASES.get(dom);if(!cache){cache=new Map();BOARD_CANVASES.set(dom,cache);}return cache;}
+function boardCanvasCache(dom){let cache=BOARD_CANVASES.get(dom);if(!cache){cache=new ReferenceCanvasCache();BOARD_CANVASES.set(dom,cache);}return cache;}
+function pruneDocumentCaches(){
+ const states=[...documentTabs.items.map(item=>item.state),...closedDocuments],ids=new Set(states.map(state=>state.documentId)),keys=new Set(states.flatMap(state=>(state.doc.references||[]).map(boardCacheKey)));
+ for(const dom of new Set([document,boardPanel()?.ownerDocument]))if(dom)boardCanvasCache(dom).retain(keys);
+ for(const views of [BOARD_VIEWS,PREVIEW_VIEWS])for(const id of views.keys())if(!ids.has(id))views.delete(id);
+}
 function boardForget(item){for(const dom of [document,boardPanel()?.ownerDocument])if(dom)boardCanvasCache(dom).delete(boardCacheKey(item));}
 function boardDirty(){return boardRevision!==savedBoardRevision;}
 function boardView(){let view=BOARD_VIEWS.get(documentId);if(!view){view={zoom:1,x:0,y:0};BOARD_VIEWS.set(documentId,view);}return view;}

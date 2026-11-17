@@ -30,6 +30,13 @@ async function runChecks(){
   const point=(type,x,y)=>{const rect=canvas.getBoundingClientRect();viewport.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,clientX:rect.left+(x+.5)*zoom,clientY:rect.top+(y+.5)*zoom,pointerId:73,button:0}));};
   point('pointerdown',5,5);check('cropped stroke base is a sparse view of the existing cel snapshot',gesture.base.length===1024*1024&&Object.keys(gesture.base).length===0&&gesture.before.frames[0].cels[0].length===256);finishGesture(true);check('cropped stroke cancellation restores original source pixels',doc.frames[0].cels[0].every(pixel=>pixel===0));
   point('pointerdown',3,4);point('pointerup',3,4);check('cropped stroke grows the source and undo restores its bounds',celProperty(doc,0,0).width===17);actions.undo();check('cropped growth undo restores 16px source',celProperty(doc,0,0).width===16&&doc.frames[0].cels[0].length===256);viewport.setPointerCapture=capture;
+  closedDocuments.length=0;
+  for(let i=0;i<12;i++){
+   const next=createDocument(2,2,'closed reference '+i);next.references=[{...encodeReference(8,8,new Uint8Array(256)),id:'cache-reclaim-'+i,name:'ref',path:'C:/ref-'+i+'.png'}];next.requiredFeatures.push('reference-board');replaceDocument(next,true);renderReferenceBoard(true);await closeDocumentTab();
+  }
+  const retained=new Set(closedDocuments.flatMap(state=>(state.doc.references||[]).map(boardCacheKey))),cached=boardCanvasCache(window.document);
+  check('closing more than ten documents releases orphan reference canvases',closedDocuments.length===10&&[...cached.keys()].every(key=>retained.has(key))&&cached.size<=10);
+  reopenDocument();check('reopening retained document can regenerate its reference canvas',boardItems().length===1&&!!boardCachedCanvas(window.document,boardItems()[0]));
   return{ok:true,results,renderMetrics:render.metrics};
  }catch(error){return{ok:false,results,error:error.stack};}
  finally{client?.dispose();clearTimeout(recoveryTimer);}
