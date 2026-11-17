@@ -2074,8 +2074,11 @@ function drawPreviewCanvas(){
   const error=metrics?previewRenderError(metrics.width,metrics.height):'';
   ui.limit.textContent=error;ui.limit.hidden=!error;
   ui.node.style.visibility=error?'hidden':'';
-  if(!metrics||error){ui.canvas.width=0;ui.canvas.height=0;return;}
+  if(!metrics||error){ui.canvas.width=0;ui.canvas.height=0;ui.renderKey='';ui.renderDocument=null;return;}
   const {entry,tileW,tileH,cols,rows,width,height}=metrics,tileset=entry.layer.tileset,atlasCols=Math.floor(doc.width/tileW);
+  const renderKey=[documentId,history.revision,boardRevision,entry.layer.id,width,height,$('grid').checked].join(':');
+  if(ui.renderDocument===doc&&ui.renderKey===renderKey&&ui.canvas.width===width&&ui.canvas.height===height)return;
+  ui.renderDocument=doc;ui.renderKey=renderKey;
   if(ui.canvas.width!==width||ui.canvas.height!==height){ui.canvas.width=width;ui.canvas.height=height;}
   const preview=findPreview(entry),painted=!!preview&&preview.cells.some(id=>id>=0);
   const resolved=painted?resolvePreviewCells(tileset,cols,rows,preview.cells):[];

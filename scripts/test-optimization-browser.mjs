@@ -37,6 +37,9 @@ async function runChecks(){
   const metadataDoc=createDocument(64,64,'metadata gesture');replaceDocument(metadataDoc,true);const originalPixels=doc.frames[0].cels[0],oldCapture=viewport.setPointerCapture;viewport.setPointerCapture=()=>{};
   symmetryHandles[0].onpointerdown({preventDefault(){},stopPropagation(){},pointerId:81});check('symmetry gesture snapshots metadata while sharing untouched source',gesture.before.frames[0].cels[0]===originalPixels);doc.symmetryAxes={x:10,y:20};finishGesture(true);check('symmetry cancellation restores metadata without replacing pixels',!doc.symmetryAxes&&doc.frames[0].cels[0]===originalPixels);viewport.setPointerCapture=oldCapture;
   const paletteSnapshot=snapshotPaletteGesture();check('RGBA palette gesture snapshots metadata only',paletteSnapshot.frames[0].cels[0]===doc.frames[0].cels[0]);
+  const previewDoc=createDocument(4,4,'preview repaint');previewDoc.frames[0].cels[0].fill(0xffffffff);replaceDocument(previewDoc,true);mutate(()=>toTileset(doc,0,{w:2,h:2,frame:0}),'tileset');renderTerrainPreview();
+  const previewContext=previewUI.canvas.getContext('2d'),putImage=previewContext.putImageData;let previewWrites=0;previewContext.putImageData=function(...args){previewWrites++;return putImage.apply(this,args);};
+  for(let i=0;i<10;i++)renderTerrainPreview();check('unchanged terrain preview reuses the existing rendered image',previewWrites===0);previewDirty();drawPreviewCanvas();check('terrain preview revision repaints once',previewWrites===1);previewContext.putImageData=putImage;
   closedDocuments.length=0;
   for(let i=0;i<12;i++){
    const next=createDocument(2,2,'closed reference '+i);next.references=[{...encodeReference(8,8,new Uint8Array(256)),id:'cache-reclaim-'+i,name:'ref',path:'C:/ref-'+i+'.png'}];next.requiredFeatures.push('reference-board');replaceDocument(next,true);renderReferenceBoard(true);await closeDocumentTab();
