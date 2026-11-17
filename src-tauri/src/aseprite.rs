@@ -262,7 +262,6 @@ pub fn encode(doc: &Value) -> io::Result<Vec<u8>> {
     }
     let mut body = Vec::new();
     let mut links = HashMap::new();
-    let mut total_pixels = 0usize;
     for (frame_index, frame) in frames.iter().enumerate() {
         let duration = word(number(&frame["duration"])?)?;
         if !(20..=10000).contains(&duration) {
@@ -305,10 +304,6 @@ pub fn encode(doc: &Value) -> io::Result<Vec<u8>> {
             let pixels = array(&frame["cels"][index])?;
             if pixels.len() != usize::from(w) * usize::from(h) {
                 return Err(invalid("ASE cel 像素尺寸不一致"));
-            }
-            total_pixels += pixels.len();
-            if total_pixels > 32 * 1024 * 1024 {
-                return Err(invalid("ASE 原始像素超过 32M"));
             }
             let mut raw = Vec::with_capacity(pixels.len() * (depth / 8));
             for (i, pixel) in pixels.iter().enumerate() {

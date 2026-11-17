@@ -56,7 +56,6 @@ export default {
 "已清除像素": "Pixels cleared",
 "已水平翻转": "Flipped horizontally",
 "已垂直翻转": "Flipped vertically",
-"参考图片与cel总容量超过32M": "Reference images and cels exceed the 32 MB budget",
 "已导入参考图片（仅编辑视图显示）": "Imported reference images (editing view only)",
 "请先选择参考图层": "Select a reference layer first",
 "参考图层位置": "Reference layer position",

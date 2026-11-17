@@ -12,8 +12,8 @@ import {validateReferences} from './reference-board.js';
 import {isTileset,validateTileset} from './tilemap.js';
 import {validatePreviewTerrain} from './terrain-preview.js';
 import {validateCanvasBackground} from './canvas-background.js';
-import {assertCapacity,assertProjectCapacity,celPixelCount,sourcePixelCount} from './project-capacity.js';
-export {LIMIT,assertCapacity} from './project-capacity.js';
+import {assertCapacity,assertProjectCapacity} from './project-capacity.js';
+export {assertCapacity} from './project-capacity.js';
 export const PALETTE = BRIGHT24;
 export const clone = value => structuredClone(value);
 export function colorValue(hex) { return parseInt(hex.slice(1).padEnd(8,'f'),16)>>>0; }
@@ -38,7 +38,6 @@ export function validateDocument(input) {
   validateLayerTree(layers);
   if(layers.filter(isBackground).length>1||layers.some((l,i)=>isBackground(l)&&(i!==0||l.parentId!==undefined||l.opacity!==100||l.blendMode&&l.blendMode!=='normal'||!Number.isInteger(l.clearColor)||l.clearColor<0||l.clearColor>0xffffffff||(l.clearColor&255)!==255)))throw new Error('背景层必须位于最底层、不透明且使用正常混合');
   const references=validateReferences(input.references??[]);
-  assertProjectCapacity({...input,layers,references},{pixels:0});
   const frames=input.frames.map(f=>{
     if(f?.links!==undefined&&(typeof f.links!=='object'||!f.links||Array.isArray(f.links)))throw new Error('cel链接表无效');
     if (!f || !Number.isFinite(f.duration) || f.duration<20 || f.duration>10000 || !Array.isArray(f.cels) || f.cels.length!==layers.length) throw new Error('无效的帧数据');
@@ -50,7 +49,6 @@ export function validateDocument(input) {
       return c.slice();
     })};
   });
-  assertProjectCapacity({...input,layers,frames,references});
   const palette=Array.isArray(input.palette)?input.palette.filter(c=>/^#[a-f0-9]{6}(?:[a-f0-9]{2})?$/i.test(c)).slice(0,256):[];
   if(input.colorMode==='indexed'&&(!Array.isArray(input.palette)||!input.palette.length||input.palette.length>256||palette.length!==input.palette.length))throw new Error('索引色板无效');
   const normalizedTags=validateTags(input.tags,frames.length),previewTerrain=validatePreviewTerrain(input.previewTerrain);
@@ -105,8 +103,7 @@ export function composite(doc,frameIndex,options={}) {
 }
 export function addFrame(doc,index,duplicate=false) {
   const position=index+1,source=doc.frames[Math.max(0,index)];
-  const added=doc.layers.reduce((n,layer,l)=>n+(duplicate||layer.continuous?source.cels[l].length:doc.width*doc.height),0);
-  assertProjectCapacity(doc,{frames:doc.frames.length+1,pixels:celPixelCount(doc)+added});
+  assertProjectCapacity(doc,{frames:doc.frames.length+1});
   const sources=doc.frames.map((_,i)=>i);sources.splice(position,0,Math.max(0,index));doc.slices=remapSliceFrames(doc.slices,sources);
   doc.frames.splice(position,0,duplicate?clone(source):{duration:doc.frames[Math.max(0,index)].duration,cels:doc.layers.map(layer=>new Array(doc.width*doc.height).fill(isBackground(layer)?layer.clearColor:0))});
   if(doc.colorMode==='indexed'&&!duplicate)doc.frames[position].indices=doc.layers.map(l=>isGroup(l)||isReference(l)?null:new Array(doc.width*doc.height).fill(isBackground(l)?l.clearIndex:doc.transparentIndex));
@@ -115,8 +112,7 @@ export function addFrame(doc,index,duplicate=false) {
 }
 export function addLayer(doc,index,duplicate=false) {
   const old=doc.layers[index],id=Math.max(...doc.layers.map(l=>l.id))+1;
-  const added=doc.frames.reduce((n,frame)=>n+(duplicate?frame.cels[index].length:doc.width*doc.height),0),source=duplicate&&old.reference?.data?old.reference.width*old.reference.height:0;
-  assertProjectCapacity(doc,{layers:doc.layers.length+1,pixels:celPixelCount(doc)+added,sources:sourcePixelCount(doc)+source});
+  assertProjectCapacity(doc,{layers:doc.layers.length+1});
   const position=isGroup(old)?index:index+1,parentId=isGroup(old)?old.id:old.parentId;
   doc.layers.splice(position,0,duplicate?{...clone(old),id,name:old.name+' 副本'}:{id,name:`图层 ${id}`,visible:true,locked:false,opacity:100,...(parentId!==undefined?{parentId}:{})});
   doc.frames.forEach(f=>{if(duplicate&&f.celProperties?.[old.id])f.celProperties={...f.celProperties,[id]:{...f.celProperties[old.id]}};f.cels.splice(position,0,duplicate?[...f.cels[index]]:new Array(doc.width*doc.height).fill(0));if(f.indices)f.indices.splice(position,0,duplicate?f.indices[index].slice():new Array(doc.width*doc.height).fill(doc.transparentIndex));f.tiles?.splice(position,0,null);});

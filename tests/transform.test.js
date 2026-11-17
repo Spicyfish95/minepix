@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { transformState, transformPoint, localPoint, relocatePivot, transformHandles, hitTransform, dragTransform, transformCursor } from '../src/transform-controls.js';
-import { LIMIT } from '../src/model.js';
 import { transformSelectionRegion } from '../src/selection-mask.js';
 const near=(a,b)=>{assert.ok(Math.abs(a.x-b.x)<1e-8);assert.ok(Math.abs(a.y-b.y)<1e-8);};
 const base=()=>transformState({x:10,y:20,w:12,h:8});
@@ -18,12 +17,12 @@ test('corner and edge resize keep their opposite anchor fixed after rotation',()
     if(u===.5)assert.equal(next.width,state.width);if(v===.5)assert.equal(next.height,state.height);
   }
 });
-test('Shift corner resize preserves aspect and prevents collapsed or excessive dimensions',()=>{
+test('Shift corner resize preserves aspect and prevents collapsed dimensions without a fixed pixel budget',()=>{
   const state=base(),start=transformPoint(state,1,1),next=dragTransform(state,'se',start,{x:start.x+12,y:start.y+3},true);
   assert.equal(next.width,24);assert.equal(next.height,16);
-  const tiny=dragTransform(state,'se',start,{x:-100,y:-100}),large=dragTransform(state,'se',start,{x:5000,y:5000});
-  assert.equal(tiny.width,1);assert.ok(large.width>4096);assert.ok(large.width*large.height<=LIMIT);
-  const proportional=dragTransform(state,'se',start,{x:5000,y:5000},true);assert.ok(proportional.width>4096);assert.ok(proportional.width*proportional.height<=LIMIT);
+  const tiny=dragTransform(state,'se',start,{x:-100,y:-100}),large=dragTransform(state,'se',start,{x:10000,y:10000});
+  assert.equal(tiny.width,1);assert.ok(large.width>4096);assert.ok(large.width*large.height>32*1024*1024);
+  const proportional=dragTransform(state,'se',start,{x:10000,y:10000},true);assert.ok(proportional.width>4096);assert.ok(proportional.width*proportional.height>32*1024*1024);
 });
 test('pivot relocation keeps all corners and rasterized pixels stationary',()=>{
   const region={x:10,y:20,w:2,h:2,data:[255,511,767,1023]},state={...transformState(region),angle:90};

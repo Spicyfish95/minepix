@@ -15,6 +15,10 @@ function editor(clipboard=null,answer=null){
  return{context,dialogs,created,dimensions,preferences};
 }
 test('no copied pixels keeps the configured new-document dimensions',async()=>{const {context,dimensions}=editor();await context.newDocument();assert.deepEqual(dimensions(),{width:96,height:48});});
+test('new dialog accepts dimensions above the former pixel budget and drops its warning',async()=>{
+ const state=editor({w:8192,h:4097});await state.context.newDocument();assert.deepEqual(state.dimensions(),{width:8192,height:4097});
+ assert.ok(!state.dialogs[0].html.includes('32M'));assert.ok(!/name="(?:width|height)"[^>]*max=/.test(state.dialogs[0].html));
+});
 test('clipboard rectangle dimensions override preferences without copying source coordinates',async()=>{const clip={x:120,y:90,w:13,h:7,data:[]},state=editor(clip);await state.context.newDocument();assert.deepEqual(state.dimensions(),{width:13,height:7});assert.equal(state.context.clipboard,clip);});
 test('transparent padding and selection mask keep the full clipboard bounding rectangle',async()=>{const state=editor({x:4,y:8,w:3,h:2,data:[0,0,0,0,0,0xff0000ff],mask:new Uint8Array([0,0,0,0,0,1])});await state.context.newDocument();assert.deepEqual(state.dimensions(),{width:3,height:2});});
 test('manual dimensions create a blank project and preserve palette duration and background defaults',async()=>{

@@ -22,5 +22,5 @@ test('automatic trim considers every frame and includes hidden layer content', (
 });
 test('sprite flips affect all cels and dimension failures leave the document intact', () => {
   const d=createDocument(3,2);d.frames[0].cels[0][0]=red;addFrame(d,0,true);flipSprite(d,'x');assert(d.frames.every(f=>f.cels[0][2]===red));flipSprite(d,'y');assert(d.frames.every(f=>f.cels[0][5]===red));
-  const before=clone(d);assert.throws(()=>resizeCanvas(d,33554433,2));assert.deepEqual(d,before);
+  const before=clone(d);assert.throws(()=>resizeCanvas(d,0,2));assert.deepEqual(d,before);
 });

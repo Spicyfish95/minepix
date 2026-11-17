@@ -7,6 +7,11 @@ import {createRequire} from 'node:module';
 import {sheetLayout,sheetImportPlan} from '../src/formats/sprite-sheet.js';
 import {sheetMetadata} from '../src/timeline-commands.js';
 import {createDocument} from '../src/model.js';
+test('精灵表导入导出不再限制总像素，仍保留渲染边长上限',()=>{
+ const output=sheetLayout(4096,4096,4,{columns:2});assert.deepEqual([output.width,output.height],[8192,8192]);
+ const input=sheetImportPlan(8192,8192,{width:4096,height:4096});assert.equal(input.rects.length,4);
+ assert.throws(()=>sheetLayout(16385,1,1),/导出图像过大/);
+});
 test('布局将边距和双轴间距一并缩放，保留非满行',()=>{const p=sheetLayout(3,2,5,{columns:3,scale:2,margin:1,gapX:2,gapY:3});assert.deepEqual([p.width,p.height],[30,18]);assert.deepEqual(p.rects[4],{x:12,y:12,w:6,h:4});});
 test('逐列布局和导入坐标一致，并限定尾部空位',()=>{const p=sheetLayout(3,2,5,{columns:3,margin:1,gapX:2,gapY:3,order:'columns'});const q=sheetImportPlan(p.width,p.height,{width:3,height:2,margin:1,gapX:2,gapY:3,count:5,order:'columns'});assert.deepEqual(q.rects,p.rects);assert.deepEqual(q.rects[2],{x:6,y:1,w:3,h:2});});
 test('导入偏移、尾边忽略与默认时长',()=>{const p=sheetImportPlan(18,13,{width:3,height:2,offsetX:2,offsetY:1,margin:1,gapX:2,gapY:3,count:3,duration:75});assert.deepEqual(p.rects[0],{x:3,y:2,w:3,h:2});assert.equal(p.rects.length,3);assert.equal(p.duration,75);});

@@ -57,6 +57,7 @@ Press `Ctrl+1` to enter capture mode on the monitor under the pointer. Drag a se
 | Task | Tools |
 | --- | --- |
 | Pixel drawing | Pencil, eraser, fill, shapes, symmetry and pattern brushes |
+| Project size | No fixed 32M total-pixel cap; practical sizes depend on memory and target formats, with layer/frame and file-size limits retained |
 | Selections and adjustments | Rectangle, ellipse, lasso, magic wand, cross-project paste preserving irregular masks, new canvas sized from copied bounds, scale and rotation, color adjustments and outlines |
 | Layers and color | Groups, blend modes, RGBA, grayscale, true indexed color and palette editing |
 | Animation | Frame durations, tags, onion skinning, linked cels and cel range editing |

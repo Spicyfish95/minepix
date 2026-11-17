@@ -7,8 +7,6 @@ use std::{
     rc::Rc,
 };
 
-const MAX_PIXELS: usize = 32 * 1024 * 1024;
-
 struct Reader<'a> {
     bytes: &'a [u8],
     p: usize,
@@ -54,22 +52,11 @@ impl<'a> Reader<'a> {
 }
 
 fn pixels(w: usize, h: usize) -> io::Result<usize> {
-    let count = w
-        .checked_mul(h)
-        .ok_or_else(|| invalid("ASE 像素超过 32M"))?;
-    if w == 0 || h == 0 || count > MAX_PIXELS {
-        return Err(invalid("ASE 尺寸无效或像素超过 32M"));
+    let count = w.checked_mul(h).ok_or_else(|| invalid("ASE 尺寸溢出"))?;
+    if w == 0 || h == 0 || count > isize::MAX as usize / 4 {
+        return Err(invalid("ASE 尺寸无效或超出可寻址范围"));
     }
     Ok(count)
-}
-fn charge(total: &mut usize, amount: usize) -> io::Result<()> {
-    *total = total
-        .checked_add(amount)
-        .ok_or_else(|| invalid("ASE 像素超过 32M"))?;
-    if *total > MAX_PIXELS {
-        return Err(invalid("ASE 像素超过 32M"));
-    }
-    Ok(())
 }
 fn inflate(data: &[u8], size: usize) -> io::Result<Vec<u8>> {
     let mut result = Vec::new();
@@ -145,7 +132,7 @@ struct Image {
     tilemap: bool,
 }
 
-fn tileset(r: &mut Reader<'_>, bpp: usize, total: &mut usize) -> io::Result<(u32, Tileset)> {
+fn tileset(r: &mut Reader<'_>, bpp: usize) -> io::Result<(u32, Tileset)> {
     let id = r.u32()?;
     let flags = r.u32()?;
     let count = r.u32()? as usize;
@@ -164,10 +151,11 @@ fn tileset(r: &mut Reader<'_>, bpp: usize, total: &mut usize) -> io::Result<(u32
     }
     let n = pixels(w, h)?
         .checked_mul(count)
-        .ok_or_else(|| invalid("ASE 瓦片集超过 32M"))?;
-    charge(total, n)?;
+        .ok_or_else(|| invalid("ASE 瓦片集尺寸溢出"))?;
     let size = r.u32()? as usize;
-    let data = inflate(r.take(size)?, n * bpp)?;
+    let bytes = n.checked_mul(bpp).filter(|&size| size <= isize::MAX as usize)
+        .ok_or_else(|| invalid("ASE 瓦片集字节尺寸溢出"))?;
+    let data = inflate(r.take(size)?, bytes)?;
     Ok((
         id,
         Tileset {
@@ -185,7 +173,6 @@ fn rasterize(
     set: &Tileset,
     bpp: usize,
     transparent: u8,
-    total: &mut usize,
 ) -> io::Result<Image> {
     let format = cel
         .tiles
@@ -200,7 +187,6 @@ fn rasterize(
         .checked_mul(set.h)
         .ok_or_else(|| invalid("ASE tilemap 尺寸越界"))?;
     let n = pixels(w, h)?;
-    charge(total, n)?;
     let stride = format.bits / 8;
     let tiles = inflate(cel.data, pixels(cel.w, cel.h)? * stride)?;
     let mut raw = vec![if bpp == 1 { transparent } else { 0 }; n * bpp];
@@ -269,9 +255,9 @@ pub fn decode(bytes: &[u8], name: &str) -> io::Result<Value> {
     if ![8, 16, 32].contains(&depth) {
         return Err(invalid("ASE 仅支持索引、灰度或 RGBA"));
     }
-    let area = pixels(width, height)?;
-    if count == 0 || count > 256 || area * count > MAX_PIXELS {
-        return Err(invalid("ASE 帧数无效或像素超过 32M"));
+    pixels(width, height)?;
+    if count == 0 || count > 256 {
+        return Err(invalid("ASE 帧数需在 1–256 之间"));
     }
     let flags = r.u32()?;
     let speed = r.u16()?;
@@ -295,7 +281,6 @@ pub fn decode(bytes: &[u8], name: &str) -> io::Result<Value> {
     let mut warnings = Vec::new();
     let mut layer_sets = HashMap::new();
     let mut sets = HashMap::new();
-    let mut raw_pixels = 0;
     for f in 0..count {
         let length = r.u32()? as usize;
         if length < 16 {
@@ -436,7 +421,7 @@ pub fn decode(bytes: &[u8], name: &str) -> io::Result<Value> {
                     } else {
                         cel.w = chunk.u16()? as usize;
                         cel.h = chunk.u16()? as usize;
-                        charge(&mut raw_pixels, pixels(cel.w, cel.h)?)?;
+                        pixels(cel.w, cel.h)?;
                         if kind == 3 {
                             let bits = chunk.u16()? as usize;
                             if ![8, 16, 32].contains(&bits) {
@@ -622,7 +607,7 @@ pub fn decode(bytes: &[u8], name: &str) -> io::Result<Value> {
                     }
                 }
                 0x2023 => {
-                    let (id, set) = tileset(&mut chunk, bpp, &mut raw_pixels)?;
+                    let (id, set) = tileset(&mut chunk, bpp)?;
                     if sets.insert(id, set).is_some() {
                         return Err(invalid("ASE 重复瓦片集 ID"));
                     }
@@ -639,8 +624,8 @@ pub fn decode(bytes: &[u8], name: &str) -> io::Result<Value> {
     if !r.rest().is_empty() {
         return Err(invalid("ASE 文件尾存在额外数据"));
     }
-    if layers.is_empty() || area * layers.len() * count > MAX_PIXELS {
-        return Err(invalid("ASE 图层无效或总像素超过 32M"));
+    if layers.is_empty() {
+        return Err(invalid("ASE 图层不能为空"));
     }
     if palette.is_empty() {
         palette = legacy_palette;
@@ -667,7 +652,6 @@ pub fn decode(bytes: &[u8], name: &str) -> io::Result<Value> {
     }
     let mut images: Vec<HashMap<usize, Rc<Image>>> = Vec::new();
     let mut output_frames: Vec<Value> = Vec::new();
-    let mut output_pixels = 0;
     for frame in &frames {
         if frame.cels.keys().any(|l| *l >= layers.len()) {
             return Err(invalid("ASE cel 引用未知图层"));
@@ -694,7 +678,7 @@ pub fn decode(bytes: &[u8], name: &str) -> io::Result<Value> {
                         .get(&l)
                         .and_then(|id| sets.get(id))
                         .ok_or_else(|| invalid("ASE tilemap 引用缺失的瓦片集"))?;
-                    Rc::new(rasterize(cel, set, bpp, transparent, &mut raw_pixels)?)
+                    Rc::new(rasterize(cel, set, bpp, transparent)?)
                 } else {
                     let n = pixels(cel.w, cel.h)? * bpp;
                     let raw = if cel.kind == 2 {
@@ -727,7 +711,6 @@ pub fn decode(bytes: &[u8], name: &str) -> io::Result<Value> {
                     }
                 })
                 .unwrap_or((width, height));
-            charge(&mut output_pixels, pixels(w, h)?)?;
             let default = if background {
                 layer["clearColor"].as_u64().unwrap() as u32
             } else {
@@ -1137,17 +1120,36 @@ mod tests {
         );
     }
     #[test]
-    fn rejects_corruption_limits_and_unsupported_semantics() {
+    fn accepts_dimensions_above_former_pixel_budget() {
+        assert_eq!(pixels(8192, 4097).unwrap(), 8192 * 4097);
+        assert_eq!(pixels(65535, 65535).unwrap(), 65535 * 65535);
+        assert!(pixels(0, 1).is_err());
+        assert!(pixels(usize::MAX, 2).is_err());
+
+        // No image allocation: a large header proceeds to normal content validation.
+        let mut bytes = vec![0; 144];
+        bytes[..4].copy_from_slice(&144u32.to_le_bytes());
+        bytes[4..6].copy_from_slice(&0xa5e0u16.to_le_bytes());
+        bytes[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bytes[8..10].copy_from_slice(&8192u16.to_le_bytes());
+        bytes[10..12].copy_from_slice(&4097u16.to_le_bytes());
+        bytes[12..14].copy_from_slice(&32u16.to_le_bytes());
+        bytes[128..132].copy_from_slice(&16u32.to_le_bytes());
+        bytes[132..134].copy_from_slice(&0xf1fau16.to_le_bytes());
+        assert!(decode(&bytes, "large").unwrap_err().to_string().contains("图层不能为空"));
+    }
+    #[test]
+    fn rejects_corruption_dimensions_and_unsupported_semantics() {
         for n in [0, 4, 127, RGBA.len() - 1] {
             assert!(decode(&RGBA[..n], "bad").is_err());
         }
         let mut bytes = RGBA.to_vec();
-        bytes[8..12].fill(255);
+        bytes[8..12].fill(0);
         assert!(
-            decode(&bytes, "big")
+            decode(&bytes, "zero")
                 .unwrap_err()
                 .to_string()
-                .contains("32M")
+                .contains("尺寸")
         );
         let mut bytes = RGBA.to_vec();
         bytes[12..14].copy_from_slice(&24u16.to_le_bytes());
@@ -1197,7 +1199,7 @@ mod tests {
         let end = bytes.len();
         bytes[end - 1] ^= 255;
         assert!(decode(&bytes, "zip").is_err());
-        // Wider than 512 is valid when the total pixel budget allows it.
+        // Canvas edges are independent of the former total pixel budget.
         let mut bytes = RGBA.to_vec();
         bytes[8..10].copy_from_slice(&513u16.to_le_bytes());
         assert_eq!(document(&bytes)["width"], 513);

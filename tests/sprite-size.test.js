@@ -100,10 +100,10 @@ test('精灵缩放可单步撤销且恢复原尺寸与像素', () => {
   assert.equal(redone.width, 8);
 });
 
-test('超出容量的精灵尺寸被拒绝且不修改文档', () => {
+test('无效精灵尺寸与插值被拒绝且不修改文档', () => {
   const doc = createDocument(2, 2, 'limit');
   const before = clone(doc);
-  assert.throws(() => spriteSize(doc, 33554433, 2), /总像素不超过 32M/);
+  assert.throws(() => spriteSize(doc, 0, 2), /正整数/);
   assert.deepEqual(doc, before);
   assert.throws(() => spriteSize(doc, 4, 4, 'rotSprite'), /缩放插值方式无效/);
   assert.deepEqual(doc, before);

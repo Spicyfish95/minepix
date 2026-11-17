@@ -1,4 +1,4 @@
-import {assertProjectCapacity,celPixelCount,sourcePixelCount} from './project-capacity.js';
+import {assertProjectCapacity} from './project-capacity.js';
 import {initFormLayout} from './form-layout.js';
 import {readSaveFormat,rememberSaveFormat} from './save-format.js';
 import {snapshotProject} from './project-save-client.js';
@@ -1768,7 +1768,7 @@ async function recentDialog(){
  });
  if(values&&entries.length){const file=await window.desktop.openRecent(entries[+values.index].path);await importFile(file,true);}
 }
-async function newDocument(){const defaults={...DEFAULT_APPLICATION,...JSON.parse(localStorage.getItem(APP_SETTINGS_KEY)||'{}'),...(clipboard?{width:clipboard.w,height:clipboard.h}:{})};const values=await modal('新建像素项目','<label>项目名称 <input type="text" name="name" value="未命名" maxlength="100" required></label><label>宽度 <input type="number" name="width" value="'+defaults.width+'" min="1" required></label><label>高度 <input type="number" name="height" value="'+defaults.height+'" min="1" required></label><p>宽高不设固定上限；所有图层与帧的总像素最多 32M。</p>');if(values){const next=createDocument(+values.width,+values.height,values.name);next.palette=palettePreset().colors;next.frames[0].duration=defaults.duration;next.canvasBackground=validateCanvasBackground(defaults.canvasBackground||DEFAULT_CANVAS_BACKGROUND);replaceDocument(next,false,null,crypto.randomUUID(),true);}}
+async function newDocument(){const defaults={...DEFAULT_APPLICATION,...JSON.parse(localStorage.getItem(APP_SETTINGS_KEY)||'{}'),...(clipboard?{width:clipboard.w,height:clipboard.h}:{})};const values=await modal('新建像素项目','<label>项目名称 <input type="text" name="name" value="未命名" maxlength="100" required></label><label>宽度 <input type="number" name="width" value="'+defaults.width+'" min="1" required></label><label>高度 <input type="number" name="height" value="'+defaults.height+'" min="1" required></label><p>宽高需为正整数；可用尺寸取决于内存与图像格式。</p>');if(values){const next=createDocument(+values.width,+values.height,values.name);next.palette=palettePreset().colors;next.frames[0].duration=defaults.duration;next.canvasBackground=validateCanvasBackground(defaults.canvasBackground||DEFAULT_CANVAS_BACKGROUND);replaceDocument(next,false,null,crypto.randomUUID(),true);}}
 function replaceDocument(value,isSaved=true,nextPath=null,id=crypto.randomUUID(),newTab=false,paletteUI=null){
   activeSliceId=null;
   if(textSession)cancelTextSession();
@@ -2218,7 +2218,7 @@ async function relinkBoardItem(id){
  try{const files=await window.desktop.open('reference');if(!files?.length)return;
  const image=await window.desktop.readReference(files[0].sourcePath);
  const state=targetId===documentId?null:documentTabs.get(targetId),target=state?.doc||(targetId===documentId?doc:null),item=target?.references?.find(item=>item.id===id);if(!item)return;
- assertProjectCapacity(target,{sources:sourcePixelCount(target)-item.width*item.height+image.width*image.height});boardForget(item);Object.assign(item,image,{path:files[0].sourcePath});delete item.missing;
+ boardForget(item);Object.assign(item,image,{path:files[0].sourcePath});delete item.missing;
  if(state){state.boardRevision++;state.dirty=true;renderDocumentTabs();void flushRecovery(state);}else boardChanged('已重新定位参考图');
  }catch(error){showError('重新定位失败：'+error.message);}
 }
@@ -2405,8 +2405,8 @@ async function exportDialog(defaultMode='png'){
   },v=>{
     const animated=['gif','sequence'].includes(v.mode),indices=v.mode==='gif'?animationIndices(doc,v.scope,frameSelection,v.direction):scopeFrames(doc,v.scope,frameSelection),cols=Math.min(+v.columns||1,indices.length),rows=Math.ceil(indices.length/cols),scale=+v.scale;
     if(['sheet','metadata','sheet-pair'].includes(v.mode))layerPlan();
-    const layout=['sheet','metadata','sheet-pair'].includes(v.mode)?(()=>{const m=atlasMetadata(layerPlan().document,indices,{columns:cols,scale,...sheetOptions(form)});return{width:m.size.w,height:m.size.h};})():{width:doc.width*scale,height:doc.height*scale};const w=layout.width,h=layout.height,pixels=w*h*(animated?indices.length:1);
-    if(animated&&indices.length>256)throw new Error('动画输出最多 256 帧，请缩小范围或使用非往返方向');if(pixels>32*1024*1024||w>16384||h>16384)throw new Error('导出图像过大，请减少放大倍数或调整范围');
+    const layout=['sheet','metadata','sheet-pair'].includes(v.mode)?(()=>{const m=atlasMetadata(layerPlan().document,indices,{columns:cols,scale,...sheetOptions(form)});return{width:m.size.w,height:m.size.h};})():{width:doc.width*scale,height:doc.height*scale};const w=layout.width,h=layout.height;
+    if(animated&&indices.length>256)throw new Error('动画输出最多 256 帧，请缩小范围或使用非往返方向');if(w>16384||h>16384)throw new Error('导出图像过大，请减少放大倍数或调整范围');
   });
   if(!values){if($('modal').returnValue==='normal-map')await normalMapDialog();return;}
   const options={...values,...readOptions(),frame:fi,selectedFrames:[...frameSelection],layerIds:['sheet','metadata','sheet-pair'].includes(values.mode)?layerPlan().indices.map(index=>doc.layers[index].id):[]};
@@ -2447,7 +2447,7 @@ async function performExport(values,destination){
   const metadata=isSheet?{...atlasMetadata(layers.document,indices,{columns:cols,scale,...sheet}),layerScope:values.layerScope,sourceLayers:layers.sourceLayers}:null;
   const width=metadata?.size.w||doc.width*scale,height=metadata?.size.h||doc.height*scale,animated=['gif','sequence'].includes(mode);
   if(animated&&indices.length>256)throw new Error('动画输出最多 256 帧，请缩小范围或使用非往返方向');
-  if(width*height*(animated?indices.length:1)>32*1024*1024||width>16384||height>16384)throw new Error('导出图像过大，请减少放大倍数或调整范围');
+  if(width>16384||height>16384)throw new Error('导出图像过大，请减少放大倍数或调整范围');
   const animationOptions={destination,colors:+values.colors||256,threshold:values.threshold===undefined?127:+values.threshold,alphaMode:values.alphaMode||'threshold',matte:values.matte||'#ffffff',loop:values.repeat==='loop'};
   if(animated){
     if(!window.desktop)throw new Error('动画导出请使用 桌面版');
@@ -2566,7 +2566,7 @@ async function spriteSizeDialog(){
     wp.oninput=()=>{if(+wp.value>0)w.value=Math.max(1,Math.round(doc.width*+wp.value/100));syncHeight();hp.value=+(+h.value/doc.height*100).toFixed(4);};
     hp.oninput=()=>{if(+hp.value>0)h.value=Math.max(1,Math.round(doc.height*+hp.value/100));};
     lock.onchange=syncHeight;
-  },v=>{assertProjectCapacity(doc,{width:+v.width,height:+v.height,pixels:+v.width*+v.height*doc.layers.length*doc.frames.length});if(+v.width===doc.width&&+v.height===doc.height)throw new Error('精灵尺寸未改变');});
+  },v=>{assertProjectCapacity(doc,{width:+v.width,height:+v.height});if(+v.width===doc.width&&+v.height===doc.height)throw new Error('精灵尺寸未改变');});
   if(!values)return;
   const width=+values.width,height=+values.height;
   canvasEdit(()=>spriteSize(doc,width,height,values.method),'已缩放精灵为 '+width+' × '+height);
@@ -2698,7 +2698,7 @@ const actions={
   'flip-y':()=>{if(editable())mutate(()=>{selection=flipRegion(doc,pixels(),selection,'y');},'已垂直翻转');},
   deselect:()=>{if(selection)previousSelection=selection;selection=null;drawOverlay();syncCommandStates();}
 };
-async function importReferenceImage(){if(!window.desktop)return message('参考图片导入请使用桌面版');try{const [file]=await window.desktop.open('reference');if(!file)return;const image=new Image();image.src='data:'+(file.mime||'image/png')+';base64,'+file.data;await image.decode();const source=document.createElement('canvas');source.width=image.width;source.height=image.height;const context=source.getContext('2d');context.drawImage(image,0,0);const reference={...encodeReference(source.width,source.height,context.getImageData(0,0,source.width,source.height).data),path:file.sourcePath};assertProjectCapacity(doc,{layers:doc.layers.length+1,pixels:celPixelCount(doc)+doc.width*doc.height*doc.frames.length,sources:sourcePixelCount(doc)+source.width*source.height});mutate(()=>{li=addLayer(doc,li);doc.layers[li].name=file.name;doc.layers[li].type='reference';doc.layers[li].reference=reference;doc.requiredFeatures=[...new Set([...doc.requiredFeatures,'layer-types'])];},'已导入参考图片（仅编辑视图显示）');}catch(error){showError('参考图片导入失败：'+error.message);}}
+async function importReferenceImage(){if(!window.desktop)return message('参考图片导入请使用桌面版');try{const [file]=await window.desktop.open('reference');if(!file)return;const image=new Image();image.src='data:'+(file.mime||'image/png')+';base64,'+file.data;await image.decode();const source=document.createElement('canvas');source.width=image.width;source.height=image.height;const context=source.getContext('2d');context.drawImage(image,0,0);const reference={...encodeReference(source.width,source.height,context.getImageData(0,0,source.width,source.height).data),path:file.sourcePath};assertProjectCapacity(doc,{layers:doc.layers.length+1});mutate(()=>{li=addLayer(doc,li);doc.layers[li].name=file.name;doc.layers[li].type='reference';doc.layers[li].reference=reference;doc.requiredFeatures=[...new Set([...doc.requiredFeatures,'layer-types'])];},'已导入参考图片（仅编辑视图显示）');}catch(error){showError('参考图片导入失败：'+error.message);}}
 async function referenceSettings(){if(!isReference(doc.layers[li]))return message('请先选择参考图层');const ref=doc.layers[li].reference,values=await modal('参考图层位置','<label>X<input name="x" type="number" min="-16384" max="16384" step=".125" required></label><label>Y<input name="y" type="number" min="-16384" max="16384" step=".125" required></label><label>显示倍率<input name="scale" type="number" min=".125" max="16" step=".125" required></label><p>参考仅在暂停编辑视图显示；预览、洋葱皮、PNG / 动画 / ASE 不含参考。项目只保存源图片路径，打开时重新读取；转普通层按当前画布栅格化，超出部分会裁剪。</p>',form=>{for(const key of ['x','y','scale'])form.elements[key].value=ref[key];});if(values)mutate(()=>{doc.layers[li].reference={...ref,x:+values.x,y:+values.y,scale:+values.scale};},'已调整参考图层位置');}
 async function layerParentDialog(){const current=doc.layers[li],values=await modal('移动到图层组','<label>目标组<select name="parent"></select></label><p>将当前图层或整组移动到目标组顶端。</p>',form=>{form.elements.parent.replaceChildren(new Option('最外层',''),...doc.layers.filter(layer=>isGroup(layer)&&layer.id!==current.id).map(layer=>new Option(layer.name,String(layer.id))));form.elements.parent.value=current.parentId||'';});if(values)mutate(()=>{li=reparentLayer(doc,li,values.parent?+values.parent:undefined);},'已移动图层组归属');}
 function reorderLayer(delta){mutate(()=>{li=moveLayerSibling(doc,li,delta);});}

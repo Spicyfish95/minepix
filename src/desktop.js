@@ -30,7 +30,6 @@ const invokeBackend=(command,args)=>invoke(command,args).catch(error=>{throw err
 const readProject=async(filePath,record=true)=>loadReferenceFiles(unpackProjectRead(await invokeBackend('read_project_packed',{filePath,record})),path=>readReference(path));
 async function readReference(path){
  const file=await call('readReference',path),image=new Image();image.src='data:'+file.mime+';base64,'+file.data;await image.decode();
- if(image.width*image.height>32*1024*1024)throw new Error('参考图片超过32M像素');
  const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;const context=canvas.getContext('2d');context.drawImage(image,0,0);
  const {width,height,data}=encodeReference(image.width,image.height,context.getImageData(0,0,image.width,image.height).data);return{width,height,data};
 }

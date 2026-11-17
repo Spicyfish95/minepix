@@ -3,7 +3,7 @@ import {assertCapacity,validateTags} from '../model.js';
 export function sheetManifestPlan(metadata){
   if(!metadata||metadata.app!=='pixel-studio'||!Array.isArray(metadata.frames)||!metadata.frames.length)throw new Error('仅支持像素工坊精灵表 JSON');
   const {w:sheetWidth,h:sheetHeight}=metadata.size||{};
-  if(![sheetWidth,sheetHeight].every(Number.isInteger)||sheetWidth<1||sheetHeight<1||sheetWidth>16384||sheetHeight>16384||sheetWidth*sheetHeight>32*1024*1024)throw new Error('精灵表尺寸需在 16384 边长及 32M 像素内');
+  if(![sheetWidth,sheetHeight].every(Number.isInteger)||sheetWidth<1||sheetHeight<1||sheetWidth>16384||sheetHeight>16384)throw new Error('精灵表单边尺寸需在 16384 像素内');
   const first=metadata.frames[0]?.frame;if(!first)throw new Error('精灵表缺少帧矩形');
   const source=metadata.frames[0].trimmed?metadata.frames[0].sourceSize:{w:first.w,h:first.h};if(!source)throw new Error('裁边帧缺少原始尺寸');assertCapacity(source.w,source.h,1,metadata.frames.length);
   const frames=metadata.frames.map(item=>{

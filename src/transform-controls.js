@@ -1,4 +1,3 @@
-import { LIMIT } from './model.js';
 
 const rotate=(x,y,angle)=>{const a=angle*Math.PI/180,c=Math.cos(a),s=Math.sin(a);return{x:x*c-y*s,y:x*s+y*c};};
 export const transformState=region=>({x:region.x,y:region.y,width:region.w,height:region.h,angle:0,u:.5,v:.5});
@@ -44,7 +43,6 @@ export function dragTransform(state,handle,start,point,shift=false){
   let width=u===.5?state.width:Math.round(delta.x/(2*u-1)),height=v===.5?state.height:Math.round(delta.y/(2*v-1));
   if(shift&&u!==.5&&v!==.5){const ratio=Math.max(1/state.width,1/state.height,Math.max(width/state.width,height/state.height));width=Math.round(state.width*ratio);height=Math.round(state.height*ratio);}
   width=Math.max(1,width);height=Math.max(1,height);
-  if(width*height>LIMIT){const ratio=Math.sqrt(LIMIT/(width*height));width=Math.max(1,Math.floor(width*ratio));height=Math.max(1,Math.floor(height*ratio));}
   const next={...state,width,height},moved=transformPoint(next,1-u,1-v);
   return{...next,x:next.x+anchor.x-moved.x,y:next.y+anchor.y-moved.y};
 }

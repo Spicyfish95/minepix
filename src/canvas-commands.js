@@ -6,7 +6,7 @@ import { flipRegion } from './model.js';
 import {assertProjectCapacity} from './project-capacity.js';
 
 export function reframe(doc, { x, y, w, h }, fill = 0) {
-  assertProjectCapacity(doc,{width:w,height:h,pixels:w*h*doc.layers.length*doc.frames.length});
+  assertProjectCapacity(doc,{width:w,height:h});
   materializeCels(doc);
   const oldWidth = doc.width, oldHeight = doc.height;
   const remap=(source,value)=>{const target=new Array(w*h).fill(value);for(let sy=Math.max(0,y);sy<Math.min(oldHeight,y+h);sy++)for(let sx=Math.max(0,x);sx<Math.min(oldWidth,x+w);sx++)target[(sy-y)*w+sx-x]=source[sy*oldWidth+sx];return target;};
@@ -27,7 +27,7 @@ export const SPRITE_SIZE_METHODS = ['nearest', 'bilinear'];
 
 // 精灵尺寸：缩放全部图层与帧的像素，画布尺寸随内容一起变化（与只改画布的 resizeCanvas 不同）。
 export function spriteSize(doc, width, height, method = 'nearest') {
-  assertProjectCapacity(doc,{width,height,pixels:width*height*doc.layers.length*doc.frames.length});
+  assertProjectCapacity(doc,{width,height});
   if (!SPRITE_SIZE_METHODS.includes(method)) throw new Error('缩放插值方式无效');
   const oldWidth = doc.width, oldHeight = doc.height;
   if (width === oldWidth && height === oldHeight) return false;

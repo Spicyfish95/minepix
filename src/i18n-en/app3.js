@@ -44,7 +44,7 @@ export default {
 "清空记录": "Clear history",
 "读取文件不会覆盖现有标签。不存在的文件会显示打开失败，原文档保持。": "Opening a file never overwrites existing tabs. Missing files report an open failure and the current document stays.",
 "项目名称": "Project name",
-"宽高不设固定上限；所有图层与帧的总像素最多 32M。": "Width and height have no fixed limit; all layers and frames together may use at most 32M pixels.",
+"宽高需为正整数；可用尺寸取决于内存与图像格式。": "Width and height must be positive integers; available sizes depend on memory and the image format.",
 "排序": "Order",
 "文件名自然排序": "Natural file name order",
 "文件选择器顺序": "File picker order",

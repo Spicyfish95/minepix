@@ -68,7 +68,7 @@ export async function rasterImportDocument(file,{modal,$,showError}){
   const width=+form.elements.width.value,height=+form.elements.height.value;assertCapacity(width,height,1,1);
   return{width,height,columns:1,rows:1,duration:100,rects:[{x:0,y:0,w:source.width,h:source.height}]};
  };
- const resetSize=form=>{const scale=Math.min(1,Math.sqrt((32*1024*1024)/(source.width*source.height)));form.elements.width.value=Math.max(1,Math.floor(source.width*scale));form.elements.height.value=Math.max(1,Math.floor(source.height*scale));};
+ const resetSize=form=>{form.elements.width.value=source.width;form.elements.height.value=source.height;};
  let selectedPlan,selectedMode;
  const values=await modal(file.name.toLowerCase().endsWith('.png')?'导入 PNG':'导入图片',
   previewMarkup+'<section id="repair-palette" hidden><p>限色结果 · <span id="repair-palette-count"></span> 色 · 导入后设为当前色板</p><ul id="repair-palette-colors" aria-label="处理结果颜色列表"></ul></section><p id="sheet-import-info"></p>'+(supported?'<label>图片处理<select name="processing"><option value="normal">普通导入（默认）</option><option value="repair">像素处理</option></select></label>'+repairFields():'')+

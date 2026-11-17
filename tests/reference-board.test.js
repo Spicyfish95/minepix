@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createDocument,validateDocument,addLayer,LIMIT} from '../src/model.js';
+import {createDocument,validateDocument,addLayer} from '../src/model.js';
 import {validateReferences,validateBoardItem,boardItemPixels,addReference,removeReference,moveReference,resizeReference,reorderReference,resetReferencePosition,boardBounds,referencePixelCount,BOARD_MIN} from '../src/reference-board.js';
 import {referencePixels} from '../src/layer-types.js';
 const image=(width,height,rgba=[])=>{const bytes=new Uint8ClampedArray(width*height*4);rgba.forEach((value,index)=>bytes[index]=value);return{width,height,data:btoa(String.fromCharCode(...bytes))};};
@@ -47,12 +47,9 @@ test('空参考列表与缺省参考字段不写入 references 键',()=>{
  assert.equal(empty.requiredFeatures.includes('reference-board'),false);
 
 });
-test('参考图总像素计入 32M 预算',()=>{
- const doc={format:'pixel-studio',version:2,requiredFeatures:[],width:4096,height:4096,layers:[{id:1,name:'图层 1',visible:true,locked:false,opacity:100},{id:2,name:'图层 2',visible:true,locked:false,opacity:100}],frames:[{duration:100,cels:[[],[]]}],references:[{id:'ref',name:'参考',...image(1,1,[0,0,0,255]),x:0,y:0,scale:1}]};
- assert.ok(doc.width*doc.height*doc.layers.length*doc.frames.length===LIMIT);
- assert.throws(()=>validateDocument(doc),/32M/);
- const withoutReference={...doc};delete withoutReference.references;
- assert.throws(()=>validateDocument(withoutReference),/像素数据损坏/);
+test('超过旧预算的外部参考可加入并验证，画布数据损坏仍拒绝',()=>{
+ const doc=createDocument(2,2);addReference(doc,{id:'large',name:'large',path:'C:/large.png',missing:true,width:8192,height:4097,x:0,y:0,scale:1});
+ assert.equal(validateDocument(doc).references[0].width,8192);doc.frames[0].cels[0].pop();assert.throws(()=>validateDocument(doc),/像素数据损坏/);
 });
 test('增删移改就地生效且拒绝越界与缺失条目',()=>{
  const doc=createDocument(2,2);

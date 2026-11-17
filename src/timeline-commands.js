@@ -2,7 +2,7 @@ import {remapSliceFrames} from './slices.js';
 import {initializeFrameLinks} from './cel-links.js';
 import { sheetLayout } from './formats/sprite-sheet.js';
 import { clone } from './model.js';
-import {assertProjectCapacity,celPixelCount} from './project-capacity.js';
+import {assertProjectCapacity} from './project-capacity.js';
 
 export const sortedFrames=selection=>[...selection].sort((a,b)=>a-b);
 export function remapTags(tags,sources){
@@ -29,7 +29,7 @@ export function reverseFrames(doc,selection){
 }
 export function duplicateFrames(doc,selection,position){
   const selected=sortedFrames(selection);
-  assertProjectCapacity(doc,{frames:doc.frames.length+selected.length,pixels:celPixelCount(doc)+selected.reduce((n,f)=>n+doc.frames[f].cels.reduce((sum,cel)=>sum+cel.length,0),0)});
+  assertProjectCapacity(doc,{frames:doc.frames.length+selected.length});
   const sources=doc.frames.map((_,i)=>i),copies=selected.map(i=>clone(doc.frames[i]));
   copies.forEach((frame,i)=>initializeFrameLinks(doc,doc.frames[selected[i]],frame));
   sources.splice(position,0,...selected);doc.slices=remapSliceFrames(doc.slices,sources);doc.tags=remapTags(doc.tags,sources);doc.frames.splice(position,0,...copies);

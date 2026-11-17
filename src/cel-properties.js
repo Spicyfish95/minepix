@@ -1,20 +1,18 @@
-import {assertProjectCapacity,celPixelCount} from './project-capacity.js';
 export const celProperty=(doc,frame,layer)=>({x:0,y:0,width:doc.width,height:doc.height,opacity:100,...doc.frames[frame].celProperties?.[doc.layers[layer].id]});
 export function setCelProperty(doc,frame,layer,value){const f=doc.frames[frame],key=doc.layers[layer].id;f.celProperties={...f.celProperties,[key]:{...celProperty(doc,frame,layer),...value}};doc.requiredFeatures=[...new Set([...doc.requiredFeatures,'cel-properties'])];}
 export function validateCelProperties(value,doc){
  if(value===undefined)return undefined;
  if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('cel 属性无效');
  const result={};for(const [key,p]of Object.entries(value)){const layer=doc.layers.find(l=>String(l.id)===key);if(!layer||layer.type==='group'||layer.type==='reference')throw new Error('cel 属性引用非像素图层');
- if(!p||!Number.isInteger(p.x)||!Number.isInteger(p.y)||p.x< -32768||p.x>32767||p.y< -32768||p.y>32767||!Number.isInteger(p.width)||!Number.isInteger(p.height)||p.width<1||p.height<1||p.width>65535||p.height>65535||p.width*p.height>32*1024*1024||!Number.isFinite(p.opacity)||p.opacity<0||p.opacity>100)throw new Error('cel 位置、尺寸或透明度无效');
+ if(!p||!Number.isInteger(p.x)||!Number.isInteger(p.y)||p.x< -32768||p.x>32767||p.y< -32768||p.y>32767||!Number.isInteger(p.width)||!Number.isInteger(p.height)||p.width<1||p.height<1||p.width>65535||p.height>65535||!Number.isFinite(p.opacity)||p.opacity<0||p.opacity>100)throw new Error('cel 位置、尺寸或透明度无效');
  if(layer.type==='background'&&(p.x||p.y||p.width!==doc.width||p.height!==doc.height||p.opacity!==100))throw new Error('背景 cel 必须覆盖画布且完全不透明');result[key]={x:p.x,y:p.y,width:p.width,height:p.height,opacity:p.opacity};}return result;
 }
 const locations=new WeakMap(),views=new WeakMap();
 export const celViewLocation=pixels=>locations.get(pixels);
 function growCel(doc,f,l,x,y){
  const frame=doc.frames[f],old=frame.cels[l],p=celProperty(doc,f,l),left=Math.min(p.x,x),top=Math.min(p.y,y),width=Math.max(p.x+p.width,x+1)-left,height=Math.max(p.y+p.height,y+1)-top,dx=left-p.x,dy=top-p.y;
- const members=doc.frames.flatMap((frame,i)=>frame.cels[l]===old?[i]:[]),total=celPixelCount(doc)+(width*height-old.length)*members.length;
- if(width>65535||height>65535)throw new Error('cel 图像超过 32M 像素容量');
- assertProjectCapacity(doc,{pixels:total});
+ const members=doc.frames.flatMap((frame,i)=>frame.cels[l]===old?[i]:[]);
+ if(width>65535||height>65535)throw new Error('cel 图像单边最多 65535 像素');
  const copy=(source,empty)=>{const target=Array(width*height).fill(empty);for(let y=0;y<p.height;y++)for(let x=0;x<p.width;x++)target[(y-dy)*width+x-dx]=source[y*p.width+x];return target;};
  const pixels=copy(old,0),indices=frame.indices?.[l]&&copy(frame.indices[l],doc.transparentIndex);
  for(const index of members){const current=celProperty(doc,index,l);doc.frames[index].cels[l]=pixels;if(indices)doc.frames[index].indices[l]=indices;setCelProperty(doc,index,l,{...current,x:current.x+dx,y:current.y+dy,width,height});}

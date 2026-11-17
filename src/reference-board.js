@@ -1,5 +1,4 @@
 import {referencePixels,validateImageData} from './layer-types.js';
-import {assertProjectCapacity,sourcePixelCount} from './project-capacity.js';
 export const BOARD_MIN=512;
 const ID_LIMIT=64,NAME_LIMIT=120,POSITION_LIMIT=1e6,MIN_SCALE=.125,MAX_SCALE=16;
 export function validateBoardItem(item){
@@ -22,7 +21,6 @@ function findReference(doc,id){const item=doc.references?.find(reference=>refere
 export function addReference(doc,item){
   if(!item||typeof item!=='object')throw new Error('参考图片数据无效');
   const normalized=validateBoardItem({...item,id:item.id??crypto.randomUUID()});
-  assertProjectCapacity(doc,{sources:sourcePixelCount(doc)+normalized.width*normalized.height});
   doc.references=[...(doc.references||[]),normalized];
   doc.requiredFeatures=[...new Set([...(doc.requiredFeatures||[]),'reference-board'])];
   return normalized;

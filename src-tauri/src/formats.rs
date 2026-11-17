@@ -56,8 +56,8 @@ pub fn png_size(bytes: &[u8]) -> io::Result<(u32, u32)> {
     }
     let width = u32::from_be_bytes(bytes[16..20].try_into().unwrap());
     let height = u32::from_be_bytes(bytes[20..24].try_into().unwrap());
-    if width == 0 || height == 0 || u64::from(width) * u64::from(height) > 32 * 1024 * 1024 {
-        return Err(invalid("PNG 像素容量超过限制"));
+    if width == 0 || height == 0 {
+        return Err(invalid("PNG 尺寸无效"));
     }
     Ok((width, height))
 }
@@ -102,9 +102,8 @@ fn check_animation(width: u32, height: u32, count: usize) -> io::Result<()> {
         || height > 4096
         || count == 0
         || count > 256
-        || u64::from(width) * u64::from(height) * count as u64 > 32 * 1024 * 1024
     {
-        return Err(invalid("动画最多 256 帧、单边 4096、总像素 32M"));
+        return Err(invalid("动画尺寸需为正整数、最多 256 帧、单边 4096"));
     }
     Ok(())
 }
@@ -589,6 +588,20 @@ pub fn export_sheet_metadata(image: &Path, target: &Path, options: &Value) -> io
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dimensions_are_not_limited_by_total_pixels() {
+        let mut bytes = png();
+        bytes[16..20].copy_from_slice(&8192u32.to_be_bytes());
+        bytes[20..24].copy_from_slice(&4097u32.to_be_bytes());
+        assert_eq!(png_size(&bytes).unwrap(), (8192, 4097));
+        bytes[16..20].fill(0);
+        assert!(png_size(&bytes).is_err());
+        assert!(check_animation(4096, 4096, 3).is_ok());
+        assert!(check_animation(4096, 4096, 256).is_ok());
+        assert!(check_animation(0, 1, 1).is_err());
+        assert!(check_animation(4097, 1, 1).is_err());
+        assert!(check_animation(1, 1, 257).is_err());
+    }
     fn png() -> Vec<u8> {
         let mut bytes = Vec::new();
         {
