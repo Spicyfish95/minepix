@@ -108,3 +108,7 @@ test('层次调整按 front/up/down/back 重排 references，重置恢复位置�
  assert.deepEqual([doc.references[1].x,doc.references[1].y,doc.references[1].scale],[0,0,1]);
  assert.throws(()=>resetReferencePosition(doc,'missing'),/不存在/);
 });
+
+test('relinking reference data in place invalidates decoded pixels even at the same dimensions',()=>{
+ const item={id:'r',name:'r',width:1,height:1,data:'/wAA/w==',x:0,y:0,scale:1};const before=boardItemPixels(item);assert.equal(before[0],0xff0000ff);assert.equal(boardItemPixels(item),before);item.data='AP8A/w==';const after=boardItemPixels(item);assert.notEqual(after,before);assert.equal(after[0],0x00ff00ff);assert.equal(before[0],0xff0000ff);
+});

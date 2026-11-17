@@ -3,7 +3,12 @@ export const isReference=layer=>layer.type==='reference';
 export const isBackground=layer=>layer.type==='background';
 const imageCache=new WeakMap();
 export function encodeReference(width,height,rgba){let raw='';for(let i=0;i<rgba.length;i+=32768)raw+=String.fromCharCode(...rgba.subarray(i,i+32768));return{width,height,data:btoa(raw),x:0,y:0,scale:1};}
-export function referencePixels(ref){if(!ref.data)return new Uint32Array(ref.width*ref.height);if(!imageCache.has(ref)){const bytes=atob(ref.data),pixels=new Uint32Array(ref.width*ref.height);for(let i=0;i<pixels.length;i++){const j=i*4;pixels[i]=((bytes.charCodeAt(j)<<24)|(bytes.charCodeAt(j+1)<<16)|(bytes.charCodeAt(j+2)<<8)|bytes.charCodeAt(j+3))>>>0;}imageCache.set(ref,pixels);}return imageCache.get(ref);}
+export function referencePixels(ref){
+ if(!ref.data)return new Uint32Array(ref.width*ref.height);
+ const cached=imageCache.get(ref);if(cached?.data===ref.data&&cached.width===ref.width&&cached.height===ref.height)return cached.pixels;
+ const bytes=atob(ref.data),pixels=new Uint32Array(ref.width*ref.height);for(let i=0;i<pixels.length;i++){const j=i*4;pixels[i]=((bytes.charCodeAt(j)<<24)|(bytes.charCodeAt(j+1)<<16)|(bytes.charCodeAt(j+2)<<8)|bytes.charCodeAt(j+3))>>>0;}
+ imageCache.set(ref,{data:ref.data,width:ref.width,height:ref.height,pixels});return pixels;
+}
 export function validateImageData(width,height,data){if(!Number.isInteger(width)||!Number.isInteger(height)||width<1||height<1||typeof data!=='string'||data.length!==4*Math.ceil(width*height*4/3)||!/^[A-Za-z0-9+/]*={0,2}$/.test(data)||atob(data).length!==width*height*4)throw new Error('参考图片需为完整 RGBA 图像');}
 export function validateReference(ref){if(!ref||!Number.isFinite(ref.x)||!Number.isFinite(ref.y)||Math.abs(ref.x)>16384||Math.abs(ref.y)>16384||!Number.isFinite(ref.scale)||ref.scale<.125||ref.scale>16)throw new Error('参考图层位置或倍率无效');if(ref.data!==undefined)validateImageData(ref.width,ref.height,ref.data);return{...ref};}
 export function referenceSampler(doc,index,frame=0){

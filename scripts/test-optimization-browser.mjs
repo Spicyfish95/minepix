@@ -47,6 +47,8 @@ async function runChecks(){
   const retained=new Set(closedDocuments.flatMap(state=>(state.doc.references||[]).map(boardCacheKey))),cached=boardCanvasCache(window.document);
   check('closing more than ten documents releases orphan reference canvases',closedDocuments.length===10&&[...cached.keys()].every(key=>retained.has(key))&&cached.size<=10);
   reopenDocument();check('reopening retained document can regenerate its reference canvas',boardItems().length===1&&!!boardCachedCanvas(window.document,boardItems()[0]));
+  const relinked=boardItems()[0];boardForget(relinked);Object.assign(relinked,encodeReference(1,1,Uint8Array.of(255,0,0,255)));renderReferenceBoard(true);check('reference relink test primes decoded red pixel',boardItemPixels(relinked)[0]===0xff0000ff);
+  boardForget(relinked);Object.assign(relinked,encodeReference(1,1,Uint8Array.of(0,255,0,255)));renderReferenceBoard(true);const refreshedPixel=boardCachedCanvas(window.document,relinked).getContext('2d').getImageData(0,0,1,1).data;check('in-place reference relink refreshes both sampling and visible canvas',boardItemPixels(relinked)[0]===0x00ff00ff&&refreshedPixel[0]===0&&refreshedPixel[1]===255);
   return{ok:true,results,renderMetrics:render.metrics,timelineRefreshMs};
  }catch(error){return{ok:false,results,error:error.stack};}
  finally{client?.dispose();clearTimeout(recoveryTimer);}
