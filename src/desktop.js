@@ -1,3 +1,4 @@
+import {createExportClient} from './export-client.js';
 import {createRecoveryClient} from './recovery-client.js';
 ﻿import {createDocumentSaver} from './document-save.js';
 import {encodeSingleImage} from './single-image-save.js';
@@ -95,6 +96,7 @@ function windowBridge(target){
 
 export async function initializeDesktop(){
  const bridge={testing:false,secondary:current.label!=='main'},projectSaveClient=createProjectSaveClient();
+ const exports=createExportClient({invoke:bytes=>invokeBackend('export_packed',bytes),packProject:(...args)=>projectSaveClient.pack(...args)});
  const methods=['cancelScreenColor','readReference','saveReference','captureScreen','clipboardImages','openRepository','appInfo','editorInfo','editorReady','detachDocument','moveDocument','recordInputAudit','testNotification','recentFiles','recentThumbs','removeRecent','clearRecent','openRecent','startupFiles','openKeymap','openPalette','open','exportAseprite','pickExportDirectory','exportSheetMetadata','exportSheet','exportAnimation','save','saveProject','activateDocument','setDirty','checkUpdates','installUpdate','downloadUpdate','cancelUpdate','updateState','openUpdateRelease','setAutoUpdate','setLocale'];
  for(const method of methods)bridge[method]=(...args)=>call(method,...args);
  bridge.readReference=readReference;
@@ -111,7 +113,7 @@ export async function initializeDesktop(){
  bridge.saveProject=createDocumentSaver({
   getDefaultFormat:()=>readSaveFormat(localStorage),choosePath:options=>call('chooseProjectPath',options),encodeImage:encodeSingleImage,
   savePacked:async(data,name,filePath)=>invokeBackend('save_project_packed',await projectSaveClient.pack(data,name,false,{filePath})),
-  saveImage:(filePath,encoded)=>call('saveImageProject',{filePath,...encoded})
+  saveImage:(filePath,encoded)=>exports.image({filePath,...encoded})
  });
  window.addEventListener('unload',()=>projectSaveClient.dispose(),{once:true});
  bridge.recentThumbs=async()=>{
@@ -126,12 +128,14 @@ export async function initializeDesktop(){
   }
   return thumbnails;
  };
- bridge.exportAnimation=options=>call('exportAnimation',{...options,frames:options.frames.map(frame=>({...frame,...(frame.rgba?{rgba:Array.from(frame.rgba)}:{})}))});
- bridge.exportAseprite=async(document,destination)=>{const {validateDocument}=await import('./model.js');return call('exportAseprite',validateDocument(document),...(destination?[destination]:[]));};
+ bridge.exportAnimation=options=>exports.animation(options);
+ bridge.exportAseprite=(document,destination)=>exports.aseprite(document,destination);
+ bridge.save=(...args)=>exports.save(...args);
+ bridge.exportSheetMetadata=options=>exports.sheet(options,true);
  bridge.exportSheet=async options=>{
   const {engineFiles}=await import('./formats/engine-export.js');
   const name=String(options.name||'animation').replace(/[<>:"/\\|?*\x00-\x1f]/g,'_').replace(/[. ]+$/g,'').slice(0,100)||'animation',base=name+'-sheet';
-  return call('exportSheet',{...options,engineFiles:engineFiles({...options.metadata,image:base+'.png'},base,options.engineFormat||'native')});
+  return exports.sheet({...options,engineFiles:engineFiles({...options.metadata,image:base+'.png'},base,options.engineFormat||'native')});
  };
  for(const [method,event]of Object.entries({onFileLoading:'file:loading',onScreenColorRequest:'capture:request-color',onCapture:'capture:complete',onCommand:'command',onEditorError:'editor:error',onUpdateState:'update:state',onNotificationAction:'notification:action',onWindowMenu:'menu-changed'}))bridge[method]=callback=>subscribe(event,callback);
  let incoming=Promise.resolve();

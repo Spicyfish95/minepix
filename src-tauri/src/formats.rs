@@ -203,6 +203,8 @@ pub struct AnimationFrame {
     pub rgba: Vec<u8>,
     #[serde(default)]
     pub png: String,
+    #[serde(skip)]
+    pub png_bytes:Vec<u8>,
     pub source_index: Option<usize>,
 }
 
@@ -417,9 +419,9 @@ pub fn export_sequence(parent: &Path, options: &AnimationOptions) -> io::Result<
         if !(20..=10000).contains(&frame.duration) {
             return Err(invalid("PNG 序列时长无效"));
         }
-        let bytes = STANDARD
+        let bytes = if !frame.png_bytes.is_empty(){frame.png_bytes.clone()}else{STANDARD
             .decode(&frame.png)
-            .map_err(|_| invalid("PNG 编码无效"))?;
+            .map_err(|_| invalid("PNG 编码无效"))?};
         if png_size(&bytes)? != (options.width, options.height) {
             return Err(invalid("PNG 序列尺寸不一致"));
         }
@@ -519,9 +521,12 @@ pub fn read_sheet_manifest(path: &Path) -> io::Result<Value> {
 }
 
 pub fn export_sheet(parent: &Path, options: &Value) -> io::Result<Value> {
-    let bytes = STANDARD
+    export_sheet_bytes(parent,options,None)
+}
+pub fn export_sheet_bytes(parent:&Path,options:&Value,png:Option<&[u8]>)->io::Result<Value>{
+    let bytes = if let Some(png)=png{png.to_vec()}else{STANDARD
         .decode(options["png"].as_str().ok_or_else(|| invalid("缺少 PNG"))?)
-        .map_err(|_| invalid("PNG 编码无效"))?;
+        .map_err(|_| invalid("PNG 编码无效"))?};
     let (width, height) = png_size(&bytes)?;
     let metadata = &options["metadata"];
     if metadata["size"]["w"] != width || metadata["size"]["h"] != height {
@@ -581,9 +586,12 @@ pub fn export_sheet(parent: &Path, options: &Value) -> io::Result<Value> {
 }
 
 pub fn check_sheet_image(image: &Path, options: &Value) -> io::Result<()> {
-    let expected = STANDARD
+    check_sheet_image_bytes(image,options,None)
+}
+pub fn check_sheet_image_bytes(image:&Path,options:&Value,png:Option<&[u8]>)->io::Result<()>{
+    let expected = if let Some(png)=png{png.to_vec()}else{STANDARD
         .decode(options["png"].as_str().ok_or_else(|| invalid("缺少预期 PNG"))?)
-        .map_err(|_| invalid("PNG 编码无效"))?;
+        .map_err(|_| invalid("PNG 编码无效"))?};
     if png_rgba(&read_file(image)?)? != png_rgba(&expected)? {
         return Err(invalid("关联 PNG 的尺寸或像素与当前导出设置不一致"));
     }
@@ -591,6 +599,9 @@ pub fn check_sheet_image(image: &Path, options: &Value) -> io::Result<()> {
 }
 
 pub fn export_sheet_metadata(image: &Path, target: &Path, options: &Value) -> io::Result<Value> {
+    export_sheet_metadata_bytes(image,target,options,None)
+}
+pub fn export_sheet_metadata_bytes(image:&Path,target:&Path,options:&Value,png:Option<&[u8]>)->io::Result<Value>{
     check_output_file(target)?;
     let root = image.parent().ok_or_else(|| invalid("图集目录无效"))?;
     if fs::canonicalize(target.parent().unwrap())? != fs::canonicalize(root)? {
@@ -599,7 +610,7 @@ pub fn export_sheet_metadata(image: &Path, target: &Path, options: &Value) -> io
     if target.exists() && fs::canonicalize(target)? == fs::canonicalize(image)? {
         return Err(invalid("JSON 路径不能覆盖关联 PNG"));
     }
-    check_sheet_image(image, options)?;
+    check_sheet_image_bytes(image, options,png)?;
     let mut metadata = options["metadata"].as_object()
         .ok_or_else(|| invalid("图集元数据无效"))?.clone();
     metadata.insert("image".into(), json!(crate::files::basename(image)));

@@ -102,6 +102,20 @@ async fn desktop_call(
     window: tauri::WebviewWindow,
     state: tauri::State<'_, Backend>,
 ) -> Result<Value, String> {
+    desktop_action(method,args,window,state,Vec::new()).await
+}
+
+#[tauri::command]
+async fn export_packed(request:tauri::ipc::Request<'_>,window:tauri::WebviewWindow,state:tauri::State<'_,Backend>)->Result<Value,String>{
+    let tauri::ipc::InvokeBody::Raw(bytes)=request.body()else{return Err("导出需要原始字节".into())};
+    let packet=binary_packet::Packet::parse(bytes).map_err(|error|error.to_string())?;
+    let method=packet.metadata["method"].as_str().ok_or("导出类型缺失")?.to_owned();
+    if !["save","saveImageProject","exportAseprite","exportAnimation","exportSheet","exportSheetMetadata"].contains(&method.as_str()){return Err("不支持的二进制导出".into());}
+    let args:Vec<Value>=serde_json::from_value(packet.metadata["args"].clone()).map_err(|error|error.to_string())?;
+    desktop_action(method,args,window,state,packet.payloads.into_iter().map(<[u8]>::to_vec).collect()).await
+}
+
+async fn desktop_action(method:String,args:Vec<Value>,window:tauri::WebviewWindow,state:tauri::State<'_,Backend>,payloads:Vec<Vec<u8>>)->Result<Value,String>{
     let io_error = |error: std::io::Error| error.to_string();
     match method.as_str() {
         "pickScreenColor" => { screen_capture::start_color(&window)?;Ok(Value::Null) }
@@ -429,9 +443,11 @@ async fn desktop_call(
             use base64::Engine;
             let options = args.first().ok_or("缺少图像保存选项")?;
             let target = PathBuf::from(options["filePath"].as_str().ok_or("缺少图像保存路径")?);
-            let encoded = options["data"].as_str().ok_or("缺少图像数据")?;
-            let bytes = if options["binary"] == false { encoded.as_bytes().to_vec() }
-                else { base64::engine::general_purpose::STANDARD.decode(encoded).map_err(|error| error.to_string())? };
+            let bytes=if let Some(bytes)=payloads.first(){bytes.clone()}else{
+                let encoded = options["data"].as_str().ok_or("缺少图像数据")?;
+                if options["binary"] == false { encoded.as_bytes().to_vec() }
+                else { base64::engine::general_purpose::STANDARD.decode(encoded).map_err(|error| error.to_string())? }
+            };
             let result = state.files.lock().unwrap().save_image(window.label(), &target, &bytes).map_err(io_error)?;
             state.recovery.lock().unwrap().clear_saved(&target.to_string_lossy()).map_err(io_error)?;
             Ok(result)
@@ -519,7 +535,7 @@ async fn desktop_call(
                 };
                 chosen.path().to_path_buf()
             };
-            let data = if kind == "project" {
+            let data = if let Some(bytes)=payloads.first(){bytes.clone()}else if kind == "project" {
                 project::encode(
                     &serde_json::from_str(text(&args, 0)).map_err(|error| error.to_string())?,
                 )
@@ -539,7 +555,9 @@ async fn desktop_call(
             })
         }
         "exportAseprite" => {
-            let document = args.first().ok_or("缺少导出文档")?;
+            let unpacked;
+            let document = if let Some(bytes)=payloads.first(){let packed=project::PackedSave::parse(bytes).map_err(io_error)?;unpacked=packed.document(packed.name()).map_err(io_error)?;&unpacked}
+                else{args.first().ok_or("缺少导出文档")?};
             let destination = formats::ExportDestination::parse(args.get(1)).map_err(io_error)?;
             let bytes = aseprite::encode(document).map_err(io_error)?;
             let name = formats::safe_base(document["name"].as_str().unwrap_or("sprite"));
@@ -561,8 +579,12 @@ async fn desktop_call(
         }
         "exportAnimation" => {
             let value = args.first().ok_or("动画参数缺失")?;
-            let options: formats::AnimationOptions =
+            let mut options: formats::AnimationOptions =
                 serde_json::from_value(value.clone()).map_err(|error| error.to_string())?;
+            for (frame,metadata) in options.frames.iter_mut().zip(value["frames"].as_array().ok_or("缺少动画帧")?){
+                if let Some(index)=metadata["rgbaBlock"].as_u64(){frame.rgba=payloads.get(index as usize).ok_or("动画像素块缺失")?.clone();}
+                if let Some(index)=metadata["pngBlock"].as_u64(){frame.png_bytes=payloads.get(index as usize).ok_or("动画图像块缺失")?.clone();}
+            }
             let destination = formats::ExportDestination::parse(value.get("destination")).map_err(io_error)?;
             match value["format"].as_str() {
                 Some("gif") => {
@@ -611,7 +633,7 @@ async fn desktop_call(
                 };
                 chosen.path().to_path_buf()
             };
-            formats::export_sheet(&parent, options).map_err(io_error)
+            formats::export_sheet_bytes(&parent, options,payloads.first().map(Vec::as_slice)).map_err(io_error)
         }
         "exportSheetMetadata" => {
             let options = args.first().ok_or("缺少图集参数")?;
@@ -627,7 +649,7 @@ async fn desktop_call(
                     .add_filter("PNG", &["png"]).pick_file().await else {
                     return Ok(Value::Null);
                 };
-                formats::check_sheet_image(image.path(), options).map_err(io_error)?;
+                formats::check_sheet_image_bytes(image.path(), options,payloads.first().map(Vec::as_slice)).map_err(io_error)?;
                 let name = image.path().file_stem().unwrap_or_default().to_string_lossy();
                 let root = image.path().parent().ok_or("图集目录无效")?;
                 let Some(target) = dialog(&state)
@@ -639,7 +661,7 @@ async fn desktop_call(
                 };
                 (image.path().to_path_buf(), target.path().to_path_buf())
             };
-            formats::export_sheet_metadata(&image, &target, options).map_err(io_error)
+            formats::export_sheet_metadata_bytes(&image, &target, options,payloads.first().map(Vec::as_slice)).map_err(io_error)
         }
         "quit" => Ok(json!(state.windows.quit(window.app_handle()).await?)),
         _ => Err(format!("不支持的桌面功能：{method}")),
@@ -807,6 +829,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             desktop_call,
+            export_packed,
             capture_pixels,
             read_project_packed,
             save_project_packed,
