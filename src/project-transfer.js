@@ -1,12 +1,13 @@
 import {projectForSave} from './reference-files.js';
 const MAX_BYTES=512*1024*1024;
 const magic=new TextEncoder().encode('MPXSAVE1');
-export function unpackProjectRead(input){
+export function unpackProjectRead(input){return unpackProjectReadPacket(input).document;}
+export function unpackProjectReadPacket(input){
  const bytes=input instanceof Uint8Array?input:new Uint8Array(input);
  if(bytes.length<12||bytes.length-12>MAX_BYTES||new TextDecoder().decode(bytes.subarray(0,8))!=='MPXREAD1')throw new Error('项目读取传输头无效');
  const metadataEnd=12+new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength).getUint32(8,true);
  if(metadataEnd>bytes.length)throw new Error('项目读取元数据截断');
- const {document,blocks}=JSON.parse(new TextDecoder().decode(bytes.subarray(12,metadataEnd)));
+ const {document,blocks,info={}}=JSON.parse(new TextDecoder().decode(bytes.subarray(12,metadataEnd)));
  if(document.format!=='pixel-studio'||!Array.isArray(blocks))throw new Error('项目读取元数据无效');
  let offset=metadataEnd;
  for(const block of blocks){
@@ -33,11 +34,12 @@ export function unpackProjectRead(input){
   }else throw new Error('项目读取块数据类型无效');
  }
  if(offset!==bytes.length)throw new Error('项目读取包含多余像素');
- return document;
+ return{document,info};
 }
 
-export function openedProject(file,document){
+export function openedProject(file,document,info={}){
  const {rawProject,...result}=file;
+ if(result.type==='aseprite'){result.doc=document;result.warnings=info.warnings||[];return result;}
  result.document=document;
  Object.defineProperty(result,'data',{enumerable:true,get:()=>JSON.stringify(document)});
  return result;

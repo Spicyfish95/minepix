@@ -206,29 +206,29 @@ impl Files {
     }
 
     pub fn open_for_transfer(&mut self, path: &Path) -> io::Result<Value> {
-        if !path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("pix")) {
+        let ase = path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("ase") || ext.eq_ignore_ascii_case("aseprite"));
+        if !ase && !path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("pix")) {
             return self.open(path);
         }
         let mut header = [0u8; 8];
         use std::io::Read;
         let mut file = fs::File::open(path)?;
-        if file.read(&mut header)? == 8 && &header == b"MPIXPAL\0" {
+        if !ase && file.read(&mut header)? == 8 && &header == b"MPIXPAL\0" {
             return self.open(path);
         }
         let path = fs::canonicalize(path)?;
         let text = path.to_string_lossy().trim_start_matches("\\\\?\\").to_owned();
-        Ok(json!({"type":"project","name":basename(&path),"filePath":text,"rawProject":true}))
+        Ok(json!({"type":if ase {"aseprite"} else {"project"},"name":basename(&path),"filePath":text,"rawProject":true}))
     }
 
     pub fn read_project_transfer(&mut self, path: &Path, record: bool) -> io::Result<Vec<u8>> {
         let path = fs::canonicalize(path)?;
         let source = read_file(&path)?;
-        let encoded;
-        let source = if path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("ase") || extension.eq_ignore_ascii_case("aseprite")) {
-            encoded = crate::project::encode(&crate::aseprite::decode(&source, &basename(&path))?["doc"])?;
-            encoded.as_slice()
-        } else { source.as_slice() };
-        let bytes = crate::project::read_transfer(source)?;
+        let bytes = if path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("ase") || extension.eq_ignore_ascii_case("aseprite")) {
+            let mut imported = crate::aseprite::decode(&source, &basename(&path))?;
+            let info = json!({"warnings":imported["warnings"].take()});
+            crate::project::document_read_transfer(&imported["doc"], info)?
+        } else { crate::project::read_transfer(&source)? };
         if record {
             let text = path.to_string_lossy().trim_start_matches("\\\\?\\").to_owned();
             self.selected.insert(text);
@@ -333,6 +333,47 @@ impl Files {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ase_descriptors_use_binary_pixels_and_preserve_warnings() {
+        let root = tempfile::tempdir().unwrap();
+        let mut files = Files::new(root.path().join("settings")).unwrap();
+        let mut bytes = include_bytes!("../../tests/fixtures/indexed-linked.aseprite").to_vec();
+        let frame_size = u32::from_le_bytes(bytes[128..132].try_into().unwrap());
+        let count = u16::from_le_bytes(bytes[134..136].try_into().unwrap()) + 1;
+        let end = 128 + frame_size as usize;
+        bytes.splice(end..end, [6, 0, 0, 0, 0xef, 0xbe]);
+        let size = bytes.len() as u32;
+        bytes[..4].copy_from_slice(&size.to_le_bytes());
+        bytes[128..132].copy_from_slice(&(frame_size + 6).to_le_bytes());
+        bytes[134..136].copy_from_slice(&count.to_le_bytes());
+        bytes[140..144].copy_from_slice(&(count as u32).to_le_bytes());
+        for extension in ["ase", "aseprite"] {
+            let path = root.path().join(format!("sprite.{extension}"));
+            fs::write(&path, &bytes).unwrap();
+            let descriptor = files.open_for_transfer(&path).unwrap();
+            assert_eq!(descriptor["type"], "aseprite");
+            assert_eq!(descriptor["rawProject"], true);
+            assert!(descriptor.get("doc").is_none());
+            assert!(descriptor.get("data").is_none());
+            let wire = files.read_project_transfer(&path, false).unwrap();
+            assert_eq!(&wire[..8], b"MPXREAD1");
+            let length = u32::from_le_bytes(wire[8..12].try_into().unwrap()) as usize;
+            let metadata: Value = serde_json::from_slice(&wire[12..12 + length]).unwrap();
+            assert!(metadata["document"]["frames"][0]["cels"][0].is_null());
+            assert!(metadata["blocks"].as_array().unwrap().iter().any(|block| block["kind"] == "u32"));
+            assert!(metadata["blocks"].as_array().unwrap().iter().any(|block| block["kind"] == "u8"));
+            assert_eq!(metadata["info"]["warnings"], json!(["未保留块 0xbeef"]));
+            assert_eq!(fs::read(path).unwrap(), bytes);
+        }
+        assert!(files.recent().unwrap().is_empty());
+        files.read_project_transfer(&root.path().join("sprite.ase"), true).unwrap();
+        assert_eq!(files.recent().unwrap().len(), 1);
+        let bad = root.path().join("broken.ase");fs::write(&bad, b"corrupt").unwrap();
+        assert!(files.open_for_transfer(&bad).is_ok());
+        assert!(files.read_project_transfer(&bad, true).is_err());
+        assert_eq!(files.recent().unwrap().len(), 1);
+    }
 
     #[test]
     fn single_image_save_preserves_other_active_document_and_registers_recent_path() {

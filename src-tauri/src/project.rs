@@ -43,6 +43,15 @@ fn metadata_fields(object: &serde_json::Map<String, Value>, payloads: &[&str]) -
 }
 
 pub fn encode(document: &Value) -> io::Result<Vec<u8>> {
+    encode_document(document, None)
+}
+
+pub fn document_read_transfer(document: &Value, info: Value) -> io::Result<Vec<u8>> {
+    encode_document(document, Some(info))
+}
+
+fn encode_document(document: &Value, info: Option<Value>) -> io::Result<Vec<u8>> {
+    let transfer = info.is_some();
     if document["format"] != "pixel-studio" {
         return Err(invalid("无效的编辑器文档"));
     }
@@ -96,7 +105,8 @@ pub fn encode(document: &Value) -> io::Result<Vec<u8>> {
                     kind: kind.into(),
                     count,
                 });
-                chunk(b"DATA", &raw, &mut data_chunks)?;
+                if transfer { data_chunks.extend_from_slice(&raw); }
+                else { chunk(b"DATA", &raw, &mut data_chunks)?; }
             }
             frame_metadata[field] = Value::Array(placeholders);
         }
@@ -124,7 +134,8 @@ pub fn encode(document: &Value) -> io::Result<Vec<u8>> {
                 kind: "base64".into(),
                 count: raw.len(),
             });
-            chunk(b"DATA", &raw, &mut data_chunks)?;
+            if transfer { data_chunks.extend_from_slice(&raw); }
+            else { chunk(b"DATA", &raw, &mut data_chunks)?; }
             reference_metadata.push(metadata_fields(reference.as_object().unwrap(), &["data"]));
         }
         metadata["references"] = Value::Array(reference_metadata);
@@ -132,11 +143,14 @@ pub fn encode(document: &Value) -> io::Result<Vec<u8>> {
         metadata["references"] = value.clone();
     }
     let block_count = blocks.len() + 1;
-    let metadata = serde_json::to_vec(&json!({"document": metadata, "blocks": blocks}))?;
+    let mut metadata = json!({"document": metadata, "blocks": blocks});
+    if let Some(info) = info.filter(|value| !value.is_null()) { metadata["info"] = info; }
+    let metadata = serde_json::to_vec(&metadata)?;
     if total_raw + metadata.len() > MAX_RAW {
         return Err(invalid("项目解压后超过 512 MiB"));
     }
-    finish(&metadata, &data_chunks, block_count)
+    if transfer { Ok(read_packet(&metadata, vec![data_chunks])) }
+    else { finish(&metadata, &data_chunks, block_count) }
 }
 
 fn finish(metadata: &[u8], data_chunks: &[u8], block_count: usize) -> io::Result<Vec<u8>> {
@@ -396,12 +410,16 @@ fn decode_parts(bytes: &[u8]) -> io::Result<Decoded> {
 pub fn read_transfer(bytes: &[u8]) -> io::Result<Vec<u8>> {
     let decoded = decode_parts(bytes)?;
     let metadata = serde_json::to_vec(&json!({"document":decoded.document,"blocks":decoded.blocks}))?;
-    let mut output = Vec::with_capacity(12 + metadata.len() + decoded.payloads.iter().map(Vec::len).sum::<usize>());
+    Ok(read_packet(&metadata, decoded.payloads))
+}
+
+fn read_packet(metadata: &[u8], payloads: Vec<Vec<u8>>) -> Vec<u8> {
+    let mut output = Vec::with_capacity(12 + metadata.len() + payloads.iter().map(Vec::len).sum::<usize>());
     output.extend_from_slice(b"MPXREAD1");
     output.extend_from_slice(&(metadata.len() as u32).to_le_bytes());
     output.extend_from_slice(&metadata);
-    for raw in decoded.payloads { output.extend_from_slice(&raw); }
-    Ok(output)
+    for raw in payloads { output.extend_from_slice(&raw); }
+    output
 }
 
 pub fn decode(bytes: &[u8]) -> io::Result<Value> {
@@ -440,6 +458,22 @@ mod tests {
         assert_eq!(&wire[end..], decoded.payloads.concat());
         assert_eq!(decode(&bytes).unwrap(), document);
         assert_eq!(metadata["document"]["custom"], document["custom"]);
+    }
+
+    #[test]
+    fn document_read_matches_container_read_without_compressing_pixels() {
+        let document: Value = serde_json::from_slice(include_bytes!("../../tests/fixtures/project-transfer/fixture.json")).unwrap();
+        let before = document.clone();
+        assert_eq!(document_read_transfer(&document, Value::Null).unwrap(), read_transfer(&encode(&document).unwrap()).unwrap());
+        let wire = document_read_transfer(&document, json!({"warnings":["extension"]})).unwrap();
+        let end = 12 + u32_at(&wire, 8) as usize;
+        let metadata: Value = serde_json::from_slice(&wire[12..end]).unwrap();
+        assert_eq!(metadata["info"]["warnings"], json!(["extension"]));
+        assert!(metadata["document"]["frames"][0]["cels"][0].is_null());
+        assert_eq!(document, before);
+        for bad in [json!({"format":"wrong"}), json!({"format":"pixel-studio","frames":[{"cels":[[-1]]}]})] {
+            assert!(document_read_transfer(&bad, Value::Null).is_err());
+        }
     }
 
     #[test]

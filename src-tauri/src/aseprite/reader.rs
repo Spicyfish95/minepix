@@ -704,13 +704,13 @@ pub fn decode(bytes: &[u8], name: &str) -> io::Result<Value> {
             let (w, h) = image
                 .as_ref()
                 .map(|image| {
-                    if image.tilemap {
+                    if image.tilemap || background {
                         (width, height)
                     } else {
-                        (width.max(image.w), height.max(image.h))
+                        (image.w, image.h)
                     }
                 })
-                .unwrap_or((width, height));
+                .unwrap_or(if background || group { (width, height) } else { (1, 1) });
             let default = if background {
                 layer["clearColor"].as_u64().unwrap() as u32
             } else {
@@ -722,9 +722,12 @@ pub fn decode(bytes: &[u8], name: &str) -> io::Result<Value> {
             } else {
                 None
             };
+            if cel.is_none() && !background && !group && (w != width || h != height) {
+                properties.insert((l+1).to_string(), json!({"x":0,"y":0,"width":w,"height":h,"opacity":100.0}));
+            }
             if let (Some(cel), Some(image)) = (cel, image) {
                 if background
-                    && (cel.x != 0 || cel.y != 0 || cel.opacity != 255 || w != width || h != height)
+                    && (cel.x != 0 || cel.y != 0 || cel.opacity != 255 || image.w > width || image.h > height)
                 {
                     return Err(invalid("背景 cel 位置、尺寸或透明度不支持"));
                 }
@@ -773,12 +776,13 @@ pub fn decode(bytes: &[u8], name: &str) -> io::Result<Value> {
             cels.push(json!(out));
             indices.push(json!(indexed));
         }
-        let mut output = json!({"duration":frame.duration,"cels":cels});
+        let mut output = json!({"duration":frame.duration});
+        output["cels"] = Value::Array(cels);
         if depth == 8 {
-            output["indices"] = json!(indices);
+            output["indices"] = Value::Array(indices);
         }
         if !properties.is_empty() {
-            output["celProperties"] = json!(properties);
+            output["celProperties"] = Value::Object(properties);
         }
         // Pixel links share image content, while each cel keeps its own placement.
         for (&l, cel) in &frame.cels {
@@ -826,31 +830,27 @@ pub fn decode(bytes: &[u8], name: &str) -> io::Result<Value> {
         return Err(invalid("背景层必须位于最底层"));
     }
     for frame in &mut output_frames {
-        frame["cels"] = json!(
-            order
-                .iter()
-                .map(|i| frame["cels"][*i].clone())
-                .collect::<Vec<_>>()
-        );
+        let mut cels = frame["cels"].take();
+        frame["cels"] = Value::Array(order.iter().map(|i| cels[*i].take()).collect());
         if depth == 8 {
-            frame["indices"] = json!(
-                order
-                    .iter()
-                    .map(|i| frame["indices"][*i].clone())
-                    .collect::<Vec<_>>()
-            );
+            let mut indices = frame["indices"].take();
+            frame["indices"] = Value::Array(order.iter().map(|i| indices[*i].take()).collect());
         }
     }
     let mut doc = json!({"format":"pixel-studio","version":2,"requiredFeatures":[],"name":name,
-        "width":width,"height":height,"layers":ordered_layers,"frames":output_frames,
+        "width":width,"height":height,
         "palette":palette.iter().map(|p|hex(p.unwrap_or(0))).collect::<Vec<_>>(),"tags":tags,"slices":slices});
+    doc["layers"] = Value::Array(ordered_layers);
+    doc["frames"] = Value::Array(output_frames);
     if depth == 8 {
         doc["colorMode"] = json!("indexed");
         doc["transparentIndex"] = json!(transparent);
     } else if depth == 16 {
         doc["colorMode"] = json!("grayscale");
     }
-    Ok(json!({"doc":doc,"warnings":warnings}))
+    let mut result = json!({"warnings":warnings});
+    result["doc"] = doc;
+    Ok(result)
 }
 fn over_black(pixel: u32) -> u32 {
     let a = pixel & 255;
@@ -998,7 +998,8 @@ mod tests {
         assert_eq!(doc["frames"][0]["duration"], 60);
         assert_eq!(doc["frames"][1]["duration"], 120);
         assert_eq!(doc["frames"][0]["cels"][0][0], 0xff0000ffu32);
-        assert_eq!(doc["frames"][0]["cels"][0][2], 0x0000ff80u32);
+        assert_eq!(doc["frames"][0]["cels"][0][1], 0x0000ff80u32);
+        assert_eq!(doc["frames"][0]["celProperties"]["1"]["width"], 1);
         assert_eq!(doc["frames"][0]["cels"][0], doc["frames"][1]["cels"][0]);
         assert_eq!(
             doc["frames"][0]["links"]["1"],
@@ -1118,6 +1119,37 @@ mod tests {
                 .to_string()
                 .contains("外部瓦片集")
         );
+    }
+    #[test]
+    fn cropped_cels_stay_small_on_large_canvases() {
+        for fixture in [
+            RGBA,
+            include_bytes!("../../../tests/fixtures/indexed-linked.aseprite").as_slice(),
+            include_bytes!("../../../tests/fixtures/grayscale-linked.aseprite").as_slice(),
+        ] {
+            let mut doc = document(fixture);
+            let width = doc["width"].clone();
+            let height = doc["height"].clone();
+            let layers = doc["layers"].as_array().unwrap().len();
+            for frame in doc["frames"].as_array_mut().unwrap() {
+                for layer in 0..layers {
+                    let key = (layer + 1).to_string();
+                    if frame["celProperties"][&key].is_null() {
+                        if frame["celProperties"].is_null() { frame["celProperties"] = json!({}); }
+                        frame["celProperties"][&key] = json!({"x":0,"y":0,"width":width,"height":height,"opacity":100.0});
+                    }
+                }
+            }
+            doc["width"] = json!(1024);
+            doc["height"] = json!(1024);
+            let imported = document(&encode(&doc).unwrap());
+            for (before, after) in doc["frames"].as_array().unwrap().iter().zip(imported["frames"].as_array().unwrap()) {
+                assert_eq!(before["cels"], after["cels"]);
+                assert_eq!(before["indices"], after["indices"]);
+                assert_eq!(before["celProperties"], after["celProperties"]);
+                assert!(after["cels"].as_array().unwrap().iter().all(|cel| cel.as_array().unwrap().len() <= 4));
+            }
+        }
     }
     #[test]
     fn accepts_dimensions_above_former_pixel_budget() {

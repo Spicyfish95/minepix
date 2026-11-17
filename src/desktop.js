@@ -7,7 +7,7 @@ import {invoke} from '@tauri-apps/api/core';
 import {getCurrentWebviewWindow} from '@tauri-apps/api/webviewWindow';
 import {getCurrentWindow,Window} from '@tauri-apps/api/window';
 import {applicationMenu} from './application-menu.js';
-import {unpackProjectRead,openedProject} from './project-transfer.js';
+import {unpackProjectReadPacket,openedProject} from './project-transfer.js';
 import {createProjectSaveClient} from './project-save-client.js';
 
 // 拦截 WebView2 原生浏览器快捷键，防止刷新/查找/打印/源码/缩放重置等操作破坏编辑器状态。
@@ -27,7 +27,14 @@ const handlers=new Map(),current=getCurrentWindow();
 const dispatch=(name,payload)=>{for(const callback of handlers.get(name)||[])callback(payload);};
 const subscribe=(name,callback)=>{if(!handlers.has(name))handlers.set(name,new Set());handlers.get(name).add(callback);return()=>handlers.get(name).delete(callback);};
 const invokeBackend=(command,args)=>invoke(command,args).catch(error=>{throw error instanceof Error?error:new Error(String(error));});
-const readProject=async(filePath,record=true)=>loadReferenceFiles(unpackProjectRead(await invokeBackend('read_project_packed',{filePath,record})),path=>readReference(path));
+async function readProjectPacket(filePath,record=true){
+ if(record)dispatch('file:loading',true);
+ try{
+  const packet=unpackProjectReadPacket(await invokeBackend('read_project_packed',{filePath,record}));
+  packet.document=await loadReferenceFiles(packet.document,path=>readReference(path));return packet;
+ }finally{if(record)dispatch('file:loading',false);}
+}
+const readProject=async(filePath,record=true)=>(await readProjectPacket(filePath,record)).document;
 async function readReference(path){
  const file=await call('readReference',path),image=new Image();image.src='data:'+file.mime+';base64,'+file.data;await image.decode();
  const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;const context=canvas.getContext('2d');context.drawImage(image,0,0);
@@ -35,7 +42,8 @@ async function readReference(path){
 }
 async function resolveOpened(value){
  if(Array.isArray(value)){const files=[];for(const file of value)files.push(await resolveOpened(file));return files;}
- return value?.type==='project'&&value.rawProject?openedProject(value,await readProject(value.filePath)):value;
+ if(!value?.rawProject)return value;
+ const packet=await readProjectPacket(value.filePath);return openedProject(value,packet.document,packet.info);
 }
 async function call(method,...args){
  const value=decodeWire(await invokeBackend('desktop_call',{method,args}));
@@ -124,7 +132,7 @@ export async function initializeDesktop(){
   const name=String(options.name||'animation').replace(/[<>:"/\\|?*\x00-\x1f]/g,'_').replace(/[. ]+$/g,'').slice(0,100)||'animation',base=name+'-sheet';
   return call('exportSheet',{...options,engineFiles:engineFiles({...options.metadata,image:base+'.png'},base,options.engineFormat||'native')});
  };
- for(const [method,event]of Object.entries({onScreenColorRequest:'capture:request-color',onCapture:'capture:complete',onCommand:'command',onEditorError:'editor:error',onUpdateState:'update:state',onNotificationAction:'notification:action',onWindowMenu:'menu-changed'}))bridge[method]=callback=>subscribe(event,callback);
+ for(const [method,event]of Object.entries({onFileLoading:'file:loading',onScreenColorRequest:'capture:request-color',onCapture:'capture:complete',onCommand:'command',onEditorError:'editor:error',onUpdateState:'update:state',onNotificationAction:'notification:action',onWindowMenu:'menu-changed'}))bridge[method]=callback=>subscribe(event,callback);
  let incoming=Promise.resolve();
  bridge.onOpenFile=callback=>subscribe('open-file-data',file=>{incoming=incoming.then(async()=>callback(await resolveOpened(file))).catch(error=>dispatch('editor:error',error.message));});
  bridge.onDocumentRequest=callback=>subscribe('editor:request',async({requestId,operation,data})=>{

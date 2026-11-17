@@ -1,4 +1,5 @@
 export default {
+"正在读取文件…": "Reading file…",
 "导出目录": "Export directory",
 "选择目录…": "Choose directory…",
 "快捷导出": "Quick export",
