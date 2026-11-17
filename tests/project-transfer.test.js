@@ -113,3 +113,9 @@ test('正常document访问不触发惰性诊断JSON，data按需保留原接口'
  assert.equal(file.document,document);assert.equal(serialized,0);assert.equal(file.rawProject,undefined);
  assert.equal(file.data,'{"format":"pixel-studio","frames":[]}');assert.equal(serialized,1);
 });
+
+test('typed subarray packing honors offsets and matches the validated plain-array wire byte for byte',()=>{
+ const d=createDocument(3,1);d.frames[0].cels=[Uint32Array.of(7,0,0xffffffff,0x12345678,9).subarray(1,4)];d.frames[0].indices=[Uint8Array.of(9,0,255,2,9).subarray(1,4)];
+ const plain={...d,frames:[{...d.frames[0],cels:[Array.from(d.frames[0].cels[0])],indices:[Array.from(d.frames[0].indices[0])]}]};
+ assert.deepEqual(packProjectSave(d,'offset'),packProjectSave(plain,'offset'));assert.deepEqual(unpack(packProjectSave(d,'offset')).document.frames[0].cels[0],[0,0xffffffff,0x12345678]);
+});

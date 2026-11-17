@@ -1,6 +1,7 @@
 import {prepareDocumentPixels,documentJSON,isPixelArray} from './pixel-storage.js';
 import {projectForSave} from './reference-files.js';
 const MAX_BYTES=512*1024*1024;
+const littleEndian=new Uint8Array(Uint32Array.of(1).buffer)[0]===1;
 const magic=new TextEncoder().encode('MPXSAVE1');
 export function unpackProjectRead(input){return unpackProjectReadPacket(input).document;}
 export function unpackProjectReadPacket(input,{typed=false}={}){
@@ -56,12 +57,9 @@ export function packProjectSave(data,name,saveAs=false,target){
   if(!isPixelArray(pixels))throw new Error('像素块不是数组');
   const width=kind==='u32'?4:1,size=pixels.length*width;
   if(rawBytes+size>MAX_BYTES)throw new Error('项目解压后超过 512 MiB');
-  const bytes=new Uint8Array(size),view=new DataView(bytes.buffer),max=kind==='u32'?0xffffffff:255;
-  for(let i=0;i<pixels.length;i++){
-   const pixel=pixels[i];if(!Number.isInteger(pixel)||pixel<0||pixel>max)throw new Error('项目像素值越界');
-   if(width===4)view.setUint32(i*4,pixel,true);else bytes[i]=pixel;
-  }
-  rawBytes+=size;blocks.push({path,kind,count:pixels.length});payloads.push(bytes);
+  const native=kind==='u32'?pixels instanceof Uint32Array&&littleEndian:pixels instanceof Uint8Array,max=kind==='u32'?0xffffffff:255;
+  if(!native&&pixels.some(pixel=>!Number.isInteger(pixel)||pixel<0||pixel>max))throw new Error('项目像素值越界');
+  rawBytes+=size;blocks.push({path,kind,count:pixels.length});payloads.push({pixels,kind,size,native});
  }
  const metadata={...document,frames:document.frames.map((frame,f)=>{
   const copy=Object.fromEntries(Object.entries(frame).filter(([key])=>key!=='cels'&&key!=='indices'));
@@ -76,6 +74,11 @@ export function packProjectSave(data,name,saveAs=false,target){
  const json=new TextEncoder().encode(JSON.stringify({document:metadata,blocks,name,saveAs,...(target?{target}:{})}));
  if(rawBytes+json.length>MAX_BYTES)throw new Error('项目解压后超过 512 MiB');
  const output=new Uint8Array(12+json.length+rawBytes);output.set(magic);new DataView(output.buffer).setUint32(8,json.length,true);output.set(json,12);
- let offset=12+json.length;for(const bytes of payloads){output.set(bytes,offset);offset+=bytes.length;}
+ let offset=12+json.length;const view=new DataView(output.buffer);
+ for(const {pixels,kind,size,native}of payloads){
+  if(native)output.set(new Uint8Array(pixels.buffer,pixels.byteOffset,pixels.byteLength),offset);
+  else for(let i=0;i<pixels.length;i++)if(kind==='u32')view.setUint32(offset+i*4,pixels[i],true);else output[offset+i]=pixels[i];
+  offset+=size;
+ }
  return output;
 }
