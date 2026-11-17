@@ -61,6 +61,7 @@ Press `Ctrl+1` to enter capture mode on the monitor under the pointer. Drag a se
 | Selections and adjustments | Rectangle, ellipse, lasso, magic wand, cross-project paste preserving irregular masks, new canvas sized from copied bounds, scale and rotation, color adjustments and outlines |
 | Layers and color | Groups, blend modes, RGBA, grayscale, true indexed color and palette editing |
 | Animation | Frame durations, tags, onion skinning, linked cels and cel range editing |
+| Export paths | Confirm to save directly into the configured directory; quick export remembers exact destinations per project |
 | Workspace | Adjustable panels, multiple windows, configurable shortcuts and project recovery |
 
 ## Install and get started

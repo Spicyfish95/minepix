@@ -173,6 +173,28 @@ fn check_output_file(path: &Path) -> io::Result<()> {
     ExportDestination::check_directory(path.parent().ok_or_else(|| invalid("导出目录无效"))?)
 }
 
+pub fn export_target(destination: Option<&ExportDestination>, name: &str, extension: &str) -> io::Result<Option<PathBuf>> {
+    let Some(destination) = destination else { return Ok(None) };
+    if destination.silent {
+        return Ok(Some(destination.file_path()?.to_path_buf()));
+    }
+    let Some(directory) = destination.directory.as_deref() else { return Ok(None) };
+    if extension.is_empty() || !extension.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+        return Err(invalid("导出扩展名无效"));
+    }
+    let target = directory.join(format!("{}.{extension}", safe_base(name)));
+    check_output_file(&target)?;
+    Ok(Some(target))
+}
+
+pub fn export_parent(destination: Option<&ExportDestination>) -> io::Result<Option<PathBuf>> {
+    let Some(destination) = destination else { return Ok(None) };
+    if destination.silent {
+        return Ok(Some(destination.folder()?.parent().unwrap().to_path_buf()));
+    }
+    Ok(destination.directory.clone())
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AnimationFrame {
@@ -692,6 +714,45 @@ mod tests {
         assert!(export_sheet(root.path(), &options).is_err());
         assert_eq!(fs::read(folder.join("hero-sheet.png")).unwrap(), before);
         assert!(!root.path().join("escape.json").exists());
+    }
+
+    #[test]
+    fn configured_export_directory_resolves_files_and_folder_parent_without_a_picker() {
+        let root = tempfile::tempdir().unwrap();
+        let destination = ExportDestination::parse(Some(&json!({"directory":root.path()}))).unwrap().unwrap();
+        for extension in ["png", "webp", "jpg", "jpeg", "bmp", "ico", "svg", "css", "gif", "aseprite", "json"] {
+            let path = export_target(Some(&destination), "work", extension).unwrap().unwrap();
+            assert_eq!(path, root.path().join(format!("work.{extension}")));
+            write_atomic(&path, b"first").unwrap();
+            write_atomic(&path, b"replacement").unwrap();
+            assert_eq!(fs::read(path).unwrap(), b"replacement");
+        }
+        assert_eq!(export_parent(Some(&destination)).unwrap().unwrap(), root.path());
+        let sanitized = export_target(Some(&destination), "../work:bad?", "png").unwrap().unwrap();
+        assert_eq!(sanitized.parent().unwrap(), root.path());
+        assert!(export_target(Some(&destination), "work", "../png").is_err());
+        assert!(export_target(Some(&destination), "work", "").is_err());
+        fs::create_dir(root.path().join("directory.png")).unwrap();
+        assert!(export_target(Some(&destination), "directory", "png").is_err());
+    }
+
+    #[test]
+    fn unconfigured_exports_still_request_a_picker_and_quick_exports_keep_exact_paths() {
+        assert!(export_target(None, "work", "png").unwrap().is_none());
+        assert!(export_parent(None).unwrap().is_none());
+        let empty = ExportDestination::parse(Some(&json!({"directory":""}))).unwrap().unwrap();
+        assert!(export_target(Some(&empty), "work", "png").unwrap().is_none());
+        assert!(export_parent(Some(&empty)).unwrap().is_none());
+        let root = tempfile::tempdir().unwrap();
+        let file = root.path().join("previous-name.webp");
+        let folder = root.path().join("previous-folder");
+        fs::create_dir(&folder).unwrap();
+        let quick = ExportDestination::parse(Some(&json!({"silent":true,"filePath":file,"folder":folder,"directory":root.path()}))).unwrap().unwrap();
+        assert_eq!(export_target(Some(&quick), "new-name", "png").unwrap().unwrap(), file);
+        assert_eq!(export_parent(Some(&quick)).unwrap().unwrap(), root.path());
+        let incomplete = ExportDestination::parse(Some(&json!({"silent":true,"directory":root.path()}))).unwrap().unwrap();
+        assert!(export_target(Some(&incomplete), "work", "png").is_err());
+        assert!(export_parent(Some(&incomplete)).is_err());
     }
 
     #[test]

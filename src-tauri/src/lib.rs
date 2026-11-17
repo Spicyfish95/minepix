@@ -505,8 +505,8 @@ async fn desktop_call(
                 .file_stem()
                 .unwrap_or_default()
                 .to_string_lossy();
-            let target = if let Some(destination) = destination.as_ref().filter(|value| value.silent) {
-                destination.file_path().map_err(io_error)?.to_path_buf()
+            let target = if let Some(target) = formats::export_target(destination.as_ref(), &name, extension).map_err(io_error)? {
+                target
             } else {
                 let Some(chosen) = export_dialog(&state, destination.as_ref())
                     .add_filter(extension, &[extension])
@@ -542,8 +542,8 @@ async fn desktop_call(
             let destination = formats::ExportDestination::parse(args.get(1)).map_err(io_error)?;
             let bytes = aseprite::encode(document).map_err(io_error)?;
             let name = formats::safe_base(document["name"].as_str().unwrap_or("sprite"));
-            let target = if let Some(destination) = destination.as_ref().filter(|value| value.silent) {
-                destination.file_path().map_err(io_error)?.to_path_buf()
+            let target = if let Some(target) = formats::export_target(destination.as_ref(), &name, "aseprite").map_err(io_error)? {
+                target
             } else {
                 let Some(chosen) = export_dialog(&state, destination.as_ref())
                     .add_filter("Aseprite", &["aseprite"])
@@ -565,8 +565,8 @@ async fn desktop_call(
             let destination = formats::ExportDestination::parse(value.get("destination")).map_err(io_error)?;
             match value["format"].as_str() {
                 Some("gif") => {
-                    let target = if let Some(destination) = destination.as_ref().filter(|value| value.silent) {
-                        destination.file_path().map_err(io_error)?.to_path_buf()
+                    let target = if let Some(target) = formats::export_target(destination.as_ref(), &options.name, "gif").map_err(io_error)? {
+                        target
                     } else {
                         let Some(chosen) = export_dialog(&state, destination.as_ref())
                             .add_filter("GIF", &["gif"])
@@ -586,8 +586,8 @@ async fn desktop_call(
                     Ok(json!({"filePath":target,"directory":target.parent(),"count":options.frames.len()}))
                 }
                 Some("sequence") => {
-                    let parent = if let Some(destination) = destination.as_ref().filter(|value| value.silent) {
-                        destination.folder().map_err(io_error)?.parent().unwrap().to_path_buf()
+                    let parent = if let Some(parent) = formats::export_parent(destination.as_ref()).map_err(io_error)? {
+                        parent
                     } else {
                         let Some(chosen) = export_dialog(&state, destination.as_ref()).pick_folder().await else {
                             return Ok(Value::Null);
@@ -602,8 +602,8 @@ async fn desktop_call(
         "exportSheet" => {
             let options = args.first().ok_or("缺少图集参数")?;
             let destination = formats::ExportDestination::parse(options.get("destination")).map_err(io_error)?;
-            let parent = if let Some(destination) = destination.as_ref().filter(|value| value.silent) {
-                destination.folder().map_err(io_error)?.parent().unwrap().to_path_buf()
+            let parent = if let Some(parent) = formats::export_parent(destination.as_ref()).map_err(io_error)? {
+                parent
             } else {
                 let Some(chosen) = export_dialog(&state, destination.as_ref()).pick_folder().await else {
                     return Ok(Value::Null);
@@ -618,6 +618,9 @@ async fn desktop_call(
             let (image, target) = if let Some(destination) = destination.as_ref().filter(|value| value.silent) {
                 (destination.image_path().map_err(io_error)?.to_path_buf(),
                     destination.file_path().map_err(io_error)?.to_path_buf())
+            } else if let Some(directory) = destination.as_ref().and_then(|value| value.directory.as_deref()) {
+                let base = format!("{}-sheet", formats::safe_base(options["name"].as_str().unwrap_or("animation")));
+                (directory.join(format!("{base}.png")), directory.join(format!("{base}.json")))
             } else {
                 let Some(image) = export_dialog(&state, destination.as_ref())
                     .add_filter("PNG", &["png"]).pick_file().await else {
