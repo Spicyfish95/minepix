@@ -191,3 +191,10 @@ test('单图保存绑定发起时当前帧，等待选择路径时切帧不会�
  context.window.desktop.saveProject=async(_snapshot,_name,_saveAs,_path,index)=>{frame=index;return pending.promise;};
  const saving=context.saveProject(true);context.fi=0;pending.resolve({filePath:'current.png',name:'current',singleImage:true});assert.equal(await saving,true);assert.equal(frame,1);assert.equal(context.filePath,'current.png');
 });
+
+for(const [name,revision,saved,boardRevision,savedBoardRevision,expected]of [
+ ['pixel edits',1,0,0,0,true],['reference edits',0,0,1,0,true],['never saved document',0,-1,0,0,true],['saved document',2,2,1,1,false]
+])test('reopen recomputes dirty state for '+name,()=>{
+ const state={documentId:'closed',doc:createDocument(1,1),dirty:false,historyState:{revision},saved,boardRevision,savedBoardRevision},documentTabs=new DocumentStore();let restored,recoveries=0;
+ const context={closedDocuments:[state],documentTabs,captureDocumentState:()=>({}),restoreDocumentState:value=>{restored=value;},scheduleRecovery:()=>recoveries++,message:()=>{}};vm.createContext(context);vm.runInContext(section('function reopenDocument(','async function recentDialog('),context);context.reopenDocument();assert.equal(restored.dirty,expected);assert.equal(recoveries,1);
+});
