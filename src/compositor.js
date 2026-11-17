@@ -11,12 +11,12 @@ function channel(b,s,mode){switch(mode){case 'multiply':return b*s;case 'screen'
 export function blendColor(b,s,mode){switch(mode){case 'hue':return setLum(setSat(s,sat(b)),lum(b));case 'saturation':return setLum(setSat(b,sat(s)),lum(b));case 'color':return setLum(s,lum(b));case 'luminosity':return setLum(b,lum(s));default:return b.map((v,i)=>channel(v,s[i],mode));}}
 // Aseprite new-blender blends normal and mode results in two alpha-weighted stages.
 // The combined mode weight is da + da * sa * (1 - da), not the W3C backdrop weight alone.
-export function compositeInto(doc,index,rect,target,{includeReference=false}={}){
+export function compositeInto(doc,index,rect,target,{includeReference=false,targetX=0,targetY=0,targetWidth=doc.width}={}){
  const indexedPalette=doc.colorMode==='indexed'?doc.palette.map(color=>parseInt(color.slice(1).padEnd(8,'f'),16)>>>0):null;
  const x0=Math.max(0,Math.floor(rect.x)),y0=Math.max(0,Math.floor(rect.y)),x1=Math.min(doc.width,Math.ceil(rect.x+rect.w)),y1=Math.min(doc.height,Math.ceil(rect.y+rect.h));
  if(x1<=x0||y1<=y0)return{x:x0,y:y0,w:0,h:0};
  const regionWidth=x1-x0,regionHeight=y1-y0;
- for(let y=y0;y<y1;y++)target.fill(0,(y*doc.width+x0)*4,(y*doc.width+x1)*4);
+ for(let y=y0;y<y1;y++)target.fill(0,((y-targetY)*targetWidth+x0-targetX)*4,((y-targetY)*targetWidth+x1-targetX)*4);
  const children=new Map();
  doc.layers.forEach((layer,l)=>{
   if(!children.has(layer.parentId))children.set(layer.parentId,[]);
@@ -67,6 +67,10 @@ export function compositeInto(doc,index,rect,target,{includeReference=false}={})
    }
   }
  };
- paint(children.get(undefined)||[],target,doc.width,0,0);
+ paint(children.get(undefined)||[],target,targetWidth,targetX,targetY);
  return{x:x0,y:y0,w:regionWidth,h:regionHeight};
+}
+
+export function compositePixel(doc,index,x,y,options={}){
+ const rgba=new Uint8ClampedArray(4);compositeInto(doc,index,{x,y,w:1,h:1},rgba,{...options,targetX:x,targetY:y,targetWidth:1});return rgba;
 }

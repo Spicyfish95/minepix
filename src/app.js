@@ -43,7 +43,7 @@ import {linkedMembers,linkCels,unlinkCels,hydrateLinks} from './cel-links.js';
 import {isReference,isBackground,encodeReference,rasterReference,convertReference,convertBackground} from './layer-types.js';
 import {PEN_KEY,DEFAULT_PEN,loadPen,validatePen,deviceTool,pressureOptions} from './pen-dynamics.js';
 import {isGroup,layerState,ancestors,visibleLayerIndices,groupLayer,ungroupLayer,reparentLayer,removeLayerTree,duplicateLayerTree,moveLayerSibling} from './layer-tree.js';
-import {BLEND_MODES} from './compositor.js';
+import {BLEND_MODES,compositePixel} from './compositor.js';
 import {FrameCache} from './renderer.js';
 import {snapshotCel,snapshotMetadata} from './history.js';
 import {DocumentStore} from './document-manager.js';
@@ -364,7 +364,7 @@ async function pickScreenColor(){
   render();message('已从屏幕取色 '+color.toUpperCase());
  }catch(error){showError('屏幕取色失败：'+error.message);}finally{screenColorPicking=false;}
 }
-function pickCanvasColor(event){const raw=point(event,false);if(!insideTiledCanvas(doc,raw,tiledMode))return;const p=tiledPoint(doc,raw.x,raw.y,tiledMode),c=composite(doc,fi),i=(p.y*doc.width+p.x)*4;if(c[i+3])pickColor(fromRgba({r:c[i],g:c[i+1],b:c[i+2],a:c[i+3]}));}
+function pickCanvasColor(event){const raw=point(event,false);if(!insideTiledCanvas(doc,raw,tiledMode))return;const p=tiledPoint(doc,raw.x,raw.y,tiledMode),c=compositePixel(doc,fi,p.x,p.y);if(c[3])pickColor(fromRgba({r:c[0],g:c[1],b:c[2],a:c[3]}));}
 function setBackground(value){const next=normalizeColor(value);if(next!==background)useForegroundForPattern();background=next;saveColorPreferences();renderColors();}
 function renderPalette(){
  syncPalettePresetButton();

@@ -132,7 +132,7 @@ function tabEditor(){
  const documentTabs=new DocumentStore();
  documentTabs.add({documentId:'b',doc:{name:'B'},dirty:true});
  documentTabs.add({documentId:'a',doc:{name:'A'},dirty:false});
- const confirmations=[],context={...documentTabs.get('a'),documentTabs,projectSaves:new Map(),filePath:null,busy:false,gesture:null,shapeSession:null,celGesture:null,closedDocuments:[],
+ const confirmations=[],context={...documentTabs.get('a'),documentTabs,projectSaves:new Map(),filePath:null,busy:false,gesture:null,shapeSession:null,celGesture:null,closedDocuments:[],pruneDocumentCaches:()=>{},
   $:()=>({open:false}),message:()=>{},flushRecovery:async()=>{},captureDocumentState:()=>({documentId:context.documentId,doc:context.doc,dirty:context.dirty}),
   restoreDocumentState:state=>{Object.assign(context,state);documentTabs.active=state.documentId;},enterEmptyState:()=>{throw new Error('不应关闭全部标签');},
   modal:async()=>{confirmations.push(context.documentId);return context.answer;},setDirty:value=>{context.dirty=value;}};

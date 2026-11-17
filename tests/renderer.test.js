@@ -1,3 +1,4 @@
+import {compositePixel,BLEND_MODES} from '../src/compositor.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {FrameCache,compositeRegion} from '../src/renderer.js';
@@ -49,4 +50,13 @@ test('reference partial composition samples transformed source directly and matc
 test('missing external reference samples transparent without allocating a placeholder source image',()=>{
  const doc=createDocument(4,4);doc.layers[0].type='reference';doc.layers[0].reference={path:'missing.png',width:100000,height:100000,x:0,y:0,scale:1};
  assert.ok(composite(doc,0,{includeReference:true}).every(value=>value===0));
+});
+
+test('single-pixel output equals full composition for all blend modes and nested isolated groups',()=>{
+ const doc=createDocument(7,5);addLayer(doc,0);for(let i=0;i<35;i++){doc.frames[0].cels[0][i]=(i*4131127|127)>>>0;doc.frames[0].cels[1][i]=(i*18431127|219)>>>0;}setCelProperty(doc,0,1,{x:-1,y:1,opacity:63});const group=groupLayer(doc,1);doc.layers[group].opacity=73;
+ for(const [mode]of BLEND_MODES){doc.layers[1].blendMode=mode;const full=composite(doc,0);for(let y=0;y<5;y++)for(let x=0;x<7;x++){const i=(y*7+x)*4;assert.deepEqual(compositePixel(doc,0,x,y),full.slice(i,i+4));}}
+});
+test('single-pixel indexed composition preserves transparency and reference inclusion settings',()=>{
+ const doc=createDocument(2,1);doc.colorMode='indexed';doc.transparentIndex=0;doc.palette=['#00000000','#12345680'];doc.frames[0].indices=[Uint8Array.of(0,1)];doc.layers.push({id:2,type:'reference',reference:{...encodeReference(1,1,Uint8Array.of(255,0,0,255)),x:0,y:0,scale:1},visible:true,opacity:100});doc.frames[0].cels.push([0,0]);doc.frames[0].indices.push(null);
+ for(const includeReference of [false,true]){const full=composite(doc,0,{includeReference});for(let x=0;x<2;x++)assert.deepEqual(compositePixel(doc,0,x,0,{includeReference}),full.slice(x*4,x*4+4));}
 });
