@@ -14,6 +14,8 @@ pub struct RecentFile {
     pub path: String,
     pub name: String,
     pub opened_at: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_stamp: Option<String>,
 }
 
 pub struct Files {
@@ -169,6 +171,7 @@ impl Files {
                 path: text,
                 name: basename(&path),
                 opened_at: chrono::Utc::now().timestamp_millis(),
+                file_stamp: None,
             },
         );
         self.recent.truncate(20);
@@ -183,7 +186,13 @@ impl Files {
                     .is_some_and(|value| crate::document_save::FORMATS.iter().any(|extension| value.eq_ignore_ascii_case(extension)))
         });
         self.persist_recent()?;
-        Ok(self.recent.clone())
+        let mut entries = self.recent.clone();
+        for entry in &mut entries {
+            let metadata = fs::metadata(&entry.path)?;
+            let modified = metadata.modified()?.duration_since(std::time::UNIX_EPOCH).map_err(|e| error(&e.to_string()))?;
+            entry.file_stamp = Some(format!("{}:{}", metadata.len(), modified.as_nanos()));
+        }
+        Ok(entries)
     }
 
     pub fn remove_recent(&mut self, path: &str) -> io::Result<Vec<RecentFile>> {
@@ -331,6 +340,19 @@ impl Files {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recent_file_stamp_tracks_content_without_persisting_derived_metadata() {
+        let root = tempfile::tempdir().unwrap();
+        let mut files = Files::new(root.path().join("settings")).unwrap();
+        let path = root.path().join("preview.png");
+        fs::write(&path, b"one").unwrap();files.add_recent(&path).unwrap();
+        let first = files.recent().unwrap()[0].file_stamp.clone().unwrap();
+        fs::write(&path, b"changed size").unwrap();
+        assert_ne!(files.recent().unwrap()[0].file_stamp.as_ref().unwrap(), &first);
+        let disk: Value = serde_json::from_slice(&fs::read(files.root.join("recent-files.json")).unwrap()).unwrap();
+        assert!(disk[0].get("fileStamp").is_none());
+    }
 
     #[test]
     fn ase_descriptors_use_binary_pixels_and_preserve_warnings() {

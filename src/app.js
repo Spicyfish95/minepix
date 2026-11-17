@@ -1,3 +1,4 @@
+import {layerThumbnailPixels} from './thumbnails.js';
 import {prepareDocumentPixels,releaseIndexedCaches,pixelStorageStats,documentJSON} from './pixel-storage.js';
 import {assertProjectCapacity} from './project-capacity.js';
 import {initFormLayout} from './form-layout.js';
@@ -863,7 +864,7 @@ async function importPalette(){
 async function exportPalette(){try{if(await saveData(paletteBase64(encodePalette(doc.palette)),'pix',doc.name+'-palette',true))message('色板已导出');}catch(error){showError('色板导出失败：'+error.message);}}
 function imageCanvas(data,w=doc.width,h=doc.height){const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(data),w,h),0,0);return c;}
 function frameCanvas(index,includeReference=false){const hasReferences=doc.layers.some(isReference);frameCache.budget=(hasReferences?32:64)*1024*1024;const cache=includeReference&&hasReferences?referenceCache:frameCache,entry=cache.get(doc,index);if(!entry.canvas){entry.canvas=document.createElement('canvas');entry.canvas.width=doc.width;entry.canvas.height=doc.height;}if(entry.canvasRevision!==entry.revision){const ctx=entry.canvas.getContext('2d'),image=new ImageData(entry.rgba,doc.width,doc.height),r=entry.canvasRevision&&entry.updated;ctx.putImageData(image,0,0,...(r?[r.x,r.y,r.w,r.h]:[]));entry.canvasRevision=entry.revision;}return entry.canvas;}
-function pixelsCanvas(data){const rgba=new Uint8ClampedArray(doc.width*doc.height*4);data.forEach((p,i)=>{rgba[i*4]=p>>>24;rgba[i*4+1]=p>>>16&255;rgba[i*4+2]=p>>>8&255;rgba[i*4+3]=p&255;});return imageCanvas(rgba);}
+function layerMini(index){const mini=imageCanvas(layerThumbnailPixels(doc,fi,index),32,32);mini.className='mini';return mini;}
 function place(){applyCanvasBackground(wrap,doc.canvasBackground||DEFAULT_CANVAS_BACKGROUND,zoom);wrap.style.left=pan.x+'px';wrap.style.top=pan.y+'px';wrap.style.width=doc.width*zoom+'px';wrap.style.height=doc.height*zoom+'px';canvas.style.width=doc.width*zoom+'px';canvas.style.height=doc.height*zoom+'px';$('zoom-label').textContent=Math.round(zoom*100)+'%';updateBrushPreview();}
 function fit(){const r=viewport.getBoundingClientRect();zoom=Math.max(.25,Math.min(24,Math.floor(Math.min((r.width-90)/doc.width,(r.height-65)/doc.height)*4)/4));pan={x:Math.round((r.width-doc.width*zoom)/2),y:Math.round((r.height-doc.height*zoom)/2)};place();draw();}
 function scale(factor,anchor=null){const old=zoom;zoom=Math.max(.25,Math.min(48,zoom*factor));const r=viewport.getBoundingClientRect();const p=anchor||{x:r.width/2,y:r.height/2};pan={x:p.x-(p.x-pan.x)*zoom/old,y:p.y-(p.y-pan.y)*zoom/old};place();drawOverlay();}
@@ -1080,7 +1081,7 @@ previewArea.addEventListener('wheel',event=>{event.preventDefault();const r=prev
 previewArea.addEventListener('pointerdown',event=>{if(event.target.closest('button')||event.button!==0&&event.button!==1)return;event.preventDefault();previewDrag={pointerId:event.pointerId,x:event.clientX,y:event.clientY,pan:{...previewPan}};previewArea.setPointerCapture(event.pointerId);});
 previewArea.addEventListener('pointermove',event=>{if(previewDrag?.pointerId!==event.pointerId)return;previewPan={x:previewDrag.pan.x+event.clientX-previewDrag.x,y:previewDrag.pan.y+event.clientY-previewDrag.y};drawPreview();});
 for(const type of ['pointerup','pointercancel'])previewArea.addEventListener(type,event=>{if(previewDrag?.pointerId!==event.pointerId)return;previewDrag=null;if(previewArea.hasPointerCapture(event.pointerId))previewArea.releasePointerCapture(event.pointerId);});
-function layerThumbnail(index){if(isReference(doc.layers[index])){const ref=doc.layers[index].reference;if(!thumbCache.has(ref)){const mini=pixelsCanvas(rasterReference(doc,index,fi));mini.className='mini';thumbCache.set(ref,mini);}return thumbCache.get(ref);}if(isGroup(doc.layers[index])){const key=doc.layers[index];if(!thumbCache.has(key)){const mini=document.createElement('span');mini.className='mini group-icon';mini.innerHTML=iconMarkup('layers');thumbCache.set(key,mini);}return thumbCache.get(key);}const cel=doc.frames[fi].celProperties?.[doc.layers[index].id]||doc.frames[fi].cels[index];if(!thumbCache.has(cel)){const mini=pixelsCanvas(celPixels(doc,fi,index));mini.className='mini';thumbCache.set(cel,mini);}return thumbCache.get(cel);}
+function layerThumbnail(index){if(isReference(doc.layers[index])){const ref=doc.layers[index].reference;if(!thumbCache.has(ref)){const mini=layerMini(index);thumbCache.set(ref,mini);}return thumbCache.get(ref);}if(isGroup(doc.layers[index])){const key=doc.layers[index];if(!thumbCache.has(key)){const mini=document.createElement('span');mini.className='mini group-icon';mini.innerHTML=iconMarkup('layers');thumbCache.set(key,mini);}return thumbCache.get(key);}const cel=doc.frames[fi].celProperties?.[doc.layers[index].id]||doc.frames[fi].cels[index];if(!thumbCache.has(cel)){const mini=layerMini(index);thumbCache.set(cel,mini);}return thumbCache.get(cel);}
 function navigateLayer(event,index){
   if(event.target!==event.currentTarget||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey||event.isComposing)return;
   const keys=['ArrowUp','ArrowDown','Home','End','ArrowLeft','ArrowRight','Enter',' '];
@@ -1702,7 +1703,7 @@ function thumbCanvas(thumb){
 function recentThumb(thumb){const canvas=thumbCanvas(thumb);canvas.className='welcome-recent-thumb recent-thumb';return canvas;}
 function loadRecentThumbs(){
  if(!window.desktop?.recentThumbs)return;
- window.desktop.recentThumbs().then(list=>{welcomeThumbs=new Map(list.map(item=>[item.path,item]));welcomeRecentKey='';if(!documentTabs.items.length)renderWelcomeRecent();},()=>{});
+ window.desktop.recentThumbs(createWelcomeState(welcomeEntries).recent.map(entry=>entry.path)).then(list=>{welcomeThumbs=new Map(list.map(item=>[item.path,item]));welcomeRecentKey='';if(!documentTabs.items.length)renderWelcomeRecent();},()=>{});
 }
 function renderWelcomeRecent(){
  const state=createWelcomeState(welcomeEntries),key=JSON.stringify(state.recent)+'|'+welcomeThumbs.size;
@@ -1763,8 +1764,8 @@ async function recentDialog(){
    paths.replaceChildren(...(entries.length?entries.map((entry,i)=>new Option(entry.path,String(i))):[new Option('暂无最近文件','')]));
    paths.disabled=clear.disabled=submit.disabled=!entries.length;syncPreview();
   };
-  paths.onchange=syncPreview;syncEntries();
-  window.desktop.recentThumbs().then(list=>{for(const item of list)thumbs.set(item.path,item);syncPreview();},syncPreview);
+  const loadPreview=()=>{syncPreview();const entry=entries[+paths.value];if(entry)window.desktop.recentThumbs([entry.path]).then(list=>{for(const item of list)thumbs.set(item.path,item);syncPreview();},syncPreview);};
+  paths.onchange=loadPreview;syncEntries();loadPreview();
   clear.onclick=async()=>{await window.desktop.clearRecent();entries.length=0;syncEntries();welcomeEntries=[];welcomeThumbs.clear();welcomeRecentKey='';renderWelcomeRecent();};
  });
  if(values&&entries.length){const file=await window.desktop.openRecent(entries[+values.index].path);await importFile(file,true);}

@@ -1,3 +1,4 @@
+import {createThumbnailCache} from './thumbnails.js';
 import {createExportClient} from './export-client.js';
 import {packBinaryPacket} from './binary-packet.js';
 import {packDocumentWire,unpackDocumentWire} from './document-wire.js';
@@ -31,11 +32,11 @@ const handlers=new Map(),current=getCurrentWindow();
 const dispatch=(name,payload)=>{for(const callback of handlers.get(name)||[])callback(payload);};
 const subscribe=(name,callback)=>{if(!handlers.has(name))handlers.set(name,new Set());handlers.get(name).add(callback);return()=>handlers.get(name).delete(callback);};
 const invokeBackend=(command,args)=>invoke(command,args).catch(error=>{throw error instanceof Error?error:new Error(String(error));});
-async function readProjectPacket(filePath,record=true){
+async function readProjectPacket(filePath,record=true,references=true){
  if(record)dispatch('file:loading',true);
  try{
   const packet=unpackProjectReadPacket(await invokeBackend('read_project_packed',{filePath,record}),{typed:true});
-  packet.document=await loadReferenceFiles(packet.document,path=>readReference(path));return packet;
+  if(references)packet.document=await loadReferenceFiles(packet.document,path=>readReference(path));return packet;
  }finally{if(record)dispatch('file:loading',false);}
 }
 const readProject=async(filePath,record=true)=>(await readProjectPacket(filePath,record)).document;
@@ -118,18 +119,16 @@ export async function initializeDesktop(){
   saveImage:(filePath,encoded)=>exports.image({filePath,...encoded})
  });
  window.addEventListener('unload',()=>projectSaveClient.dispose(),{once:true});
- bridge.recentThumbs=async()=>{
-  const {composite}=await import('./model.js'),entries=await call('recentFiles'),size=32,thumbnails=[];
-  for(const {path}of entries){
-   let doc,bytes;
-   if(/\.(pix|ase|aseprite)$/i.test(path)){doc=await readProject(path,false);const source=composite(doc,0);bytes=new Uint8Array(source.buffer,source.byteOffset,source.byteLength);}
-   else{doc=await readReference(path);bytes=Uint8Array.from(atob(doc.data),value=>value.charCodeAt(0));}
-   const pixels=new Uint8Array(size*size*4);
-   for(let y=0;y<size;y++)for(let x=0;x<size;x++){const from=(Math.min(doc.height-1,Math.floor(y*doc.height/size))*doc.width+Math.min(doc.width-1,Math.floor(x*doc.width/size)))*4;pixels.set(bytes.subarray(from,from+4),(y*size+x)*4);}
-   thumbnails.push({path,width:doc.width,height:doc.height,size,pixels:btoa(String.fromCharCode(...pixels))});
-  }
-  return thumbnails;
- };
+ const recentThumbnails=createThumbnailCache({storage:localStorage,generate:async path=>{
+  const {composite}=await import('./model.js'),size=32;
+  let doc,bytes;
+  if(/\.(pix|ase|aseprite)$/i.test(path)){doc=(await readProjectPacket(path,false,false)).document;const source=composite(doc,0);bytes=new Uint8Array(source.buffer,source.byteOffset,source.byteLength);}
+  else{doc=await readReference(path);bytes=Uint8Array.from(atob(doc.data),value=>value.charCodeAt(0));}
+  const pixels=new Uint8Array(size*size*4);
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){const from=(Math.min(doc.height-1,Math.floor(y*doc.height/size))*doc.width+Math.min(doc.width-1,Math.floor(x*doc.width/size)))*4;pixels.set(bytes.subarray(from,from+4),(y*size+x)*4);}
+  return{path,width:doc.width,height:doc.height,size,pixels:btoa(String.fromCharCode(...pixels))};
+ }});
+ bridge.recentThumbs=async paths=>recentThumbnails(await call('recentFiles'),paths);
  bridge.exportAnimation=options=>exports.animation(options);
  bridge.exportAseprite=(document,destination)=>exports.aseprite(document,destination);
  bridge.save=(...args)=>exports.save(...args);
