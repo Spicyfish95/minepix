@@ -125,7 +125,20 @@ impl RecoveryStore {
         }
     }
 
-    pub fn write(&self, record: RecoveryInput) -> io::Result<()> {
+    pub fn write(&self, mut record: RecoveryInput) -> io::Result<()> {
+        let data=std::mem::take(&mut record.data);
+        self.write_bytes(record,data.as_bytes())
+    }
+
+    pub fn write_packed(&self, record:RecoveryInput,payloads:&[&[u8]])->io::Result<()>{
+        if !record.dirty||record.file_path.as_ref().is_none_or(|path|path.is_empty()){return self.remove(&record.id);}
+        if payloads.len()!=1{return Err(invalid("恢复快照缺少项目数据"));}
+        let packed=crate::project::PackedSave::parse(payloads[0])?;
+        let bytes=packed.encode(packed.name())?;
+        self.write_bytes(record,&bytes)
+    }
+
+    fn write_bytes(&self, record: RecoveryInput, data:&[u8]) -> io::Result<()> {
         let Some(file_path) = record
             .file_path
             .filter(|path| !path.is_empty() && record.dirty)
@@ -143,7 +156,7 @@ impl RecoveryStore {
                 result?;
             }
         };
-        write_atomic(&folder.join("current.recovery"), record.data.as_bytes())?;
+        write_atomic(&folder.join("current.recovery"), data)?;
         write_json(
             &folder.join("metadata.json"),
             &RecoveryMetadata {
@@ -210,19 +223,48 @@ impl RecoveryStore {
             return Err(invalid("没有符合条件的恢复项目"));
         }
         metadata.previous = folder.join("previous.recovery").is_file();
-        let data = String::from_utf8(read_file(&folder.join(if previous {
+        let bytes = read_file(&folder.join(if previous {
             "previous.recovery"
         } else {
             "current.recovery"
-        }))?)
-        .map_err(|_| invalid("恢复数据不是 UTF-8"))?;
+        }))?;
+        let data = if bytes.starts_with(b"MINEPIX\0") { serde_json::to_string(&crate::project::decode(&bytes)?)? }
+            else {String::from_utf8(bytes).map_err(|_|invalid("恢复数据不是 UTF-8"))?};
         Ok(RecoveryDocument { metadata, data })
+    }
+
+    pub fn read_packed(&self,id:&str,previous:bool)->io::Result<Vec<u8>>{
+        let folder=self.folder(id)?;
+        let mut metadata:RecoveryMetadata=serde_json::from_slice(&read_file(&folder.join("metadata.json"))?)?;
+        if metadata.file_path.is_empty()||!metadata.dirty{return Err(invalid("没有符合条件的恢复项目"));}
+        metadata.previous=previous;
+        let source=read_file(&folder.join(if previous{"previous.recovery"}else{"current.recovery"}))?;
+        let pixels=if source.starts_with(b"MINEPIX\0"){crate::project::read_transfer(&source)?}
+            else {crate::project::document_read_transfer(&serde_json::from_slice(&source)?,serde_json::Value::Null)?};
+        crate::binary_packet::encode(serde_json::to_value(metadata)?,&[&pixels])
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn packed_recovery_rotates_binary_and_preserves_last_valid_snapshot_on_bad_input(){
+        let root=tempfile::tempdir().unwrap();let store=RecoveryStore::new(root.path().join("recovery"));
+        let request=||RecoveryInput{id:"binary-1".into(),name:"恢复".into(),file_path:Some("C:/a.pix".into()),dirty:true,data:String::new()};
+        let packed=|pixel:u32|{
+            let metadata=serde_json::to_vec(&serde_json::json!({"document":{"format":"pixel-studio","frames":[{"cels":[null]}]},"blocks":[{"path":"/frames/0/cels/0","kind":"u32","count":1}],"name":"恢复","saveAs":false})).unwrap();
+            let mut bytes=b"MPXSAVE1".to_vec();bytes.extend_from_slice(&(metadata.len() as u32).to_le_bytes());bytes.extend_from_slice(&metadata);bytes.extend_from_slice(&pixel.to_le_bytes());bytes
+        };
+        let first=packed(0xff0000ff);store.write_packed(request(),&[&first]).unwrap();let second=packed(0x00ff00ff);store.write_packed(request(),&[&second]).unwrap();
+        let folder=root.path().join("recovery/binary-1");let current=read_file(&folder.join("current.recovery")).unwrap();assert!(current.starts_with(b"MINEPIX\0"));
+        assert_eq!(crate::project::decode(&current).unwrap()["frames"][0]["cels"][0][0],0x00ff00ffu32);
+        assert_eq!(crate::project::decode(&read_file(&folder.join("previous.recovery")).unwrap()).unwrap()["frames"][0]["cels"][0][0],0xff0000ffu32);
+        assert!(store.write_packed(request(),&[b"bad"]).is_err());assert_eq!(read_file(&folder.join("current.recovery")).unwrap(),current);
+        let wire=store.read_packed("binary-1",false).unwrap();let packet=crate::binary_packet::Packet::parse(&wire).unwrap();assert_eq!(packet.metadata["id"],"binary-1");assert!(packet.payloads[0].starts_with(b"MPXREAD1"));
+        store.write(RecoveryInput{data:"{\"format\":\"pixel-studio\",\"frames\":[]}".into(),..request()}).unwrap();assert!(store.read_packed("binary-1",false).is_ok());
+    }
 
     #[test]
     fn clean_recovery_request_accepts_missing_payload() {

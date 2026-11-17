@@ -1,4 +1,5 @@
 pub mod aseprite;
+mod binary_packet;
 mod diagnostics;
 mod document_save;
 pub mod differential;
@@ -656,6 +657,19 @@ fn recovery_write(record: RecoveryInput, state: tauri::State<Backend>) -> Result
 }
 
 #[tauri::command]
+async fn recovery_write_packed(request: tauri::ipc::Request<'_>, state: tauri::State<'_, Backend>) -> Result<(), String> {
+    let tauri::ipc::InvokeBody::Raw(bytes)=request.body() else{return Err("恢复保存需要原始字节".into())};
+    let packet=binary_packet::Packet::parse(bytes).map_err(|error|error.to_string())?;
+    let record:RecoveryInput=serde_json::from_value(packet.metadata).map_err(|error|error.to_string())?;
+    state.recovery.lock().unwrap().write_packed(record,&packet.payloads).map_err(|error|error.to_string())
+}
+
+#[tauri::command]
+async fn recovery_load_packed(id:String,previous:bool,state:tauri::State<'_,Backend>)->Result<tauri::ipc::Response,String>{
+    state.recovery.lock().unwrap().read_packed(&id,previous).map(tauri::ipc::Response::new).map_err(|error|error.to_string())
+}
+
+#[tauri::command]
 fn recovery_list(state: tauri::State<Backend>) -> Result<Vec<RecoveryMetadata>, String> {
     state
         .recovery
@@ -797,6 +811,8 @@ pub fn run() {
             read_project_packed,
             save_project_packed,
             recovery_write,
+            recovery_write_packed,
+            recovery_load_packed,
             recovery_list,
             recovery_for_path,
             recovery_discard,

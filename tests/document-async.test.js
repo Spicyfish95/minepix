@@ -116,7 +116,7 @@ test('后台文档恢复写入使用其自身路径和内容，不清除前台�
  context.clearTimeout=()=>{cleared=true;};
  vm.runInContext(section('async function flushRecovery(','window.addEventListener(\'beforeunload\''),context);
  await context.flushRecovery(state);
- assert.equal(record.id,'a');assert.equal(record.filePath,'a.pix');assert.equal(JSON.parse(record.data).name,'A');assert.equal(cleared,false);
+ assert.equal(record.id,'a');assert.equal(record.filePath,'a.pix');assert.equal(record.document.name,'A');assert.equal(cleared,false);
 });
 test('最近文件首页按选中的路径请求，不随其他记录的顺序变化',async()=>{
  const context={welcomeEntries:[{path:'a.pix'},{path:'b.pix'}],window:{desktop:{openRecent:async path=>{assert.equal(path,'b.pix');return{filePath:path};}}},importFile:async file=>assert.equal(file.filePath,'b.pix')};
