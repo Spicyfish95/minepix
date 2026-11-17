@@ -1,3 +1,4 @@
+import {floodSpans} from './flood-spans.js';
 import {tiledPoint} from './tiled-mode.js';
 import {symmetryPoints} from './symmetry.js';
 import {colorMatches} from './color-replace.js';
@@ -95,19 +96,11 @@ export function appendPixelPerfect(points,point){
 
 export function paintFill(doc,pixels,x,y,color,options,selection=null){
   ({x,y}=tiledPoint(doc,x,y,options.tiledMode));
-  const base=options.base||[...pixels],target=base[y*doc.width+x],seen=new Uint8Array(pixels.length),queue=[y*doc.width+x];
+  const base=options.base||pixels.slice(),target=base[y*doc.width+x];
   const inside=(px,py)=>px>=0&&py>=0&&px<doc.width&&py<doc.height&&selectionContains(selection,px,py);
   if(!inside(x,y))return;
   const matches=value=>colorMatches(value,target,options.fillTolerance||0);
   const put=i=>{if(options.ink==='shading'&&!options.erasing){if(options.opacity>0&&options.shade)pixels[i]=options.shade(base[i],i);options.touched?.add(i);return;}const value=applyInk(base[i],color,options.erasing?'erase':options.ink,options.opacity);pixels[i]=options.quantize?options.quantize(value,i,color):value;options.touched?.add(i);};
   if(options.fillContiguous===false){for(let i=0;i<base.length;i++)if(inside(i%doc.width,Math.floor(i/doc.width))&&matches(base[i]))put(i);return;}
-  seen[queue[0]]=1;
-  for(let n=0;n<queue.length;n++){
-    const i=queue[n],px=i%doc.width,py=Math.floor(i/doc.width);
-    put(i);
-    for(let [nx,ny]of[[px-1,py],[px+1,py],[px,py-1],[px,py+1]]){
-      ({x:nx,y:ny}=tiledPoint(doc,nx,ny,options.tiledMode));
-      const next=ny*doc.width+nx;if(inside(nx,ny)&&!seen[next]&&matches(base[next])){seen[next]=1;queue.push(next);}
-    }
-  }
+  floodSpans(doc.width,doc.height,x,y,(px,py)=>inside(px,py)&&matches(base[py*doc.width+px]),(_x,_y,i)=>put(i),options.tiledMode);
 }
