@@ -1,4 +1,4 @@
-import {isPixelArray} from './pixel-storage.js';
+import {isPixelArray,pixelPlane,prepareDocumentPixels} from './pixel-storage.js';
 import {BRIGHT24} from './builtin-palette.js';
 import {validateCelProperties,celViewLocation} from './cel-properties.js';
 import {validateSymmetryAxes} from './symmetry.js';
@@ -24,7 +24,7 @@ export function createDocument(width=32,height=32,name='未命名') {
   return { format:'pixel-studio',version:PROJECT_VERSION,requiredFeatures:[],slices:[],name,width,height,palette:[...PALETTE],tags:[],layers:[{id:1,name:'图层 1',visible:true,locked:false,opacity:100}],frames:[{duration:100,cels:[new Array(width*height).fill(0)]}] };
 }
 export function validateDocument(input) {
-  input=normalizeProject(input);
+  input=normalizeProject(input,{copyPixels:false});
   if (!input || input.format!=='pixel-studio' || input.version!==PROJECT_VERSION || !Array.isArray(input.layers) || !Array.isArray(input.frames)) throw new Error('不是受支持的 MinePix 项目（.pix；不支持 .ase / .aseprite）。');
   assertCapacity(input.width,input.height,input.layers.length,input.frames.length);
   const {width,height}=input;
@@ -39,21 +39,24 @@ export function validateDocument(input) {
   validateLayerTree(layers);
   if(layers.filter(isBackground).length>1||layers.some((l,i)=>isBackground(l)&&(i!==0||l.parentId!==undefined||l.opacity!==100||l.blendMode&&l.blendMode!=='normal'||!Number.isInteger(l.clearColor)||l.clearColor<0||l.clearColor>0xffffffff||(l.clearColor&255)!==255)))throw new Error('背景层必须位于最底层、不透明且使用正常混合');
   const references=validateReferences(input.references??[]);
+  let lazy=false;const copies=new Map(),copyPlane=values=>{if(!copies.has(values))copies.set(values,values.slice());return copies.get(values);};
   const frames=input.frames.map(f=>{
     if(f?.links!==undefined&&(typeof f.links!=='object'||!f.links||Array.isArray(f.links)))throw new Error('cel链接表无效');
     if (!f || !Number.isFinite(f.duration) || f.duration<20 || f.duration>10000 || !Array.isArray(f.cels) || f.cels.length!==layers.length) throw new Error('无效的帧数据');
     const celProperties=validateCelProperties(f.celProperties,{layers,width,height});
-    return {...(celProperties?{celProperties}:{}),...(f.indices!==undefined?{indices:Array.isArray(f.indices)?f.indices.map(a=>isPixelArray(a)?a.slice():a):f.indices}:{}),...(f.links?{links:{...f.links}}:{}),duration:Math.round(f.duration),cels:f.cels.map((c,l)=>{
+    return {...(celProperties?{celProperties}:{}),...(f.indices!==undefined?{indices:Array.isArray(f.indices)?f.indices.map(a=>isPixelArray(a)?copyPlane(a):a):f.indices}:{}),...(f.links?{links:{...f.links}}:{}),duration:Math.round(f.duration),cels:Array.from({length:f.cels.length},(_,l)=>{
+      const plane=pixelPlane(f,l),c=plane.values,expected=(celProperties?.[layers[l].id]?.width||width)*(celProperties?.[layers[l].id]?.height||height);
+      if(plane.derived){lazy=true;if(!isPixelArray(f.indices?.[l])||f.indices[l].length!==expected)throw new Error('索引像素尺寸无效');if(!c)return null;}
       if(!isPixelArray(c)||c.length!==(celProperties?.[layers[l].id]?.width||width)*(celProperties?.[layers[l].id]?.height||height)||!c.every(v=>Number.isInteger(v)&&v>=0&&v<=0xffffffff)) throw new Error('像素数据损坏');
       if(isBackground(layers[l])&&c.some(v=>(v&255)!==255))throw new Error('背景像素必须不透明');
       if(isGroup(layers[l])&&c.some(v=>v))throw new Error('图层组不能包含 cel 像素');
-      return c.slice();
+      return copyPlane(c);
     })};
   });
   const palette=Array.isArray(input.palette)?input.palette.filter(c=>/^#[a-f0-9]{6}(?:[a-f0-9]{2})?$/i.test(c)).slice(0,256):[];
   if(input.colorMode==='indexed'&&(!Array.isArray(input.palette)||!input.palette.length||input.palette.length>256||palette.length!==input.palette.length))throw new Error('索引色板无效');
   const normalizedTags=validateTags(input.tags,frames.length),previewTerrain=validatePreviewTerrain(input.previewTerrain);
-  const result={...(input.symmetryAxes?{symmetryAxes:validateSymmetryAxes(input.symmetryAxes,width,height)}:{}),...(input.colorMode!==undefined?{colorMode:input.colorMode}:{}),...(input.canvasBackground?{canvasBackground:validateCanvasBackground(input.canvasBackground)}:{}),...(previewTerrain?{previewTerrain}:{}),...(input.transparentIndex!==undefined?{transparentIndex:input.transparentIndex}:{}),...(references.length?{references}:{}),format:'pixel-studio',version:PROJECT_VERSION,requiredFeatures:[...new Set([...input.requiredFeatures,...(input.slices?.some(s=>s.keys)?['slice-keyframes']:[]),...(references.length?['reference-board']:[]),...(layers.some(l=>l.blendMode)?['layer-blending']:[]),...(layers.some(isGroup)?['layer-groups']:[]),...(layers.some(l=>isReference(l)||isBackground(l))?['layer-types']:[]),...(layers.some(isTileset)?['tileset']:[]),...(frames.some(f=>f.celProperties)?['cel-properties']:[]),...(frames.some(f=>f.links)||layers.some(l=>l.continuous)?['linked-cels']:[]),...(input.colorMode&&input.colorMode!=='rgba'?['color-modes']:[])])],slices:validateSlices(input.slices,width,height,frames.length),name:String(input.name||'未命名').slice(0,120),width,height,layers,frames,palette:palette.length?palette:[...PALETTE],tags:normalizedTags};validateColorMode(result);return hydrateLinks(result,true);
+  const result={...(input.symmetryAxes?{symmetryAxes:validateSymmetryAxes(input.symmetryAxes,width,height)}:{}),...(input.colorMode!==undefined?{colorMode:input.colorMode}:{}),...(input.canvasBackground?{canvasBackground:validateCanvasBackground(input.canvasBackground)}:{}),...(previewTerrain?{previewTerrain}:{}),...(input.transparentIndex!==undefined?{transparentIndex:input.transparentIndex}:{}),...(references.length?{references}:{}),format:'pixel-studio',version:PROJECT_VERSION,requiredFeatures:[...new Set([...input.requiredFeatures,...(input.slices?.some(s=>s.keys)?['slice-keyframes']:[]),...(references.length?['reference-board']:[]),...(layers.some(l=>l.blendMode)?['layer-blending']:[]),...(layers.some(isGroup)?['layer-groups']:[]),...(layers.some(l=>isReference(l)||isBackground(l))?['layer-types']:[]),...(layers.some(isTileset)?['tileset']:[]),...(frames.some(f=>f.celProperties)?['cel-properties']:[]),...(frames.some(f=>f.links)||layers.some(l=>l.continuous)?['linked-cels']:[]),...(input.colorMode&&input.colorMode!=='rgba'?['color-modes']:[])])],slices:validateSlices(input.slices,width,height,frames.length),name:String(input.name||'未命名').slice(0,120),width,height,layers,frames,palette:palette.length?palette:[...PALETTE],tags:normalizedTags};validateColorMode(result,{derived:lazy});hydrateLinks(result,true,{indicesOnly:lazy});return lazy?prepareDocumentPixels(result):result;
 }
 export function validateTags(tags=[],frameCount){
   if(!Array.isArray(tags)||tags.length>256)throw new Error('动画标签无效（最多 256 个）');

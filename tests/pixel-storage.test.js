@@ -35,3 +35,18 @@ test('indexed source packets rebuild RGBA on demand without a transmitted RGBA p
  const json=new TextEncoder().encode(JSON.stringify(meta)),wire=new Uint8Array(12+json.length+3);wire.set(new TextEncoder().encode('MPXREAD1'));new DataView(wire.buffer).setUint32(8,json.length,true);wire.set(json,12);wire.set([2,0,3],12+json.length);
  const doc=unpackProjectReadPacket(wire).document;assert.equal(pixelStorageStats(doc).rgbaBytes,0);assert.deepEqual([...doc.frames[0].cels[0]],[0xff0000ff,0,0x00ff00ff]);assert.equal(doc.frames[0].indices[0][0],2);validateDocument(doc);
 });
+
+test('validation preserves lazy indexed planes and source independence without invoking RGBA getters',()=>{
+ const doc=prepareDocumentPixels(indexed());addFrame(doc,0,true);linkCels(doc,0,[0,1]);prepareDocumentPixels(doc);releaseIndexedCaches(doc);
+ const result=validateDocument(doc);assert.equal(pixelStorageStats(doc).rgbaBytes,0);assert.equal(pixelStorageStats(result).rgbaBytes,0);assert.equal(result.frames[0].indices[0],result.frames[1].indices[0]);assert.notEqual(result.frames[0].indices[0],doc.frames[0].indices[0]);
+ result.frames[0].indices[0][0]=2;assert.equal(doc.frames[0].indices[0][0],1);assert.equal(result.frames[0].cels[0][0],0xff0000ff);
+});
+test('lazy validation rejects bad slots, wrong source lengths, mismatched cached RGBA and conflicting links',()=>{
+ let doc=prepareDocumentPixels(indexed());doc.frames[0].indices[0][0]=255;assert.throws(()=>validateDocument(doc),/索引/);
+ doc=prepareDocumentPixels(indexed());doc.frames[0].indices[0]=Uint8Array.of(1);assert.throws(()=>validateDocument(doc),/尺寸/);
+ doc=prepareDocumentPixels(indexed());doc.frames[0].cels[0][0]=0xffffffff;assert.throws(()=>validateDocument(doc),/缓存不一致/);
+ doc=indexed();addFrame(doc,0,true);linkCels(doc,0,[0,1]);prepareDocumentPixels(doc);releaseIndexedCaches(doc);doc.frames[1].indices[0]=Uint8Array.of(2,0,3);assert.throws(()=>validateDocument(doc),/不一致/);
+});
+test('plain validation copies each shared source only once and retains input isolation',()=>{
+ const doc=createDocument(4,4);doc.frames.push({...doc.frames[0],cels:[doc.frames[0].cels[0]]});const result=validateDocument(doc);assert.equal(result.frames[0].cels[0],result.frames[1].cels[0]);assert.notEqual(result.frames[0].cels[0],doc.frames[0].cels[0]);result.frames[0].cels[0][0]=1;assert.equal(doc.frames[0].cels[0][0],0);
+});

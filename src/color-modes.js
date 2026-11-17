@@ -36,7 +36,7 @@ export function canonicalizeColors(doc,{dither=false,rebuild=false,before=null,c
  doc.requiredFeatures=[...new Set([...doc.requiredFeatures,'color-modes'])];
 }
 
-export function validateColorMode(doc){
+export function validateColorMode(doc,{derived=false}={}){
  const mode=modeOf(doc);
  if(!['rgba','indexed','grayscale'].includes(mode))throw new Error('未知颜色模式');
  if(mode==='indexed'&&(!Number.isInteger(doc.transparentIndex)||doc.transparentIndex<0||doc.transparentIndex>=doc.palette.length))throw new Error('透明索引无效');
@@ -53,8 +53,8 @@ export function validateColorMode(doc){
     const colors=paletteColors(doc,layer);
     if(isBackground(layer)&&(!Number.isInteger(layer.clearIndex)||layer.clearIndex<0||layer.clearIndex>=doc.palette.length||layer.clearColor!==colors[layer.clearIndex]))throw new Error('背景擦除索引无效');
     const indices=frame.indices[l];
-    if(!isPixelArray(indices)||indices.length!==pixels.length||indices.some(i=>!Number.isInteger(i)||i<0||i>=doc.palette.length))throw new Error('索引像素越界');
-    if(pixels.some((v,i)=>v!==colors[indices[i]]))throw new Error('索引与RGBA缓存不一致');
+    if(!isPixelArray(indices)||indices.length!==(pixels?.length??(derived?indices.length:-1))||indices.some(i=>!Number.isInteger(i)||i<0||i>=doc.palette.length))throw new Error('索引像素越界');
+    if(pixels&&pixels.some((v,i)=>v!==colors[indices[i]]))throw new Error('索引与RGBA缓存不一致');
    }else if(mode==='grayscale'&&pixels.some(v=>v!==grayPixel(v)))throw new Error('灰度像素通道不一致');
   }
  }

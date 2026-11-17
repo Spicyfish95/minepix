@@ -58,3 +58,9 @@ export function pixelStorageStats(doc){
  }
  return{indexBytes,rgbaBytes,cachedCels};
 }
+
+export function pixelPlane(frame,layer){
+ const entry=entries.get(frame.cels)?.get(layer);
+ const derived=!!entry&&Object.getOwnPropertyDescriptor(frame.cels,layer)?.get===entry.get;
+ return{derived,values:derived?entry.cache:frame.cels[layer]};
+}
