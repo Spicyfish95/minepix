@@ -36,7 +36,8 @@ export function compositeInto(doc,index,rect,target,{includeReference=false,targ
     paint(children.get(layer.id)||[],groupBuffer,regionWidth,x0,y0);
    }else pixels=reference?null:indexed||doc.frames[index].cels[l];
    const property=celProperty(doc,index,l),bg=isBackground(layer),opacity=layer.opacity/100*property.opacity/100,mode=layer.blendMode||'normal';
-   for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){
+   const bounded=!groupBuffer&&!reference&&!bg,left=bounded?Math.max(x0,Math.ceil(property.x)):x0,top=bounded?Math.max(y0,Math.ceil(property.y)):y0,right=bounded?Math.min(x1,Math.ceil(property.x+property.width)):x1,bottom=bounded?Math.min(y1,Math.ceil(property.y+property.height)):y1;
+   for(let y=top;y<bottom;y++)for(let x=left;x<right;x++){
     let source;
     if(groupBuffer){
      const offset=((y-y0)*regionWidth+x-x0)*4;

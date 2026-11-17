@@ -60,3 +60,16 @@ test('single-pixel indexed composition preserves transparency and reference incl
  const doc=createDocument(2,1);doc.colorMode='indexed';doc.transparentIndex=0;doc.palette=['#00000000','#12345680'];doc.frames[0].indices=[Uint8Array.of(0,1)];doc.layers.push({id:2,type:'reference',reference:{...encodeReference(1,1,Uint8Array.of(255,0,0,255)),x:0,y:0,scale:1},visible:true,opacity:100});doc.frames[0].cels.push([0,0]);doc.frames[0].indices.push(null);
  for(const includeReference of [false,true]){const full=composite(doc,0,{includeReference});for(let x=0;x<2;x++)assert.deepEqual(compositePixel(doc,0,x,0,{includeReference}),full.slice(x*4,x*4+4));}
 });
+
+test('bounded cropped compositing equals an independent canvas bake across modes and clipping',()=>{
+ for(const indexed of [false,true])for(const [mode]of BLEND_MODES){
+  const doc=createDocument(13,9);doc.layers[0].opacity=67;doc.layers[0].blendMode=mode;doc.frames[0].cels[0]=[0x123456ff,0xff008080,0,0xabcdef40,0x00ff00ff,0x112233ff];setCelProperty(doc,0,0,{x:-1,y:4,width:3,height:2,opacity:71});
+  if(indexed){doc.colorMode='indexed';doc.transparentIndex=0;doc.palette=['#00000000','#123456ff','#ff008080','#abcdef40','#00ff00ff','#112233ff'];doc.frames[0].indices=[Uint8Array.of(1,2,0,3,4,5)];}
+  const baked=structuredClone(doc);delete baked.frames[0].celProperties;baked.layers[0].opacity=doc.layers[0].opacity*71/100;baked.frames[0].cels[0]=new Uint32Array(13*9);if(indexed)baked.frames[0].indices=[new Uint8Array(13*9)];
+  for(let y=0;y<2;y++)for(let x=0;x<3;x++)if(x-1>=0){const at=(y+4)*13+x-1;baked.frames[0].cels[0][at]=doc.frames[0].cels[0][y*3+x];if(indexed)baked.frames[0].indices[0][at]=doc.frames[0].indices[0][y*3+x];}
+  assert.deepEqual(composite(doc,0),composite(baked,0));
+ }
+});
+test('background outside its source still paints the clear color',()=>{
+ const doc=createDocument(4,3);doc.layers[0].type='background';doc.layers[0].clearColor=0x123456ff;doc.frames[0].cels[0]=Uint32Array.of(0xff0000ff);setCelProperty(doc,0,0,{x:1,y:1,width:1,height:1});const pixels=composite(doc,0);assert.deepEqual([...pixels.slice(0,4)],[18,52,86,255]);assert.deepEqual([...pixels.slice(20,24)],[255,0,0,255]);
+});
