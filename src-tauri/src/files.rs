@@ -225,9 +225,7 @@ impl Files {
         let path = fs::canonicalize(path)?;
         let source = read_file(&path)?;
         let bytes = if path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("ase") || extension.eq_ignore_ascii_case("aseprite")) {
-            let mut imported = crate::aseprite::decode(&source, &basename(&path))?;
-            let info = json!({"warnings":imported["warnings"].take()});
-            crate::project::document_read_transfer(&imported["doc"], info)?
+            crate::aseprite::decode_transfer(&source, &basename(&path))?
         } else { crate::project::read_transfer(&source)? };
         if record {
             let text = path.to_string_lossy().trim_start_matches("\\\\?\\").to_owned();
@@ -296,7 +294,7 @@ impl Files {
         let extension = target.extension().unwrap_or_default().to_string_lossy().to_ascii_lowercase();
         let bytes = match extension.as_str() {
             "pix" => packed.encode_cached(&name, &mut self.reference_chunks)?,
-            "ase" | "aseprite" => crate::aseprite::encode(&packed.document(&name)?)?,
+            "ase" | "aseprite" => crate::aseprite::encode_packed(packed)?,
             _ => return Err(error("项目保存仅支持 PIX / ASE / ASEPRITE")),
         };
         let previous = self.active.get(window).cloned();
@@ -361,7 +359,8 @@ mod tests {
             let length = u32::from_le_bytes(wire[8..12].try_into().unwrap()) as usize;
             let metadata: Value = serde_json::from_slice(&wire[12..12 + length]).unwrap();
             assert!(metadata["document"]["frames"][0]["cels"][0].is_null());
-            assert!(metadata["blocks"].as_array().unwrap().iter().any(|block| block["kind"] == "u32"));
+            assert_eq!(metadata["info"]["indexedSource"],true);
+            assert!(!metadata["blocks"].as_array().unwrap().iter().any(|block| block["kind"] == "u32"));
             assert!(metadata["blocks"].as_array().unwrap().iter().any(|block| block["kind"] == "u8"));
             assert_eq!(metadata["info"]["warnings"], json!(["未保留块 0xbeef"]));
             assert_eq!(fs::read(path).unwrap(), bytes);

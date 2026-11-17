@@ -1,3 +1,4 @@
+import {prepareDocumentPixels,releaseIndexedCaches,pixelStorageStats,documentJSON} from './pixel-storage.js';
 import {assertProjectCapacity} from './project-capacity.js';
 import {initFormLayout} from './form-layout.js';
 import {readSaveFormat,rememberSaveFormat} from './save-format.js';
@@ -49,7 +50,7 @@ import { exportLayerPlan } from './export-layers.js';
 import { lastProjectExport, defaultExportDirectory, rememberProjectExport } from './project-export.js';
 import { sheetManifestPlan } from './formats/sheet-manifest.js';
 import { EXPORT_SETTINGS_KEY, BUILTIN_EXPORT_PRESETS, exportFamily, pickExportOptions, readExportSettings, restoredExportOptions, rememberExportOptions, saveExportPreset, deleteExportPreset } from './export-settings.js';
-import { exportFormatsFor, formatLabel, encodeCanvas, encodeAnimatedWebp } from './export-formats.js';
+import { exportFormatsFor, formatLabel, encodeCanvasBytes, canvasBytes, encodeAnimatedWebp } from './export-formats.js';
 import { DEFAULT_CANVAS_BACKGROUND, validateCanvasBackground, applyCanvasBackground } from './canvas-background.js';
 import { blurAt } from './blur-tool.js';
 import { sheetLayout } from './formats/sprite-sheet.js';
@@ -1164,7 +1165,7 @@ function reorderSelected(target){
 }
 function celFilled(cel){if(!filledCache.has(cel))filledCache.set(cel,cel.some(p=>p&255));return filledCache.get(cel);}
 function renderTimeline(){
-  const key=documentId+JSON.stringify({layers:doc.layers,frames:doc.frames.map(f=>[f.duration,f.links]),tags:doc.tags,mode:$('timeline-mode').value});if(timelineDocument!==doc){timelineDirtyCells=null;timelineDocument=doc;}if(key===timelineDomKey){syncTimelineSelection();const cells=timelineDirtyCells?[...timelineDirtyCells].map(key=>{const [frame,layer]=key.split(':');return $('timeline-grid').querySelector(`.cel[data-frame="${frame}"][data-layer="${layer}"]`);}).filter(Boolean):$('timeline-grid').querySelectorAll('.cel');for(const cell of cells){const frame=doc.frames[+cell.dataset.frame],layer=+cell.dataset.layer;cell.querySelector('.dot').classList.toggle('filled',celFilled(frame.cels[layer]));}timelineDirtyCells=new Set();return;}timelineDomKey=key;timelineSelectionKey='';timelineDirtyCells=new Set();
+  const key=documentId+JSON.stringify({layers:doc.layers,frames:doc.frames.map(f=>[f.duration,f.links]),tags:doc.tags,mode:$('timeline-mode').value});if(timelineDocument!==doc){timelineDirtyCells=null;timelineDocument=doc;}if(key===timelineDomKey){syncTimelineSelection();const cells=timelineDirtyCells?[...timelineDirtyCells].map(key=>{const [frame,layer]=key.split(':');return $('timeline-grid').querySelector(`.cel[data-frame="${frame}"][data-layer="${layer}"]`);}).filter(Boolean):$('timeline-grid').querySelectorAll('.cel');for(const cell of cells){const frame=doc.frames[+cell.dataset.frame],layer=+cell.dataset.layer;cell.querySelector('.dot').classList.toggle('filled',doc.colorMode==='indexed'&&frame.indices?.[layer]?frame.indices[layer].some(index=>doc.layers[layer].type==='background'||index!==doc.transparentIndex):celFilled(frame.cels[layer]));}timelineDirtyCells=new Set();return;}timelineDomKey=key;timelineSelectionKey='';timelineDirtyCells=new Set();
   const grid=$('timeline-grid');grid.replaceChildren();const head=document.createElement('div');head.className='timeline-row';const label=document.createElement('div');label.className='timeline-label';label.textContent=`${doc.layers.length} 图层 · ${doc.frames.length} 帧`;head.append(label);
   const frameCount=doc.frames.length,tabLaneEnds=[],placedTags=[];
   [...doc.tags].sort((a,b)=>a.from-b.from||a.to-b.to).forEach(tag=>{
@@ -1182,7 +1183,7 @@ function renderTimeline(){
     b.ondrop=e=>{if(!timelineDrag)return;e.preventDefault();const after=e.clientX>=b.getBoundingClientRect().left+b.offsetWidth/2;frameSelection=new Set(timelineDrag);timelineDrag=null;delete b.dataset.drop;reorderSelected(i+(after?1:0));};
     b.ondragend=()=>{timelineDrag=null;uiAll('.frame-head[data-drop]').forEach(el=>delete el.dataset.drop);render();};head.append(b);
   });grid.append(head);
-  const visibleRows=visibleLayerIndices(doc);visibleRows.forEach(index=>{const row=document.createElement('div');row.className='timeline-row';const label=document.createElement('div');label.className='timeline-label';label.textContent=doc.layers[index].name;row.append(label);doc.frames.forEach((frame,i)=>{const b=document.createElement('button');b.dataset.frame=i;b.dataset.layer=index;b.disabled=isGroup(doc.layers[index])||isReference(doc.layers[index]);b.className='cel'+(frameSelection.has(i)&&index===li?' selected':'');const dot=document.createElement('span');dot.className='dot'+(celFilled(frame.cels[index])?' filled':'');b.append(dot);b.title=`${doc.layers[index].name} · 帧 ${i+1}`;const count=linkedMembers(doc,i,index).length;if(count>1){b.classList.add('linked');b.title+=' · 共享图像 '+count+' 帧';}b.title+=' · cel 模式可拖动 / Shift 选择矩形';b.onpointerdown=e=>beginCelSelection(e,i,index);b.ondblclick=()=>void celPropertiesDialog();b.onclick=e=>{if($('timeline-mode').value==='cels'){stop();selectCelAt(i,index,e.shiftKey);}else timelineClick(i,e,index);};row.append(b);});grid.append(row);});
+  const visibleRows=visibleLayerIndices(doc);visibleRows.forEach(index=>{const row=document.createElement('div');row.className='timeline-row';const label=document.createElement('div');label.className='timeline-label';label.textContent=doc.layers[index].name;row.append(label);doc.frames.forEach((frame,i)=>{const b=document.createElement('button');b.dataset.frame=i;b.dataset.layer=index;b.disabled=isGroup(doc.layers[index])||isReference(doc.layers[index]);b.className='cel'+(frameSelection.has(i)&&index===li?' selected':'');const dot=document.createElement('span');dot.className='dot'+((doc.colorMode==='indexed'&&frame.indices?.[index]?frame.indices[index].some(value=>doc.layers[index].type==='background'||value!==doc.transparentIndex):celFilled(frame.cels[index]))?' filled':'');b.append(dot);b.title=`${doc.layers[index].name} · 帧 ${i+1}`;const count=linkedMembers(doc,i,index).length;if(count>1){b.classList.add('linked');b.title+=' · 共享图像 '+count+' 帧';}b.title+=' · cel 模式可拖动 / Shift 选择矩形';b.onpointerdown=e=>beginCelSelection(e,i,index);b.ondblclick=()=>void celPropertiesDialog();b.onclick=e=>{if($('timeline-mode').value==='cels'){stop();selectCelAt(i,index,e.shiftKey);}else timelineClick(i,e,index);};row.append(b);});grid.append(row);});
   grid.style.setProperty('--tl-rows',visibleRows.length+1);
   const outline=document.createElement('div');outline.className='timeline-frame-outline';outline.setAttribute('aria-hidden','true');grid.append(outline);
   if(placedTags.length){const strip=document.createElement('div');strip.className='timeline-tag-strip';
@@ -1199,7 +1200,7 @@ function renderTimeline(){
   syncTimelineSelection();
 }
 
-function render(preserveTimeline=false){if(!documentTabs.items.length){renderEmptyDocument();return;}normalizeIndices();syncPalettePanel();$('doc-color-mode').dataset.mode=modeOf(doc)==='indexed'?'INDEXED 8':modeOf(doc)==='grayscale'?'GRAY 16':'RGBA';if(modeOf(doc)==='indexed'){colorIndex=Math.min(colorIndex,doc.palette.length-1);renderColors();}else if(modeOf(doc)==='grayscale'){color=normalizeColor('#'+grayPixel(colorValue(color)).toString(16).padStart(8,'0'));renderColors();}renderDocumentTabs();$('doc-name').textContent=doc.name+'.pix';$('doc-name').title=filePath||'尚未保存到文件';$('doc-meta').textContent=`${doc.width} × ${doc.height} px　/　${doc.frames.length}`;$('canvas-label').textContent=`${doc.name} · ${doc.width} × ${doc.height}`;$('duration').value=doc.frames[fi].duration;renderPalette();renderLayers();if(preserveTimeline)syncTimelineSelection();else renderTimeline();syncContextUI();place();draw();renderReferenceBoard();syncTilesetPanel();}
+function render(preserveTimeline=false){if(!documentTabs.items.length){renderEmptyDocument();return;}prepareDocumentPixels(doc);normalizeIndices();syncPalettePanel();$('doc-color-mode').dataset.mode=modeOf(doc)==='indexed'?'INDEXED 8':modeOf(doc)==='grayscale'?'GRAY 16':'RGBA';if(modeOf(doc)==='indexed'){colorIndex=Math.min(colorIndex,doc.palette.length-1);renderColors();}else if(modeOf(doc)==='grayscale'){color=normalizeColor('#'+grayPixel(colorValue(color)).toString(16).padStart(8,'0'));renderColors();}renderDocumentTabs();$('doc-name').textContent=doc.name+'.pix';$('doc-name').title=filePath||'尚未保存到文件';$('doc-meta').textContent=`${doc.width} × ${doc.height} px　/　${doc.frames.length}`;$('canvas-label').textContent=`${doc.name} · ${doc.width} × ${doc.height}`;$('duration').value=doc.frames[fi].duration;renderPalette();renderLayers();if(preserveTimeline)syncTimelineSelection();else renderTimeline();syncContextUI();place();draw();renderReferenceBoard();syncTilesetPanel();if(!gesture&&!shapeSession&&!celGesture&&!transformSession)releaseIndexedCaches(doc,fi);}
 function normalizeIndices(){fi=Math.min(fi,doc.frames.length-1);li=Math.min(li,doc.layers.length-1);if(celRange){if(celRange.toFrame>=doc.frames.length||celRange.toLayer>=doc.layers.length||!containsCel(celRange,fi,li))resetCelSelection();else syncCelFrames();}frameSelection=new Set([...frameSelection].filter(i=>i<doc.frames.length));if(!frameSelection.has(fi))frameSelection=new Set([fi]);frameAnchor=Math.min(frameAnchor,doc.frames.length-1);}
 function selectFrame(index){if(gesture||shapeSession)return;stop();fi=(index+doc.frames.length)%doc.frames.length;frameSelection=new Set([fi]);frameAnchor=fi;resetCelSelection();render();}
 function activateTag(id,preserveTimeline=false){if(gesture||shapeSession||busy||$('modal').open)return;stop();$('timeline-mode').value='frames';celRange=null;const tag=doc.tags.find(tag=>tag.id===id);$('play-range').value=id;fi=tag.from;frameSelection=new Set(scopeFrames(doc,id,frameSelection));frameAnchor=fi;render(preserveTimeline);}
@@ -1824,7 +1825,7 @@ async function importFile(file,newTab=false){
   }
   const next=await rasterImportDocument(file,{modal,$,showError});if(next){replaceDocument(next,false,null,crypto.randomUUID(),newTab);message(`已导入 ${next.frames.length} 帧`);}
 }
-async function saveData(data,kind,name,binary=['bmp','gif','ico','jpeg','jpg','png','webp'].includes(kind),destination){if(window.desktop)return window.desktop.save(data,kind,name,binary,...(destination?[destination]:[]));const blob=new Blob([binary?Uint8Array.from(atob(data),c=>c.charCodeAt(0)):data]);const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name+'.'+(kind==='project'?'pix':kind);a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return true;}
+async function saveData(data,kind,name,binary=['bmp','gif','ico','jpeg','jpg','png','webp'].includes(kind),destination){if(window.desktop)return window.desktop.save(data,kind,name,binary,...(destination?[destination]:[]));const blob=new Blob([binary?(data instanceof Uint8Array?data:Uint8Array.from(atob(data),c=>c.charCodeAt(0))):data]);const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name+'.'+(kind==='project'?'pix':kind);a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return true;}
 const projectSaves=new Map();
 async function saveProject(saveAs=false){
   if(projectSaves.has(documentId))return projectSaves.get(documentId);
@@ -1833,7 +1834,7 @@ async function saveProject(saveAs=false){
   const pending=(async()=>{
    try{
     message('正在后台保存项目…');
-    const result=window.desktop?await window.desktop.saveProject(snapshot,snapshot.name,saveAs,path,frameIndex):await saveData(JSON.stringify(snapshot),'project',snapshot.name);
+    const result=window.desktop?await window.desktop.saveProject(snapshot,snapshot.name,saveAs,path,frameIndex):await saveData(documentJSON(snapshot),'project',snapshot.name);
     if(!result){message('已取消保存');return false;}
     if(window.desktop)rememberSaveFormat(localStorage,result.filePath);
     if(documentId===target){
@@ -2453,17 +2454,17 @@ async function performExport(values,destination){
     if(!window.desktop)throw new Error('动画导出请使用 桌面版');
     const format=mode==='gif'?values.format:mode,output=document.createElement('canvas');output.width=width;output.height=height;
     const context=output.getContext('2d',{willReadFrequently:format==='gif'});context.imageSmoothingEnabled=false;const frames=[];
-    for(const sourceIndex of indices){context.clearRect(0,0,width,height);context.drawImage(frameCanvas(sourceIndex),0,0,width,height);frames.push({duration:doc.frames[sourceIndex].duration,sourceIndex,...(format==='gif'?{rgba:context.getImageData(0,0,width,height).data}:format==='webp'?{webp:output.toDataURL('image/webp',1).split(',')[1]}:{png:output.toDataURL('image/png').split(',')[1]})});await new Promise(resolve=>setTimeout(resolve,0));}
-    if(format==='webp')return saveData(encodeAnimatedWebp(frames,width,height,values.repeat==='loop'),'webp',doc.name,true,destination);
+    for(const sourceIndex of indices){context.clearRect(0,0,width,height);context.drawImage(frameCanvas(sourceIndex),0,0,width,height);frames.push({duration:doc.frames[sourceIndex].duration,sourceIndex,...(format==='gif'?{rgba:context.getImageData(0,0,width,height).data}:format==='webp'?{webp:await canvasBytes(output,'image/webp',1)}:{png:await canvasBytes(output)})});await new Promise(resolve=>setTimeout(resolve,0));}
+    if(format==='webp')return saveData(encodeAnimatedWebp(frames,width,height,values.repeat==='loop',true),'webp',doc.name,true,destination);
     return window.desktop.exportAnimation({...animationOptions,format,name:doc.name,width,height,frames,tags:animationTags(doc,indices)});
   }
   const c=document.createElement('canvas');c.width=width;c.height=height;const cx=c.getContext('2d',{willReadFrequently:true});cx.imageSmoothingEnabled=false;
   if(isSheet)metadata.frames.forEach(item=>drawAtlasFrame(cx,imageCanvas(composite(layers.document,item.sourceIndex)),item,scale,metadata.extrude));else cx.drawImage(frameCanvas(frame),0,0,width,height);
-  const png=c.toDataURL('image/png').split(',')[1],format=values.format||'png';
+  const png=['metadata','sheet-pair'].includes(mode)?await canvasBytes(c):null,format=values.format||'png';
   if(mode==='metadata'){if(!window.desktop)throw new Error('关联 PNG 元数据导出请使用桌面应用');return window.desktop.exportSheetMetadata({name:doc.name,png,metadata,destination});}
   if(mode==='sheet-pair'){if(!window.desktop)throw new Error('配对导出请使用桌面应用');return window.desktop.exportSheet({name:doc.name,png,metadata,engineFormat:values.engineFormat,destination});}
   if(format==='gif')return window.desktop.exportAnimation({...animationOptions,format:'gif',name:doc.name+(isSheet?'-sheet':''),width,height,frames:[{duration:doc.frames[frame].duration,sourceIndex:frame,rgba:cx.getImageData(0,0,width,height).data}],tags:[],loop:false});
-  const encoded=encodeCanvas(c,format);return saveData(encoded.data,format,doc.name+(isSheet?'-sheet':''),encoded.binary,destination);
+  const encoded=await encodeCanvasBytes(c,format);return saveData(encoded.data,format,doc.name+(isSheet?'-sheet':''),encoded.binary,destination);
 }
 
 function canvasEdit(fn,text){mutate(()=>{fn();selection=null;},text);fit();}
@@ -2825,7 +2826,7 @@ async function flushRecovery(state=null){
   const record={id:current.documentId,filePath:current.filePath,dirty:current.dirty,...(current.filePath&&current.dirty?{document:snapshot,name:snapshot.name}:{})};
   try{
     if(window.desktop)await window.desktop.saveRecovery(record);
-    else if(current.filePath&&current.dirty)localStorage.setItem('pixel-studio-recovery',JSON.stringify({doc:snapshot,filePath:current.filePath,dirty:current.dirty}));
+    else if(current.filePath&&current.dirty)localStorage.setItem('pixel-studio-recovery',documentJSON({doc:snapshot,filePath:current.filePath,dirty:current.dirty}));
     else localStorage.removeItem('pixel-studio-recovery');
     return true;
   }catch(error){showError('恢复副本写入失败：'+error.message);return false;}
@@ -2905,6 +2906,7 @@ onUI('keydown',event=>{if(documentDrag&&event.key==='Escape')documentDrag.cancel
 $('document-tabs').parentElement.addEventListener('dragover',handleDocumentDragOver);$('document-tabs').parentElement.addEventListener('drop',handleDocumentDrop);
 window.documentWindowAudit=()=>({id:documentId,host:editorHost,documents:documentTabs.items.map(item=>({id:item.id,name:item.state.doc.name})),name:doc.name,layerName:doc.layers[li].name,mode:modeOf(doc),indices:doc.frames[0].indices?.[0],linked:doc.frames.length>1&&doc.frames[0].cels[0]===doc.frames[1].cels[0]&&(!doc.frames[0].indices||doc.frames[0].indices[0]===doc.frames[1].indices[0]),dirty,busy,path:filePath,pixel:doc.frames[0].cels[0][0],undo:history.undoStack.length,redo:history.redoStack.length,zoom,pan,viewport:{w:viewport.clientWidth,h:viewport.clientHeight},selection:selection?.bounds||selection,controls:{tools:!!$('tools'),layers:!!$('layers'),timeline:!!$('timeline-grid'),settings:!!uiQuery('[data-top-menu="文件"]')}});
 window.documentWindowUndo=()=>actions.undo();
+window.documentPixelStorage=()=>pixelStorageStats(doc);
 window.desktop?.onFileLoading?.(loading=>{setBusy(loading);if(loading)message('正在读取文件…');});
 if(!window.desktop?.testing&&!window.desktop?.secondary){void(async()=>{const files=await window.desktop?.startupFiles()||[];for(const file of files)try{if(file.type==='error')throw new Error(file.message);await importFile(file,true);}catch(error){showError('打开失败：'+error.message);}})();}
 let incomingFileQueue=Promise.resolve();

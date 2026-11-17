@@ -55,6 +55,8 @@ try{
  const started=Date.now();await choose(sample);await wait(async()=>{const state=await snapshot();if(state.error)throw Error(await main.evaluate(`document.getElementById('error-dialog').textContent`));return state.path===sample&&!state.busy&&state.frames===8;},'scene opens');observed.openMs=Date.now()-started;
  check('native Open loads the original scene bytes without an import modal',(await snapshot()).mode==='indexed'&&!await main.evaluate(`document.getElementById('modal').open`));
  check('loading status is visible and busy state is released',same(await main.evaluate('window.__sceneLoading'),[true,false])&&(await main.evaluate('window.__sceneMessages')).includes('正在读取文件…'));
+ observed.pixelStorage=await main.evaluate('window.documentPixelStorage()');
+ check('indexed editing stores byte indices without retaining all RGBA frames',observed.pixelStorage.indexBytes===8996048&&observed.pixelStorage.rgbaBytes<8996048*4);
  await main.screenshot(path.join(root,'opened.png'));
  for(const frame of[1,7,0]){
   await main.evaluate(`document.querySelectorAll('.frame-head')[${frame}].click()`);
@@ -63,7 +65,7 @@ try{
  observed.data=await main.evaluate(`(async()=>{
   const started=performance.now(),result=await window.__TAURI_INTERNALS__.invoke('read_project_packed',{filePath:${JSON.stringify(sample)},record:false});
   const bytes=new Uint8Array(result),end=12+new DataView(bytes.buffer).getUint32(8,true),metadata=JSON.parse(new TextDecoder().decode(bytes.subarray(12,end))),doc=metadata.document,cells=[];
-  const wire={readMs:Math.round(performance.now()-started),binary:result instanceof ArrayBuffer||ArrayBuffer.isView(result),bytes:bytes.length,metadataBytes:end-12,magic:new TextDecoder().decode(bytes.subarray(0,8)),pixelPlaceholders:doc.frames.every(frame=>frame.cels.every(cel=>cel===null)),payloadBytes:bytes.length-end};
+  const wire={readMs:Math.round(performance.now()-started),binary:result instanceof ArrayBuffer||ArrayBuffer.isView(result),bytes:bytes.length,metadataBytes:end-12,magic:new TextDecoder().decode(bytes.subarray(0,8)),pixelPlaceholders:doc.frames.every(frame=>frame.cels.every(cel=>cel===null)),payloadBytes:bytes.length-end,indexedSource:!!metadata.info?.indexedSource};
   const hash=async raw=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',raw)),value=>value.toString(16).padStart(2,'0')).join('');
   for(let f=0;f<doc.frames.length;f++)for(let l=0;l<doc.layers.length;l++){
    const p={x:0,y:0,width:doc.width,height:doc.height,opacity:100,...doc.frames[f].celProperties?.[doc.layers[l].id]};
@@ -72,14 +74,14 @@ try{
   let offset=end;
   for(const block of metadata.blocks){
    const parts=block.path.split('/'),cell=cells[+parts[2]*doc.layers.length+(+parts[4])],size=block.count*(block.kind==='u32'?4:1),raw=bytes.subarray(offset,offset+size);offset+=size;
-   if(block.kind==='u32'){cell.count=block.count;cell.rgba=await hash(raw);}else cell.indices=await hash(raw);
+   if(block.kind==='u32'){cell.count=block.count;cell.rgba=await hash(raw);}else{cell.count=block.count;cell.indices=await hash(raw);const colors=Uint32Array.from(raw,index=>index===doc.transparentIndex?0:parseInt(doc.palette[index].slice(1).padEnd(8,'f'),16)>>>0);cell.rgba=await hash(colors.buffer);}
   }
   return{wire,width:doc.width,height:doc.height,frames:doc.frames.map(frame=>frame.duration),layers:doc.layers.map(layer=>({name:layer.name,visible:layer.visible,locked:layer.locked})),palette:doc.palette,transparent:doc.transparentIndex,cells,warnings:metadata.info.warnings};
  })()`);
  const actual=observed.data;check('canvas frame timing layers and palette match independent source parsing',same({...expected,cells:undefined},{width:actual.width,height:actual.height,layers:actual.layers,frames:actual.frames,transparent:actual.transparent,palette:actual.palette,cells:undefined}));
  check('all cel source sizes positions indices and RGBA hashes match',same(actual.cells,expected.cells));
  const pixels=expected.cells.reduce((n,cel)=>n+cel.count,0);check('cel arrays are not padded to the canvas',pixels<expected.width*expected.height*expected.frames.length*expected.layers.length&&pixels===8996048);
- check('native transfer carries raw binary pixels and small metadata',actual.wire.binary&&actual.wire.magic==='MPXREAD1'&&actual.wire.pixelPlaceholders&&actual.wire.payloadBytes===pixels*5&&actual.wire.metadataBytes<65536);
+ check('native transfer carries raw binary pixels and small metadata',actual.wire.binary&&actual.wire.magic==='MPXREAD1'&&actual.wire.pixelPlaceholders&&actual.wire.payloadBytes===pixels&&actual.wire.indexedSource&&actual.wire.metadataBytes<65536);
  const before=await snapshot();await choose(broken);await wait(async()=>(await snapshot()).error,'visible decode error');
  check('invalid ASE reports a visible error and clears busy state',!(await snapshot()).busy&&(await main.evaluate(`document.getElementById('error-dialog').textContent`)).includes('打开失败'));
  check('failed open keeps the loaded scene and document tabs',(await snapshot()).path===before.path&&(await snapshot()).documents===before.documents);

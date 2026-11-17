@@ -1,3 +1,4 @@
+import {isPixelArray} from './pixel-storage.js';
 import {BRIGHT24} from './builtin-palette.js';
 import {validateCelProperties,celViewLocation} from './cel-properties.js';
 import {validateSymmetryAxes} from './symmetry.js';
@@ -42,8 +43,8 @@ export function validateDocument(input) {
     if(f?.links!==undefined&&(typeof f.links!=='object'||!f.links||Array.isArray(f.links)))throw new Error('cel链接表无效');
     if (!f || !Number.isFinite(f.duration) || f.duration<20 || f.duration>10000 || !Array.isArray(f.cels) || f.cels.length!==layers.length) throw new Error('无效的帧数据');
     const celProperties=validateCelProperties(f.celProperties,{layers,width,height});
-    return {...(celProperties?{celProperties}:{}),...(f.indices!==undefined?{indices:Array.isArray(f.indices)?f.indices.map(a=>Array.isArray(a)?a.slice():a):f.indices}:{}),...(f.links?{links:{...f.links}}:{}),duration:Math.round(f.duration),cels:f.cels.map((c,l)=>{
-      if(!Array.isArray(c)||c.length!==(celProperties?.[layers[l].id]?.width||width)*(celProperties?.[layers[l].id]?.height||height)||!c.every(v=>Number.isInteger(v)&&v>=0&&v<=0xffffffff)) throw new Error('像素数据损坏');
+    return {...(celProperties?{celProperties}:{}),...(f.indices!==undefined?{indices:Array.isArray(f.indices)?f.indices.map(a=>isPixelArray(a)?a.slice():a):f.indices}:{}),...(f.links?{links:{...f.links}}:{}),duration:Math.round(f.duration),cels:f.cels.map((c,l)=>{
+      if(!isPixelArray(c)||c.length!==(celProperties?.[layers[l].id]?.width||width)*(celProperties?.[layers[l].id]?.height||height)||!c.every(v=>Number.isInteger(v)&&v>=0&&v<=0xffffffff)) throw new Error('像素数据损坏');
       if(isBackground(layers[l])&&c.some(v=>(v&255)!==255))throw new Error('背景像素必须不透明');
       if(isGroup(layers[l])&&c.some(v=>v))throw new Error('图层组不能包含 cel 像素');
       return c.slice();

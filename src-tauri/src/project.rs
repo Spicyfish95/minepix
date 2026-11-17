@@ -20,6 +20,19 @@ struct Block {
     kind: String,
     count: usize,
 }
+pub struct ReadPlane { pub path:String, pub kind:&'static str, pub bytes:Vec<u8> }
+pub fn raw_document_read_transfer(document:Value,planes:Vec<ReadPlane>,info:Value)->io::Result<Vec<u8>>{
+    let mut blocks=Vec::with_capacity(planes.len());let mut payloads=Vec::with_capacity(planes.len());let mut total=0usize;
+    for plane in planes{
+        let width=if plane.kind=="u32"{4}else{1};
+        total=total.checked_add(plane.bytes.len()).filter(|&value|value<=MAX_RAW).ok_or_else(||invalid("项目解压后超过 512 MiB"))?;
+        if plane.bytes.len()%width!=0{return Err(invalid("像素块长度无效"));}
+        blocks.push(Block{path:plane.path,kind:plane.kind.into(),count:plane.bytes.len()/width});payloads.push(plane.bytes);
+    }
+    let metadata=serde_json::to_vec(&json!({"document":document,"blocks":blocks,"info":info}))?;
+    if total+metadata.len()>MAX_RAW{return Err(invalid("项目解压后超过 512 MiB"));}
+    Ok(read_packet(&metadata,payloads))
+}
 
 fn chunk(kind: &[u8; 4], bytes: &[u8], output: &mut Vec<u8>) -> io::Result<()> {
     let mut encoder = ZlibEncoder::new(Vec::new(), Compression::fast());
@@ -239,6 +252,28 @@ impl<'a> PackedSave<'a> {
     }
 
     pub fn name(&self) -> &str { &self.metadata.name }
+    pub fn metadata(&self)->&Value{&self.metadata.document}
+    pub fn validate_planes(&self)->io::Result<()>{
+        let mut offset=0usize;let mut targets=std::collections::HashSet::new();
+        for block in &self.metadata.blocks{
+            let target=self.metadata.document.pointer(&block.path).ok_or_else(||invalid("项目块映射无效"))?;
+            if !target.is_null()||!targets.insert(target as *const Value){return Err(invalid("项目块重复或覆盖元数据"));}
+            let width=match block.kind.as_str(){"u32"=>4,"u8"|"base64"=>1,_=>return Err(invalid("项目块类型无效"))};
+            offset=block.count.checked_mul(width).and_then(|size|offset.checked_add(size)).filter(|&end|end<=self.payload.len()).ok_or_else(||invalid("项目像素截断"))?;
+        }
+        if offset!=self.payload.len(){return Err(invalid("项目保存包含多余像素"));}Ok(())
+    }
+    pub fn plane(&self,frame:usize,layer:usize,indexed:bool)->io::Result<&[u8]>{
+        let path=format!("/frames/{frame}/{}/{layer}",if indexed{"indices"}else{"cels"});let mut offset=0usize;
+        for block in &self.metadata.blocks{
+            let width=match block.kind.as_str(){"u32"=>4,"u8"|"base64"=>1,_=>return Err(invalid("项目块类型无效"))};
+            let end=block.count.checked_mul(width).and_then(|size|offset.checked_add(size)).ok_or_else(||invalid("项目块长度溢出"))?;
+            let raw=self.payload.get(offset..end).ok_or_else(||invalid("项目像素截断"))?;
+            if block.path==path{if block.kind!=if indexed{"u8"}else{"u32"}{return Err(invalid("项目像素类型不匹配"));}return Ok(raw);}
+            offset=end;
+        }
+        Err(invalid("项目像素块缺失"))
+    }
     pub fn save_as(&self) -> bool { self.metadata.save_as }
     pub fn target(&self) -> Option<&Option<String>> { self.metadata.target.as_ref().map(|target| &target.file_path) }
 

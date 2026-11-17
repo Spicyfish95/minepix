@@ -243,6 +243,14 @@ fn rasterize(
 
 /// Decode an ASE file into the editor memory model; native PIX storage stays independent.
 pub fn decode(bytes: &[u8], name: &str) -> io::Result<Value> {
+    Ok(decode_internal(bytes,name,false)?.0)
+}
+pub fn decode_transfer(bytes:&[u8],name:&str)->io::Result<Vec<u8>>{
+    let (mut value,planes)=decode_internal(bytes,name,true)?;
+    let info=json!({"warnings":value["warnings"].take(),"indexedSource":value["doc"]["colorMode"]=="indexed"});
+    crate::project::raw_document_read_transfer(value["doc"].take(),planes,info)
+}
+fn decode_internal(bytes:&[u8],name:&str,binary:bool)->io::Result<(Value,Vec<crate::project::ReadPlane>)>{
     crate::storage::check_size(bytes.len() as u64)?;
     let mut r = Reader::new(bytes);
     if bytes.len() < 128 || r.u32()? as usize != bytes.len() || r.u16()? != 0xa5e0 {
@@ -652,7 +660,8 @@ pub fn decode(bytes: &[u8], name: &str) -> io::Result<Value> {
     }
     let mut images: Vec<HashMap<usize, Rc<Image>>> = Vec::new();
     let mut output_frames: Vec<Value> = Vec::new();
-    for frame in &frames {
+    let mut planes=Vec::new();
+    for (frame_index,frame) in frames.iter().enumerate() {
         if frame.cels.keys().any(|l| *l >= layers.len()) {
             return Err(invalid("ASE cel 引用未知图层"));
         }
@@ -716,7 +725,7 @@ pub fn decode(bytes: &[u8], name: &str) -> io::Result<Value> {
             } else {
                 0
             };
-            let mut out = vec![default; w * h];
+            let mut out = if binary&&depth==8&&!group{Vec::new()}else{vec![default; w * h]};
             let mut indexed = if depth == 8 && !group {
                 Some(vec![if background { 0 } else { transparent }; w * h])
             } else {
@@ -745,7 +754,7 @@ pub fn decode(bytes: &[u8], name: &str) -> io::Result<Value> {
                         }
                         let at = py as usize * w + px as usize;
                         let i = (y * image.w + x) * bpp;
-                        out[at] = if depth == 8 {
+                        let pixel = if depth == 8 {
                             let index = image.raw[i];
                             indexed.as_mut().unwrap()[at] = index;
                             palette_entry(&palette, index, transparent, background)?
@@ -770,11 +779,17 @@ pub fn decode(bytes: &[u8], name: &str) -> io::Result<Value> {
                             let pixel = (r << 24) | (g << 16) | (b << 8) | a;
                             if background { over_black(pixel) } else { pixel }
                         };
+                        if !out.is_empty(){out[at]=pixel;}
                     }
                 }
             }
-            cels.push(json!(out));
-            indices.push(json!(indexed));
+            if binary {
+                if depth!=8||group{
+                    planes.push((frame_index,l,"u32",out.into_iter().flat_map(u32::to_le_bytes).collect::<Vec<_>>()));
+                }
+                if let Some(indexed)=indexed{planes.push((frame_index,l,"u8",indexed));}
+                cels.push(Value::Null);indices.push(Value::Null);
+            }else{cels.push(json!(out));indices.push(json!(indexed));}
         }
         let mut output = json!({"duration":frame.duration});
         output["cels"] = Value::Array(cels);
@@ -790,9 +805,12 @@ pub fn decode(bytes: &[u8], name: &str) -> io::Result<Value> {
                 continue;
             }
             let target = &mut output_frames[cel.link];
-            if output["cels"][l] == target["cels"][l]
-                && (depth != 8 || output["indices"][l] == target["indices"][l])
-            {
+            let same=if binary{["u32","u8"].iter().all(|kind|{
+                let current=planes.iter().find(|(f,layer,k,_)|*f==frame_index&&*layer==l&&k==kind).map(|(_,_,_,bytes)|bytes);
+                let previous=planes.iter().find(|(f,layer,k,_)|*f==cel.link&&*layer==l&&k==kind).map(|(_,_,_,bytes)|bytes);
+                current==previous
+            })}else{output["cels"][l]==target["cels"][l]&&(depth!=8||output["indices"][l]==target["indices"][l])};
+            if same {
                 let key = (l + 1).to_string();
                 let id = target["links"][&key]
                     .as_str()
@@ -850,7 +868,8 @@ pub fn decode(bytes: &[u8], name: &str) -> io::Result<Value> {
     }
     let mut result = json!({"warnings":warnings});
     result["doc"] = doc;
-    Ok(result)
+    let planes=planes.into_iter().map(|(f,l,kind,bytes)|crate::project::ReadPlane{path:format!("/frames/{f}/{}/{l}",if kind=="u32"{"cels"}else{"indices"},l=order.iter().position(|&value|value==l).unwrap()),kind,bytes}).collect();
+    Ok((result,planes))
 }
 fn over_black(pixel: u32) -> u32 {
     let a = pixel & 255;
@@ -1150,6 +1169,19 @@ mod tests {
                 assert!(after["cels"].as_array().unwrap().iter().all(|cel| cel.as_array().unwrap().len() <= 4));
             }
         }
+    }
+    #[test]
+    fn indexed_binary_decoder_transfers_only_source_indices(){
+        let source=include_bytes!("../../../tests/fixtures/indexed-linked.aseprite");let value=decode(source,"test").unwrap();
+        let wire=decode_transfer(source,"test").unwrap();assert_eq!(&wire[..8],b"MPXREAD1");
+        let end=12+u32::from_le_bytes(wire[8..12].try_into().unwrap())as usize;let metadata:Value=serde_json::from_slice(&wire[12..end]).unwrap();assert_eq!(metadata["info"]["indexedSource"],true);
+        let mut offset=end;
+        for block in metadata["blocks"].as_array().unwrap(){
+            assert_eq!(block["kind"],"u8");let count=block["count"].as_u64().unwrap()as usize;
+            let expected=value["doc"].pointer(block["path"].as_str().unwrap()).unwrap().as_array().unwrap().iter().map(|value|value.as_u64().unwrap()as u8).collect::<Vec<_>>();
+            assert_eq!(&wire[offset..offset+count],expected);offset+=count;
+        }
+        assert_eq!(offset,wire.len());
     }
     #[test]
     fn accepts_dimensions_above_former_pixel_budget() {

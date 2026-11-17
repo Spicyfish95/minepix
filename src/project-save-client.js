@@ -1,5 +1,6 @@
 import {projectForSave} from './reference-files.js';
-export function snapshotProject(document){return structuredClone(projectForSave(document));}
+import {releaseIndexedCaches} from './pixel-storage.js';
+export function snapshotProject(document){const snapshot=structuredClone(projectForSave(document));releaseIndexedCaches(document);return snapshot;}
 
 export function createProjectSaveClient({createWorker=()=>new Worker(new URL('./project-save-worker.js',import.meta.url),{type:'module'})}={}){
  let worker=null,nextId=0;
@@ -16,7 +17,7 @@ export function createProjectSaveClient({createWorker=()=>new Worker(new URL('./
       worker.onerror=event=>{event.preventDefault();stop(new Error(event.message||'项目保存打包失败'));};
       worker.onmessageerror=()=>stop(new Error('项目保存数据传输失败'));
      }
-     pending.set(id,{resolve,reject});worker.postMessage({id,document,name,saveAs,target});
+     pending.set(id,{resolve,reject});worker.postMessage({id,document,name,saveAs,target});releaseIndexedCaches(document);
     }catch(error){pending.delete(id);reject(error);}
    });
   },

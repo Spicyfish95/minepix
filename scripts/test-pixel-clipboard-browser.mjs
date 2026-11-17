@@ -24,7 +24,7 @@ async function runChecks(){
   pending=newDocument();form.requestSubmit($('modal-submit'));await pending;const smallId=documentId;actions.paste();
   check('paste into a clipboard-sized new project is visible despite source offsets',doc.width===3&&doc.height===2&&pixels()[4]===0xff0000ff);
   actions.undo();check('destination paste can be undone',pixels().every(pixel=>pixel===0));actions.redo();check('destination paste can be redone',pixels()[4]===0xff0000ff);
-  switchDocument(sourceId);check('switching back preserves source pixels and global clipboard',JSON.stringify(pixels())===JSON.stringify(sourcePixels)&&clipboard===originalClipboard);
+  switchDocument(sourceId);check('switching back preserves source pixels and global clipboard',JSON.stringify([...pixels()])===JSON.stringify(sourcePixels)&&clipboard===originalClipboard);
   switchDocument(smallId);check('switching back to destination preserves its paste and history',pixels()[4]===0xff0000ff&&history.undoStack.length===1);
   replaceDocument(createDocument(12,10,'large-target'),true,null,crypto.randomUUID(),true);actions.paste();check('a larger target preserves fitting source coordinates',pixels()[6*12+8]===0xff0000ff);
   replaceDocument(createDocument(6,5,'selected-target'),true,null,crypto.randomUUID(),true);selection={x:1,y:1,w:1,h:1};actions.paste();check('explicit target selection anchors the pasted region',pixels()[2*6+2]===0xff0000ff);
@@ -37,8 +37,8 @@ async function runChecks(){
    selection=selectionFrom(doc,(x,y)=>x>=7&&x<=9&&y>=5&&y<=7&&contains(x-7,y-5));actions.copy();const clip=clipboard,mask=[...clip.mask],data=[...clip.data];
    pending=newDocument();check(name+' new dimensions use the actual selection bounding rectangle',values().width===3&&values().height===3);form.requestSubmit($('modal-submit'));await pending;
    pixels().fill(0x00ff00ff);const expected=Array.from({length:9},(_,i)=>contains(i%3,Math.floor(i/3))&&i!==0?0xff0000ff:0x00ff00ff);actions.paste();
-   check(name+' paste preserves mask holes and transparent pixels',JSON.stringify(pixels())===JSON.stringify(expected));check(name+' pasted selection retains its translated irregular mask',selection.x===0&&selection.y===0&&selection.w===3&&selection.h===3&&JSON.stringify([...selection.mask])===JSON.stringify(mask));
-   actions.undo();check(name+' undo restores every destination pixel',pixels().every(pixel=>pixel===0x00ff00ff));actions.redo();check(name+' redo restores only selected opaque pixels',JSON.stringify(pixels())===JSON.stringify(expected));
+   check(name+' paste preserves mask holes and transparent pixels',JSON.stringify([...pixels()])===JSON.stringify(expected));check(name+' pasted selection retains its translated irregular mask',selection.x===0&&selection.y===0&&selection.w===3&&selection.h===3&&JSON.stringify([...selection.mask])===JSON.stringify(mask));
+   actions.undo();check(name+' undo restores every destination pixel',pixels().every(pixel=>pixel===0x00ff00ff));actions.redo();check(name+' redo restores only selected opaque pixels',JSON.stringify([...pixels()])===JSON.stringify(expected));
    switchDocument(irregularId);check(name+' source pixels and clipboard remain unchanged',pixels()[5*10+7]===0&&pixels().filter(pixel=>pixel===0xff0000ff).length===79&&clipboard===clip&&JSON.stringify([...clipboard.mask])===JSON.stringify(mask)&&JSON.stringify(clipboard.data)===JSON.stringify(data));
   }
   void newDocument();

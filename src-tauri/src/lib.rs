@@ -569,12 +569,9 @@ async fn desktop_action(method:String,args:Vec<Value>,window:tauri::WebviewWindo
             })
         }
         "exportAseprite" => {
-            let unpacked;
-            let document = if let Some(bytes)=payloads.first(){let packed=project::PackedSave::parse(bytes).map_err(io_error)?;unpacked=packed.document(packed.name()).map_err(io_error)?;&unpacked}
-                else{args.first().ok_or("缺少导出文档")?};
             let destination = formats::ExportDestination::parse(args.get(1)).map_err(io_error)?;
-            let bytes = aseprite::encode(document).map_err(io_error)?;
-            let name = formats::safe_base(document["name"].as_str().unwrap_or("sprite"));
+            let (bytes,name)=if let Some(bytes)=payloads.first(){let packed=project::PackedSave::parse(bytes).map_err(io_error)?;(aseprite::encode_packed(&packed).map_err(io_error)?,formats::safe_base(packed.name()))}
+                else{let document=args.first().ok_or("缺少导出文档")?;(aseprite::encode(document).map_err(io_error)?,formats::safe_base(document["name"].as_str().unwrap_or("sprite")))};
             let target = if let Some(target) = formats::export_target(destination.as_ref(), &name, "aseprite").map_err(io_error)? {
                 target
             } else {

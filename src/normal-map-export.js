@@ -1,3 +1,4 @@
+import {canvasBytes} from './export-formats.js';
 import {normalAngleGuideMarkup,updateNormalAngleGuide,bindNormalAngleGuide} from './normal-map-angle-guide.js';
 import {lightingPreviewMarkup,createLightingPreview} from './normal-map-light-preview.js';
 import {createImportPreview,previewMarkup} from './import-preview.js';
@@ -12,7 +13,7 @@ export function normalMapFields(){
 
 export async function normalMapPng(source,settings){
  const image=source.getContext('2d',{willReadFrequently:true}).getImageData(0,0,source.width,source.height);
- let client;try{return await new Promise((resolve,reject)=>{client=createNormalMapClient({onStatus:()=>{},onError:reject,onResult:value=>{const canvas=document.createElement('canvas');canvas.width=value.width;canvas.height=value.height;canvas.getContext('2d').putImageData(new ImageData(value.data,value.width,value.height),0,0);resolve(canvas.toDataURL('image/png').split(',')[1]);}});client.request(image,settings);});}finally{client?.dispose();}
+ let client;try{return await new Promise((resolve,reject)=>{client=createNormalMapClient({onStatus:()=>{},onError:reject,onResult:value=>{const canvas=document.createElement('canvas');canvas.width=value.width;canvas.height=value.height;canvas.getContext('2d').putImageData(new ImageData(value.data,value.width,value.height),0,0);canvasBytes(canvas).then(resolve,reject);}});client.request(image,settings);});}finally{client?.dispose();}
 }
 export async function exportNormalMap(source,{modal,$,showError,saveData,name,message,directory='',chooseDirectory}){
  const image=source.getContext('2d',{willReadFrequently:true}).getImageData(0,0,source.width,source.height);
@@ -52,7 +53,7 @@ export async function exportNormalMap(source,{modal,$,showError,saveData,name,me
   },()=>{if(!result)throw new Error('请等待法线贴图生成完成后再确定');},{confirm:'导出 PNG'});
   if(values){
    const settings={preset:values.preset};for(const [key]of numericFields)if(values[key]!==undefined)settings[key]=+values[key];for(const key of ['mergeOutlines','invertY'])settings[key]=values[key]==='on';
-   const saved=await saveData(output.toDataURL('image/png').split(',')[1],'png',name+'-normal',true,{directory:values.directory||directory});message(saved?'法线贴图已导出':'已取消导出');return{settings,result:saved};
+   const saved=await saveData(await canvasBytes(output),'png',name+'-normal',true,{directory:values.directory||directory});message(saved?'法线贴图已导出':'已取消导出');return{settings,result:saved};
   }
  }finally{disposeAngle?.();client?.dispose();preview?.dispose();lighting?.dispose();$('modal-form').oninput=null;$('modal-submit').disabled=false;}
 }

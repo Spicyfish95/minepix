@@ -1,8 +1,9 @@
+import {prepareDocumentPixels,documentJSON,isPixelArray} from './pixel-storage.js';
 import {projectForSave} from './reference-files.js';
 const MAX_BYTES=512*1024*1024;
 const magic=new TextEncoder().encode('MPXSAVE1');
 export function unpackProjectRead(input){return unpackProjectReadPacket(input).document;}
-export function unpackProjectReadPacket(input){
+export function unpackProjectReadPacket(input,{typed=false}={}){
  const bytes=input instanceof Uint8Array?input:new Uint8Array(input);
  if(bytes.length<12||bytes.length-12>MAX_BYTES||new TextDecoder().decode(bytes.subarray(0,8))!=='MPXREAD1')throw new Error('项目读取传输头无效');
  const metadataEnd=12+new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength).getUint32(8,true);
@@ -24,16 +25,17 @@ export function unpackProjectReadPacket(input){
   if(parent===null||typeof parent!=='object'||!Object.hasOwn(parent,key)||parent[key]!==null)throw new Error('项目读取块映射重复或覆盖元数据');
   const raw=bytes.subarray(offset,offset+size);offset+=size;
   if(block.kind==='u32'){
-   const view=new DataView(raw.buffer,raw.byteOffset,raw.byteLength),pixels=new Array(block.count);
+   const view=new DataView(raw.buffer,raw.byteOffset,raw.byteLength),pixels=typed?new Uint32Array(block.count):new Array(block.count);
    for(let i=0;i<pixels.length;i++)pixels[i]=view.getUint32(i*4,true);
    parent[key]=pixels;
-  }else if(block.kind==='u8')parent[key]=Array.from(raw);
+  }else if(block.kind==='u8')parent[key]=typed?raw.slice():Array.from(raw);
   else if(block.kind==='base64'){
    let binary='';for(let i=0;i<raw.length;i+=32768)binary+=String.fromCharCode(...raw.subarray(i,i+32768));
    parent[key]=btoa(binary);
   }else throw new Error('项目读取块数据类型无效');
  }
  if(offset!==bytes.length)throw new Error('项目读取包含多余像素');
+ if(typed||info.indexedSource)prepareDocumentPixels(document);
  return{document,info};
 }
 
@@ -41,7 +43,7 @@ export function openedProject(file,document,info={}){
  const {rawProject,...result}=file;
  if(result.type==='aseprite'){result.doc=document;result.warnings=info.warnings||[];return result;}
  result.document=document;
- Object.defineProperty(result,'data',{enumerable:true,get:()=>JSON.stringify(document)});
+ Object.defineProperty(result,'data',{enumerable:true,get:()=>documentJSON(document)});
  return result;
 }
 
@@ -51,7 +53,7 @@ export function packProjectSave(data,name,saveAs=false,target){
  if(document.format!=='pixel-studio'||!Array.isArray(document.frames))throw new Error('不是有效的 MinePix 项目');
  const blocks=[],payloads=[];let rawBytes=0;
  function add(path,kind,pixels){
-  if(!Array.isArray(pixels))throw new Error('像素块不是数组');
+  if(!isPixelArray(pixels))throw new Error('像素块不是数组');
   const width=kind==='u32'?4:1,size=pixels.length*width;
   if(rawBytes+size>MAX_BYTES)throw new Error('项目解压后超过 512 MiB');
   const bytes=new Uint8Array(size),view=new DataView(bytes.buffer),max=kind==='u32'?0xffffffff:255;

@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 use std::{
     collections::HashMap,
     sync::{
-        Mutex,
+        Arc,Mutex,
         atomic::{AtomicU64, Ordering},
     },
     time::{Duration,Instant},
@@ -26,7 +26,7 @@ pub struct Windows {
     serial: AtomicU64,
     pending: Mutex<HashMap<u64, Pending>>,
     ready: Mutex<HashMap<String, oneshot::Sender<()>>>,
-    transfers: Mutex<HashMap<String,Transfer>>,
+    transfers: Arc<Mutex<HashMap<String,Transfer>>>,
     pub editors: Mutex<HashMap<String, Editor>>,
 }
 
@@ -51,6 +51,8 @@ impl Windows {
         if self.pending.lock().unwrap().get(&request_id).is_none_or(|pending|pending.sender!=source){return Err("文档传输请求已失效".into());}
         let mut transfers=self.transfers.lock().unwrap();transfers.retain(|_,value|value.created.elapsed()<Duration::from_secs(60));
         let token=uuid::Uuid::new_v4().to_string();transfers.insert(token.clone(),Transfer{bytes:bytes.to_vec(),receiver:None,created:Instant::now()});
+        let expires=token.clone();let store=Arc::clone(&self.transfers);
+        tauri::async_runtime::spawn(async move{tokio::time::sleep(Duration::from_secs(60)).await;store.lock().unwrap().remove(&expires);});
         Ok(json!({"$binary":token}))
     }
 

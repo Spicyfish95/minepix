@@ -1,5 +1,5 @@
 import {packBinaryPacket,unpackBinaryPacket} from './binary-packet.js';
-import {unpackProjectRead,openedProject} from './project-transfer.js';
+import {unpackProjectReadPacket,openedProject} from './project-transfer.js';
 import {loadReferenceFiles} from './reference-files.js';
 export function createRecoveryClient({pack,write,load,readReference}){
  let queue=Promise.resolve();
@@ -14,7 +14,7 @@ export function createRecoveryClient({pack,write,load,readReference}){
   async load(id,previous=false){
    await queue.catch(()=>{});const packet=unpackBinaryPacket(await load(id,previous));
    if(packet.payloads.length!==1)throw new Error('恢复快照缺少像素数据');
-   const document=await loadReferenceFiles(unpackProjectRead(packet.payloads[0]),readReference);
+   const document=await loadReferenceFiles(unpackProjectReadPacket(packet.payloads[0],{typed:true}).document,readReference);
    return openedProject(packet.metadata,document);
   }
  };

@@ -12,6 +12,7 @@ export function blendColor(b,s,mode){switch(mode){case 'hue':return setLum(setSa
 // Aseprite new-blender blends normal and mode results in two alpha-weighted stages.
 // The combined mode weight is da + da * sa * (1 - da), not the W3C backdrop weight alone.
 export function compositeInto(doc,index,rect,target,{includeReference=false}={}){
+ const indexedPalette=doc.colorMode==='indexed'?doc.palette.map(color=>parseInt(color.slice(1).padEnd(8,'f'),16)>>>0):null;
  const x0=Math.max(0,Math.floor(rect.x)),y0=Math.max(0,Math.floor(rect.y)),x1=Math.min(doc.width,Math.ceil(rect.x+rect.w)),y1=Math.min(doc.height,Math.ceil(rect.y+rect.h));
  if(x1<=x0||y1<=y0)return{x:x0,y:y0,w:0,h:0};
  const regionWidth=x1-x0,regionHeight=y1-y0;
@@ -28,11 +29,12 @@ export function compositeInto(doc,index,rect,target,{includeReference=false}={})
    if(layer.type==='group'&&layer.passThrough){paint(children.get(layer.id)||[],output,stride,originX,originY);continue;}
    let groupBuffer;
    let pixels;
+   const indexed=indexedPalette&&!isReference(layer)?doc.frames[index].indices?.[l]:null;
    if(layer.type==='group'){
     // Isolated groups only need the dirty region, in the same RGBA layout as output.
     groupBuffer=new Uint8ClampedArray(regionWidth*regionHeight*4);
     paint(children.get(layer.id)||[],groupBuffer,regionWidth,x0,y0);
-   }else pixels=isReference(layer)?rasterReference(doc,l,index,{x:x0,y:y0,w:regionWidth,h:regionHeight}):doc.frames[index].cels[l];
+   }else pixels=isReference(layer)?rasterReference(doc,l,index,{x:x0,y:y0,w:regionWidth,h:regionHeight}):indexed||doc.frames[index].cels[l];
    const property=celProperty(doc,index,l),bg=isBackground(layer),opacity=layer.opacity/100*property.opacity/100,mode=layer.blendMode||'normal';
    for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){
     let source;
@@ -41,7 +43,7 @@ export function compositeInto(doc,index,rect,target,{includeReference=false}={})
      source=((groupBuffer[offset]<<24)|(groupBuffer[offset+1]<<16)|(groupBuffer[offset+2]<<8)|groupBuffer[offset+3])>>>0;
     }else{
      const sx=x-property.x,sy=y-property.y;
-     source=sx>=0&&sy>=0&&sx<property.width&&sy<property.height?pixels[sy*property.width+sx]:0;
+     if(sx>=0&&sy>=0&&sx<property.width&&sy<property.height){const value=pixels[sy*property.width+sx];source=indexed?(bg?(indexedPalette[value]|255)>>>0:value===doc.transparentIndex?0:indexedPalette[value]):value;}else source=0;
     }
     const pixel=bg?overBackground(source,layer.clearColor):source,sa=(pixel&255)/255*opacity;
     if(!sa)continue;

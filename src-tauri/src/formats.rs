@@ -520,6 +520,7 @@ pub fn read_sheet_manifest(path: &Path) -> io::Result<Value> {
     )
 }
 
+#[cfg(test)]
 pub fn export_sheet(parent: &Path, options: &Value) -> io::Result<Value> {
     export_sheet_bytes(parent,options,None)
 }
@@ -585,6 +586,7 @@ pub fn export_sheet_bytes(parent:&Path,options:&Value,png:Option<&[u8]>)->io::Re
     )
 }
 
+#[cfg(test)]
 pub fn check_sheet_image(image: &Path, options: &Value) -> io::Result<()> {
     check_sheet_image_bytes(image,options,None)
 }
@@ -598,6 +600,7 @@ pub fn check_sheet_image_bytes(image:&Path,options:&Value,png:Option<&[u8]>)->io
     Ok(())
 }
 
+#[cfg(test)]
 pub fn export_sheet_metadata(image: &Path, target: &Path, options: &Value) -> io::Result<Value> {
     export_sheet_metadata_bytes(image,target,options,None)
 }

@@ -34,7 +34,7 @@ const invokeBackend=(command,args)=>invoke(command,args).catch(error=>{throw err
 async function readProjectPacket(filePath,record=true){
  if(record)dispatch('file:loading',true);
  try{
-  const packet=unpackProjectReadPacket(await invokeBackend('read_project_packed',{filePath,record}));
+  const packet=unpackProjectReadPacket(await invokeBackend('read_project_packed',{filePath,record}),{typed:true});
   packet.document=await loadReferenceFiles(packet.document,path=>readReference(path));return packet;
  }finally{if(record)dispatch('file:loading',false);}
 }

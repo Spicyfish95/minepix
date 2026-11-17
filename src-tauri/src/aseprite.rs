@@ -5,7 +5,7 @@ use std::{
     io::{self, Write},
 };
 mod reader;
-pub use reader::decode;
+pub use reader::{decode,decode_transfer};
 
 const BLENDS: [&str; 19] = [
     "normal",
@@ -117,6 +117,13 @@ fn order(
 }
 
 pub fn encode(doc: &Value) -> io::Result<Vec<u8>> {
+    encode_internal(doc,None)
+}
+pub fn encode_packed(packed:&crate::project::PackedSave<'_>)->io::Result<Vec<u8>>{
+    packed.validate_planes()?;
+    encode_internal(packed.metadata(),Some(packed))
+}
+fn encode_internal(doc:&Value,packed:Option<&crate::project::PackedSave<'_>>)->io::Result<Vec<u8>>{
     let width = word(number(&doc["width"])?)?;
     let height = word(number(&doc["height"])?)?;
     let layers = array(&doc["layers"])?;
@@ -301,16 +308,19 @@ pub fn encode(doc: &Value) -> io::Result<Vec<u8>> {
             if w == 0 || h == 0 {
                 return Err(invalid("ASE cel 尺寸无效"));
             }
-            let pixels = array(&frame["cels"][index])?;
-            if pixels.len() != usize::from(w) * usize::from(h) {
+            let raw_pixels=if frame["cels"][index].is_null(){packed.map(|packed|packed.plane(frame_index,index,false)).transpose()?}else{None};
+            let raw_indices=if depth==8&&frame["indices"][index].is_null(){packed.map(|packed|packed.plane(frame_index,index,true)).transpose()?}else{None};
+            let values=if raw_pixels.is_none(){Some(array(&frame["cels"][index])?)}else{None};
+            let count=raw_pixels.map(|bytes|bytes.len()/4).unwrap_or_else(||values.unwrap().len());
+            if count != usize::from(w) * usize::from(h) || raw_indices.is_some_and(|bytes|bytes.len()!=count) {
                 return Err(invalid("ASE cel 像素尺寸不一致"));
             }
-            let mut raw = Vec::with_capacity(pixels.len() * (depth / 8));
-            for (i, pixel) in pixels.iter().enumerate() {
-                let pixel = number(pixel)?;
+            let mut raw = Vec::with_capacity(count * (depth / 8));
+            for i in 0..count {
+                let pixel = if let Some(bytes)=raw_pixels{u32::from_le_bytes(bytes[i*4..i*4+4].try_into().unwrap())}else{number(&values.unwrap()[i])?};
                 match depth {
                     8 => {
-                        let value = number(&frame["indices"][index][i])?;
+                        let value = if let Some(bytes)=raw_indices{bytes[i] as u32}else{number(&frame["indices"][index][i])?};
                         if value >= palette.len() as u32 {
                             return Err(invalid("ASE 索引像素超出色板"));
                         }
@@ -379,6 +389,16 @@ pub fn encode(doc: &Value) -> io::Result<Vec<u8>> {
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn raw_pixel_writer_matches_value_writer_without_materializing_pixel_values(){
+        for fixture in [include_bytes!("../../tests/fixtures/rgba-linked.aseprite").as_slice(),include_bytes!("../../tests/fixtures/indexed-linked.aseprite").as_slice(),include_bytes!("../../tests/fixtures/grayscale-linked.aseprite").as_slice()]{
+            let doc=decode(fixture,"test").unwrap()["doc"].take();
+            let wire=crate::project::document_read_transfer(&doc,Value::Null).unwrap();let end=12+u32::from_le_bytes(wire[8..12].try_into().unwrap())as usize;
+            let mut metadata:Value=serde_json::from_slice(&wire[12..end]).unwrap();metadata["name"]=json!("test");metadata["saveAs"]=json!(false);
+            let header=serde_json::to_vec(&metadata).unwrap();let mut bytes=b"MPXSAVE1".to_vec();bytes.extend_from_slice(&(header.len()as u32).to_le_bytes());bytes.extend_from_slice(&header);bytes.extend_from_slice(&wire[end..]);
+            let packed=crate::project::PackedSave::parse(&bytes).unwrap();assert_eq!(encode_packed(&packed).unwrap(),encode(&doc).unwrap());
+        }
+    }
     use std::io::Read;
     fn u16_at(b: &[u8], p: usize) -> u16 {
         u16::from_le_bytes(b[p..p + 2].try_into().unwrap())

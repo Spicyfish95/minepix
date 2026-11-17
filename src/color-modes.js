@@ -1,3 +1,4 @@
+import {isPixelArray,materializeDocumentPixels} from './pixel-storage.js';
 import {celViewLocation,celIndexPixels} from './cel-properties.js';
 import {isGroup} from './layer-tree.js';
 import {isReference,isBackground} from './layer-types.js';
@@ -52,7 +53,7 @@ export function validateColorMode(doc){
     const colors=paletteColors(doc,layer);
     if(isBackground(layer)&&(!Number.isInteger(layer.clearIndex)||layer.clearIndex<0||layer.clearIndex>=doc.palette.length||layer.clearColor!==colors[layer.clearIndex]))throw new Error('背景擦除索引无效');
     const indices=frame.indices[l];
-    if(!Array.isArray(indices)||indices.length!==pixels.length||indices.some(i=>!Number.isInteger(i)||i<0||i>=doc.palette.length))throw new Error('索引像素越界');
+    if(!isPixelArray(indices)||indices.length!==pixels.length||indices.some(i=>!Number.isInteger(i)||i<0||i>=doc.palette.length))throw new Error('索引像素越界');
     if(pixels.some((v,i)=>v!==colors[indices[i]]))throw new Error('索引与RGBA缓存不一致');
    }else if(mode==='grayscale'&&pixels.some(v=>v!==grayPixel(v)))throw new Error('灰度像素通道不一致');
   }
@@ -63,7 +64,7 @@ function adaptivePalette(doc,maximum){const exact=new Map(),buckets=new Map();le
  const points=detailed?[...exact].map(([pixel,count])=>({rgba:[pixel>>>24,pixel>>>16&255,pixel>>>8&255,pixel&255],count})):Array.from(buckets.values(),item=>({rgba:item.sum.map(v=>Math.round(v/item.count)),count:item.count}));if(points.length<=maximum-1)return['#00000000',...points.sort((a,b)=>b.count-a.count).map(p=>hexOf(((p.rgba[0]<<24)|(p.rgba[1]<<16)|(p.rgba[2]<<8)|p.rgba[3])>>>0))];
  const boxes=[points];while(boxes.length<maximum-1){let chosen=-1,channel=0,score=-1;boxes.forEach((box,i)=>{if(box.length<2)return;for(let c=0;c<4;c++){let lo=255,hi=0,total=0;for(const p of box){lo=Math.min(lo,p.rgba[c]);hi=Math.max(hi,p.rgba[c]);total+=p.count;}const value=(hi-lo)*Math.sqrt(total);if(value>score){score=value;chosen=i;channel=c;}}});if(chosen<0)break;const box=boxes[chosen].sort((a,b)=>a.rgba[channel]-b.rgba[channel]),total=box.reduce((n,p)=>n+p.count,0);let weight=0,cut=1;for(let i=0;i<box.length-1;i++){weight+=box[i].count;if(weight>=total/2){cut=i+1;break;}cut=i+1;}boxes.splice(chosen,1,box.slice(0,cut),box.slice(cut));}
  return['#00000000',...boxes.map(box=>{const total=box.reduce((n,p)=>n+p.count,0),rgba=[0,1,2,3].map(c=>Math.round(box.reduce((n,p)=>n+p.rgba[c]*p.count,0)/total));return hexOf(((rgba[0]<<24)|(rgba[1]<<16)|(rgba[2]<<8)|rgba[3])>>>0);})];}
-export function convertColorMode(doc,mode,{palette='adaptive',colors=256,dither=false}={}){if(!['rgba','indexed','grayscale'].includes(mode)||mode==='indexed'&&(!['adaptive','current'].includes(palette)||!Number.isInteger(colors)||colors<2||colors>256))throw new Error('颜色模式或色数无效');if(mode==='rgba'){delete doc.colorMode;canonicalizeColors(doc);return;}doc.colorMode=mode;if(mode==='grayscale')doc.palette=doc.palette.map(c=>hexOf(grayPixel(rgbaValue(c))));if(mode==='indexed'){let entries=palette==='current'?[...doc.palette]:adaptivePalette(doc,colors);let transparent=entries.findIndex(c=>(rgbaValue(c)&255)===0);if(transparent<0){entries.unshift('#00000000');transparent=0;}entries=entries.slice(0,colors);if(transparent>=entries.length){entries[0]='#00000000';transparent=0;}if(entries.length<2)entries.push('#000000ff');doc.palette=entries;doc.transparentIndex=transparent;for(const layer of doc.layers)delete layer.clearIndex;for(const frame of doc.frames)delete frame.indices;}canonicalizeColors(doc,{dither});}
+export function convertColorMode(doc,mode,{palette='adaptive',colors=256,dither=false}={}){materializeDocumentPixels(doc);if(!['rgba','indexed','grayscale'].includes(mode)||mode==='indexed'&&(!['adaptive','current'].includes(palette)||!Number.isInteger(colors)||colors<2||colors>256))throw new Error('颜色模式或色数无效');if(mode==='rgba'){delete doc.colorMode;canonicalizeColors(doc);return;}doc.colorMode=mode;if(mode==='grayscale')doc.palette=doc.palette.map(c=>hexOf(grayPixel(rgbaValue(c))));if(mode==='indexed'){let entries=palette==='current'?[...doc.palette]:adaptivePalette(doc,colors);let transparent=entries.findIndex(c=>(rgbaValue(c)&255)===0);if(transparent<0){entries.unshift('#00000000');transparent=0;}entries=entries.slice(0,colors);if(transparent>=entries.length){entries[0]='#00000000';transparent=0;}if(entries.length<2)entries.push('#000000ff');doc.palette=entries;doc.transparentIndex=transparent;for(const layer of doc.layers)delete layer.clearIndex;for(const frame of doc.frames)delete frame.indices;}canonicalizeColors(doc,{dither});}
 export function applyIndexedPalette(doc,colors,origins=null){
  if(modeOf(doc)!=='indexed'){doc.palette=[...colors];return;}
  const oldTransparent=doc.transparentIndex;
@@ -84,7 +85,7 @@ export function applyIndexedPalette(doc,colors,origins=null){
  for(const frame of doc.frames)for(const [l,indices]of (frame.indices||[]).entries()){
   if(!indices)continue;
   frame.indices[l]=indices.map((index,i)=>remap.get(index)??maps[l](frame.cels[l][i]).index);
-  frame.cels[l]=frame.indices[l].map(index=>tables[l][index]);
+  frame.cels[l]=Array.from(frame.indices[l],index=>tables[l][index]);
  }
  canonicalizeColors(doc,{rebuild:true});
 }

@@ -27,3 +27,20 @@ pub fn encode(metadata: Value, payloads: &[&[u8]]) -> io::Result<Vec<u8>> {
     let mut bytes=Vec::with_capacity(12+size);bytes.extend_from_slice(b"MPXDATA1");bytes.extend_from_slice(&(header.len() as u32).to_le_bytes());bytes.extend_from_slice(&header);
     for part in payloads{bytes.extend_from_slice(part);}Ok(bytes)
 }
+
+#[cfg(test)]
+mod tests{
+    use super::*;
+    #[test]
+    fn packets_preserve_metadata_empty_blocks_and_raw_bytes(){
+        let bytes=encode(json!({"id":"中文","dirty":true}),&[&[],&[0,255,1]]).unwrap();
+        let packet=Packet::parse(&bytes).unwrap();assert_eq!(packet.metadata["id"],"中文");assert_eq!(packet.payloads,vec![&[][..],&[0,255,1][..]]);
+    }
+    #[test]
+    fn packets_reject_truncation_bad_lengths_and_extra_payload(){
+        let bytes=encode(Value::Null,&[&[1,2,3]]).unwrap();
+        for length in[0,11,bytes.len()-1]{assert!(Packet::parse(&bytes[..length]).is_err());}
+        let mut extra=bytes.clone();extra.push(1);assert!(Packet::parse(&extra).is_err());
+        let mut bad=bytes;bad[8..12].copy_from_slice(&u32::MAX.to_le_bytes());assert!(Packet::parse(&bad).is_err());
+    }
+}
