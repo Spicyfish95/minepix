@@ -25,6 +25,11 @@ async function runChecks(){
   const bytes=last.payloads[0].slice();bytes.set(new TextEncoder().encode('MPXREAD1'));const restored=unpackProjectReadPacket(bytes,{typed:true}).document;
   check('queued Worker snapshot preserves duplicate index slots before later edits',restored.frames[0].indices[0][0]===2&&restored.frames[0].indices[0][1]===2&&document.frames[0].indices[0][1]===0);
   await save(3);check('completed recovery revision skips duplicate packing',packed===2);
+  const cropped=createDocument(1,1,'cropped stroke');cropped.width=1024;cropped.height=1024;cropped.frames[0].cels[0]=new Uint32Array(16*16);setCelProperty(cropped,0,0,{x:4,y:4,width:16,height:16});replaceDocument(cropped,true);setTool('pencil');setColor('#ffffff');
+  const capture=viewport.setPointerCapture;viewport.setPointerCapture=()=>{};
+  const point=(type,x,y)=>{const rect=canvas.getBoundingClientRect();viewport.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,clientX:rect.left+(x+.5)*zoom,clientY:rect.top+(y+.5)*zoom,pointerId:73,button:0}));};
+  point('pointerdown',5,5);check('cropped stroke base is a sparse view of the existing cel snapshot',gesture.base.length===1024*1024&&Object.keys(gesture.base).length===0&&gesture.before.frames[0].cels[0].length===256);finishGesture(true);check('cropped stroke cancellation restores original source pixels',doc.frames[0].cels[0].every(pixel=>pixel===0));
+  point('pointerdown',3,4);point('pointerup',3,4);check('cropped stroke grows the source and undo restores its bounds',celProperty(doc,0,0).width===17);actions.undo();check('cropped growth undo restores 16px source',celProperty(doc,0,0).width===16&&doc.frames[0].cels[0].length===256);viewport.setPointerCapture=capture;
   return{ok:true,results,renderMetrics:render.metrics};
  }catch(error){return{ok:false,results,error:error.stack};}
  finally{client?.dispose();clearTimeout(recoveryTimer);}

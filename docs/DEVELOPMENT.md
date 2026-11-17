@@ -232,3 +232,9 @@ Rust 构建缓存优化范围：默认分支按依赖与缓存配置变化预热
 本地 Debug 通过 `scripts/cargo.ps1 build --locked --manifest-path src-tauri/Cargo.toml --bin minepix-tauri --features tauri/custom-protocol` 构建，嵌入生产前端。`node scripts/optimization-desktop-smoke.mjs` 使用临时作品，原生验证 14 项通过，包含索引链接笔画／撤销／重做、保存与恢复的重复色槽和快照隔离、文件状态及缩略图刷新、窗口迁移与清理屏障；结束恢复 WebView 本机设置并移除临时最近项。前端构建、生产资源、仓库与 LF 检查通过。构建产物与报告保留在本地 artifacts／target，不纳入 Git，不更新版本或发布。
 
 生产资源检查按实际 Worker 文件及构建后引用验证客户端，不依赖 Rollup 自动选择的共享 chunk 名称。完整浏览器及原生性能报告分别位于本地 `artifacts/optimization-browser.json`、`artifacts/optimization-desktop/report.json`；复验使用对应脚本，不把报告副本提交为指南。
+
+## 第二轮大项目优化定向范围
+
+按功能分别提交：裁剪 cel 笔画复用原始快照视图（取消、扩展、索引、链接）；打开规范化／校验一次复制且惰性索引 RGBA（坏数据拒绝、独立性）；参考画布按文档及内存预算回收（关闭、重开、独立面板）；时间轴缓存占用状态和链接计数（可见性、索引透明槽、撤销）；参考层紧凑区域栅格化（偏移、缩放、混合）；选区按包围盒及扫描线填充（孔洞、平铺、容差）；元数据和色板手势独立快照（取消、连续取色、重复槽）。先对应 Node／浏览器专项，跨模块再扩大关联回归，最终构建前端和本地 Debug 并跑原生专项；同步行为及限制，不推送、不发布。
+
+裁剪笔画阶段：cel 属性／画笔／填充／链接／历史 Node 46 项、优化浏览器 20 项通过，覆盖稀疏视图数组语义、取消、跨边界增长与撤销；索引基底复用独立快照。
