@@ -13,7 +13,11 @@ function growCel(doc,f,l,x,y){
  const frame=doc.frames[f],old=frame.cels[l],p=celProperty(doc,f,l),left=Math.min(p.x,x),top=Math.min(p.y,y),width=Math.max(p.x+p.width,x+1)-left,height=Math.max(p.y+p.height,y+1)-top,dx=left-p.x,dy=top-p.y;
  const members=doc.frames.flatMap((frame,i)=>frame.cels[l]===old?[i]:[]);
  if(width>65535||height>65535)throw new Error('cel 图像单边最多 65535 像素');
- const copy=(source,empty)=>{const target=Array(width*height).fill(empty);for(let y=0;y<p.height;y++)for(let x=0;x<p.width;x++)target[(y-dy)*width+x-dx]=source[y*p.width+x];return target;};
+ const copy=(source,empty)=>{
+  const typed=ArrayBuffer.isView(source),target=typed?new source.constructor(width*height):Array(width*height);target.fill(empty);
+  for(let y=0;y<p.height;y++)if(typed)target.set(source.subarray(y*p.width,(y+1)*p.width),(y-dy)*width-dx);else for(let x=0;x<p.width;x++)target[(y-dy)*width+x-dx]=source[y*p.width+x];
+  return target;
+ };
  const pixels=copy(old,0),indices=frame.indices?.[l]&&copy(frame.indices[l],doc.transparentIndex);
  for(const index of members){const current=celProperty(doc,index,l);doc.frames[index].cels[l]=pixels;if(indices)doc.frames[index].indices[l]=indices;setCelProperty(doc,index,l,{...current,x:current.x+dx,y:current.y+dy,width,height});}
 }

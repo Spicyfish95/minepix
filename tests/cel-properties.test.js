@@ -23,3 +23,9 @@ test('sparse canvas views preserve array methods without allocating filled backi
  const view=celPixels(doc,0,0);assert.equal(Object.keys(view).length,0);assert.equal(view[3*1024+4],0x123456ff);assert.equal(view[0],0);
  assert.deepEqual(view.slice(3*1024+3,3*1024+6),[0,0x123456ff,0]);assert.equal(view.some(value=>value===0x123456ff),true);
 });
+
+test('typed cel growth keeps typed buffers, row alignment, transparent slots and link aliases',()=>{
+ const doc=createDocument(4,4);doc.colorMode='indexed';doc.transparentIndex=2;doc.palette=['#ff0000ff','#00ff00ff','#00000000'];doc.frames[0].cels[0]=Uint32Array.of(0xff0000ff);doc.frames[0].indices=[Uint8Array.of(0)];setCelProperty(doc,0,0,{x:2,y:2,width:1,height:1});doc.frames.push({...doc.frames[0],cels:[doc.frames[0].cels[0]],indices:[doc.frames[0].indices[0]]});
+ celPixels(doc,0,0)[1*4+1]=0x00ff00ff;celIndexPixels(doc,0,0)[1*4+1]=1;
+ assert.ok(doc.frames[0].cels[0] instanceof Uint32Array);assert.ok(doc.frames[0].indices[0] instanceof Uint8Array);assert.deepEqual([...doc.frames[0].cels[0]],[0x00ff00ff,0,0,0xff0000ff]);assert.deepEqual([...doc.frames[0].indices[0]],[1,2,2,0]);assert.equal(doc.frames[0].cels[0],doc.frames[1].cels[0]);assert.equal(doc.frames[0].indices[0],doc.frames[1].indices[0]);
+});
