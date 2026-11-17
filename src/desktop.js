@@ -165,11 +165,11 @@ export async function initializeDesktop(){
  bridge.setMenuLabels=labels=>updateMenu(labels,'label');
  bridge.setMenuEnabled=values=>updateMenu(values,'enabled');
  bridge.setMenuChecked=values=>updateMenu(values,'checked');
- const recoveryClient=createRecoveryClient({pack:(...args)=>projectSaveClient.pack(...args),write:bytes=>invokeBackend('recovery_write_packed',bytes),load:(id,previous)=>invokeBackend('recovery_load_packed',{id,previous}),readReference});
+ const recoveryClient=createRecoveryClient({pack:(...args)=>projectSaveClient.pack(...args),write:bytes=>invokeBackend('recovery_write_packed',bytes),load:(id,previous)=>invokeBackend('recovery_load_packed',{id,previous}),discard:filePath=>invokeBackend('recovery_discard',{filePath}),readReference});
  bridge.saveRecovery=record=>recoveryClient.save(record);
  bridge.listRecovery=()=>invokeBackend('recovery_list');
  bridge.recoveryForPath=filePath=>invokeBackend('recovery_for_path',{filePath});
- bridge.discardRecovery=filePath=>invokeBackend('recovery_discard',{filePath});
+ bridge.discardRecovery=filePath=>recoveryClient.discard(filePath);
  bridge.loadRecovery=(id,previous=false)=>recoveryClient.load(id,previous);
  bridge.pixelRepairWasm=()=>fetch(new URL('../node_modules/@xprite/pixelate/wasm/pixelfixer_detect_bg.wasm',import.meta.url)).then(response=>response.arrayBuffer());
  let dropSerial=0;

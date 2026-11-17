@@ -2828,9 +2828,9 @@ let recoveryTimer;
 function scheduleRecovery(){clearTimeout(recoveryTimer);recoveryTimer=setTimeout(()=>{if(gesture||shapeSession||transformSession)scheduleRecovery();else void flushRecovery();},700);}
 async function flushRecovery(state=null){
   if(!state)clearTimeout(recoveryTimer);
-  const current=state||{documentId,filePath,dirty,doc};
+  const current=state||{documentId,filePath,dirty,doc,boardRevision,historyState:{revision:history.revision}};
   const snapshot=state?state.doc:transformSession?.before||gesture?.before||shapeSession?.before||doc;
-  const record={id:current.documentId,filePath:current.filePath,dirty:current.dirty,...(current.filePath&&current.dirty?{document:snapshot,name:snapshot.name}:{})};
+  const record={id:current.documentId,filePath:current.filePath,dirty:current.dirty,revision:current.historyState.revision,boardRevision:current.boardRevision,...(current.filePath&&current.dirty?{document:snapshot,name:snapshot.name}:{})};
   try{
     if(window.desktop)await window.desktop.saveRecovery(record);
     else if(current.filePath&&current.dirty)localStorage.setItem('pixel-studio-recovery',documentJSON({doc:snapshot,filePath:current.filePath,dirty:current.dirty}));
