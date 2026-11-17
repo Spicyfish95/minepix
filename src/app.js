@@ -1,3 +1,4 @@
+import {invalidateHistoryCaches} from './render-invalidation.js';
 import {layerThumbnailPixels} from './thumbnails.js';
 import {prepareDocumentPixels,releaseIndexedCaches,pixelStorageStats,documentJSON} from './pixel-storage.js';
 import {assertProjectCapacity} from './project-capacity.js';
@@ -144,7 +145,12 @@ saved=history.revision;
 function message(text){$('status').textContent=text;}
 const showError=installErrorDialog(window,document,message);
 function setDirty(value=true){dirty=value;window.desktop?.setDirty(value||documentTabs.items.some(item=>item.id!==documentId&&item.state.dirty));$('dirty-mark').textContent=value?'●':'';document.title=`${value?'● ':''}${documentTabs.items.length?doc.name:'MinePix'} — MinePix`;}
-function changed(){const entry=history.undoStack.at(-1);if(entry?.kind==='delta')for(const change of entry.changes){const cel=doc.frames[change.f]?.cels[change.l];if(cel){filledCache.delete(cel);thumbCache.delete(cel);const property=doc.frames[change.f].celProperties?.[doc.layers[change.l].id];if(property)thumbCache.delete(property);timelineDirtyCells?.add(change.f+':'+change.l);}}else{filledCache=new WeakMap();thumbCache=new WeakMap();timelineDirtyCells=null;}onionCache.clear();frameCache.clear();referenceCache.clear();setDirty(history.revision!==saved||boardDirty());scheduleRecovery();}
+function changed(entry=history.undoStack.at(-1)){
+ const impact=invalidateHistoryCaches(doc,entry,{frameCache,referenceCache,onionCache});
+ if(impact.all){filledCache=new WeakMap();thumbCache=new WeakMap();timelineDirtyCells=null;}
+ else for(const key of impact.cells){const [f,l]=key.split(':').map(Number),frame=doc.frames[f],cel=frame.cels[l];filledCache.delete(cel);thumbCache.delete(cel);if(frame.indices?.[l])thumbCache.delete(frame.indices[l]);const property=frame.celProperties?.[doc.layers[l].id];if(property)thumbCache.delete(property);timelineDirtyCells?.add(key);}
+ setDirty(history.revision!==saved||boardDirty());scheduleRecovery();
+}
 function pixels(){return celPixels(doc,fi,li);}
 function editable(){if(playing){message('请先暂停播放再编辑');return false;}if(isReference(doc.layers[li])){message('参考层只读，请使用参考设置移动或转为普通层');return false;}if(isGroup(doc.layers[li])){message('请选择组内的像素图层');return false;}if(layerState(doc,li).locked){message('当前图层已锁定');return false;}if(!layerState(doc,li).visible){message('请先显示当前图层');return false;}return true;}
 function stop(){playing=false;clearTimeout(playTimer);playback=null;setButtonIcon($('play'),'play','播放');previewFrame=fi;highlightTimeline();syncInteraction();}
@@ -879,7 +885,7 @@ function draw(){
 function drawOnionSkin(){
   if(!$('onion').checked||playing)return;
   const key=JSON.stringify([onionSettings.mode,onionSettings.previousColor,onionSettings.nextColor,onionSettings.layers,onionSettings.layers==='current'?li:-1]);
-  if(onionCacheKey!==key){onionCache.clear();frameCache.clear();referenceCache.clear();onionCacheKey=key;}
+  if(onionCacheKey!==key){onionCache.clear();onionCacheKey=key;}
   const range=onionSettings.limitRange?scopeFrames(doc,$('play-range').value,frameSelection):null;
   ctx.save();
   for(const source of onionSources(doc.frames.length,fi,onionSettings,range)){
@@ -1081,7 +1087,7 @@ previewArea.addEventListener('wheel',event=>{event.preventDefault();const r=prev
 previewArea.addEventListener('pointerdown',event=>{if(event.target.closest('button')||event.button!==0&&event.button!==1)return;event.preventDefault();previewDrag={pointerId:event.pointerId,x:event.clientX,y:event.clientY,pan:{...previewPan}};previewArea.setPointerCapture(event.pointerId);});
 previewArea.addEventListener('pointermove',event=>{if(previewDrag?.pointerId!==event.pointerId)return;previewPan={x:previewDrag.pan.x+event.clientX-previewDrag.x,y:previewDrag.pan.y+event.clientY-previewDrag.y};drawPreview();});
 for(const type of ['pointerup','pointercancel'])previewArea.addEventListener(type,event=>{if(previewDrag?.pointerId!==event.pointerId)return;previewDrag=null;if(previewArea.hasPointerCapture(event.pointerId))previewArea.releasePointerCapture(event.pointerId);});
-function layerThumbnail(index){if(isReference(doc.layers[index])){const ref=doc.layers[index].reference;if(!thumbCache.has(ref)){const mini=layerMini(index);thumbCache.set(ref,mini);}return thumbCache.get(ref);}if(isGroup(doc.layers[index])){const key=doc.layers[index];if(!thumbCache.has(key)){const mini=document.createElement('span');mini.className='mini group-icon';mini.innerHTML=iconMarkup('layers');thumbCache.set(key,mini);}return thumbCache.get(key);}const cel=doc.frames[fi].celProperties?.[doc.layers[index].id]||doc.frames[fi].cels[index];if(!thumbCache.has(cel)){const mini=layerMini(index);thumbCache.set(cel,mini);}return thumbCache.get(cel);}
+function layerThumbnail(index){if(isReference(doc.layers[index])){const ref=doc.layers[index].reference;if(!thumbCache.has(ref)){const mini=layerMini(index);thumbCache.set(ref,mini);}return thumbCache.get(ref);}if(isGroup(doc.layers[index])){const key=doc.layers[index];if(!thumbCache.has(key)){const mini=document.createElement('span');mini.className='mini group-icon';mini.innerHTML=iconMarkup('layers');thumbCache.set(key,mini);}return thumbCache.get(key);}const cel=doc.frames[fi].celProperties?.[doc.layers[index].id]||(doc.colorMode==='indexed'&&doc.frames[fi].indices?.[index])||doc.frames[fi].cels[index];if(!thumbCache.has(cel)){const mini=layerMini(index);thumbCache.set(cel,mini);}return thumbCache.get(cel);}
 function navigateLayer(event,index){
   if(event.target!==event.currentTarget||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey||event.isComposing)return;
   const keys=['ArrowUp','ArrowDown','Home','End','ArrowLeft','ArrowRight','Enter',' '];
@@ -2666,8 +2672,8 @@ const actions={
   'actual-size':()=>scale(1/zoom),
   grid:togglePixelGrid,'grid-toggle':toggleGridGuide,
   onion:toggleOnion,'onion-settings':onionSettingsDialog,
-  undo:()=>{if(gesture)return;stop();const entry=history.undoStack.at(-1);const previous=history.undo(doc);if(previous){const name=doc.name;doc=previous;doc.name=name;if(entry.paletteUI)restorePaletteUI(entry.paletteUI.before);if(entry.colorPick)setColor(entry.colorPick.before.color,entry.colorPick.before.index);normalize();changed();render();message('已撤销');}},
-  redo:()=>{if(gesture)return;stop();const entry=history.redoStack.at(-1);const next=history.redo(doc);if(next){const name=doc.name;doc=next;doc.name=name;if(entry.paletteUI)restorePaletteUI(entry.paletteUI.after);if(entry.colorPick)setColor(entry.colorPick.after.color,entry.colorPick.after.index);normalize();changed();render();message('已重做');}},
+  undo:()=>{if(gesture)return;stop();const entry=history.undoStack.at(-1);const previous=history.undo(doc);if(previous){const name=doc.name;doc=previous;doc.name=name;if(entry.paletteUI)restorePaletteUI(entry.paletteUI.before);if(entry.colorPick)setColor(entry.colorPick.before.color,entry.colorPick.before.index);normalize();changed(entry);render();message('已撤销');}},
+  redo:()=>{if(gesture)return;stop();const entry=history.redoStack.at(-1);const next=history.redo(doc);if(next){const name=doc.name;doc=next;doc.name=name;if(entry.paletteUI)restorePaletteUI(entry.paletteUI.after);if(entry.colorPick)setColor(entry.colorPick.after.color,entry.colorPick.after.index);normalize();changed(entry);render();message('已重做');}},
   fit, 'zoom-in':()=>scale(1.25),'zoom-out':()=>scale(.8), play, previous:()=>selectFrame(fi-1),next:()=>selectFrame(fi+1),
   'add-frame':()=>mutate(()=>{const position=$('frame-insert').value==='before'?Math.min(...frameSelection):Math.max(...frameSelection)+1;addFrame(doc,position-1);fi=position;frameSelection=new Set([fi]);frameAnchor=fi;selection=null;},'已新建空白帧'),
   'duplicate-frame':()=>mutate(()=>{const position=$('frame-insert').value==='before'?Math.min(...frameSelection):Math.max(...frameSelection)+1;frameSelection=new Set(duplicateFrames(doc,frameSelection,position));fi=Math.min(...frameSelection);frameAnchor=fi;selection=null;},'已复制选中帧（全部图层）'),
