@@ -4,7 +4,7 @@
 
 [English](README_EN.md) · [使用指南](docs/USER_GUIDE.md)
 
-**免费开源 · Windows x64 · 中文 / English · 源码版本 2.0.6**
+**免费开源 · Windows x64 · 中文 / English · 源码版本 2.0.7**
 
 [下载 Windows x64 安装包](https://github.com/Spicyfish95/minepix/releases/latest)
 
