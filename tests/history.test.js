@@ -148,3 +148,8 @@ test('cancelled indexed stroke snapshot rebinds unedited frames without copying 
  doc=snapshotCel(doc,0,0);assert.equal(doc.frames[1].indices[0],original.frames[1].indices[0]);assert.notEqual(doc.frames[0].indices[0],original.frames[0].indices[0]);prepareDocumentPixels(doc);applyIndexedPalette(doc,['#00000000','#0000ffff'],[0,1]);prepareDocumentPixels(doc);releaseIndexedCaches(doc);validateColorMode(doc);
  assert.deepEqual([...doc.frames[1].cels[0]],[0x0000ffff,0x0000ffff]);
 });
+
+test('oversize entries obey the hard budget while revisions and subsequent edits remain valid',()=>{
+ let doc=createDocument(2,2);const history=new History(40,1),before=clone(doc);addLayer(doc,0);assert.equal(history.push(before,doc),true);assert.equal(history.undoStack.length,0);assert.equal(history.memoryBytes,0);assert.equal(history.revision,1);assert.equal(history.undo(doc),null);assert.equal(doc.layers.length,2);
+ history.budget=96*1024*1024;const next=snapshotCel(doc,0,0);doc.frames[0].cels[0][0]=0xff0000ff;history.push(next,doc);doc=history.undo(doc);assert.equal(doc.layers.length,2);assert.equal(doc.frames[0].cels[0][0],0);assert.equal(history.revision,1);
+});
