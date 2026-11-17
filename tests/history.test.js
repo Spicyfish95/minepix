@@ -1,10 +1,10 @@
-import {documentJSON,prepareDocumentPixels,pixelStorageStats} from '../src/pixel-storage.js';
+import {documentJSON,prepareDocumentPixels,pixelStorageStats,releaseIndexedCaches} from '../src/pixel-storage.js';
 import {linkCels} from '../src/cel-links.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {History,snapshotCel,snapshotMetadata} from '../src/history.js';
 import {createDocument,clone,addLayer} from '../src/model.js';
-import {convertColorMode} from '../src/color-modes.js';
+import {applyIndexedPalette,validateColorMode,convertColorMode} from '../src/color-modes.js';
 import {toTileset,toPixels} from '../src/tilemap.js';
 import {addReference,moveReference,removeReference,reorderReference} from '../src/reference-board.js';
 test('稀疏像素历史仅保存差量，撤销重做精确且没有别名',()=>{let doc=createDocument(512,512),history=new History(),before=snapshotCel(doc,0,0);doc.frames[0].cels[0][123]=0xffffffff;assert.ok(history.push(before,doc));assert.equal(history.undoStack[0].kind,'delta');assert.ok(history.memoryBytes<10000);doc=history.undo(doc);assert.equal(doc.frames[0].cels[0][123],0);doc=history.redo(doc);assert.equal(doc.frames[0].cels[0][123],0xffffffff);});
@@ -136,4 +136,15 @@ test('indexed structural snapshots store indices without materializing RGBA and 
 test('linked delta blocks share stored buffers while invalidation retains every member',()=>{
  const doc=createDocument(512,1);doc.frames.push({...doc.frames[0],cels:[doc.frames[0].cels[0]]});linkCels(doc,0,[0,1]);const history=new History(),before=snapshotCel(doc,0,0);doc.frames[0].cels[0][256]=0xffffffff;history.push(before,doc,{blocks:new Set([256])});
  const changes=history.undoStack[0].changes;assert.equal(changes.length,2);assert.equal(changes[0].before,changes[1].before);assert.equal(changes[0].after,changes[1].after);
+});
+
+test('cancelled metadata snapshot owns indexed getters after palette edits and cache release',()=>{
+ let doc=createDocument(2,1);doc.colorMode='indexed';doc.palette=['#00000000','#ff0000ff'];doc.transparentIndex=0;doc.frames[0].indices=[Uint8Array.of(1,1)];prepareDocumentPixels(doc);const original=doc;
+ const before=snapshotMetadata(doc);doc.symmetryAxes={x:1,y:0};doc=before;prepareDocumentPixels(doc);applyIndexedPalette(doc,['#00000000','#0000ffff'],[0,1]);prepareDocumentPixels(doc);releaseIndexedCaches(doc);validateColorMode(doc);
+ assert.deepEqual([...doc.frames[0].cels[0]],[0x0000ffff,0x0000ffff]);assert.equal(original.palette[1],'#ff0000ff');
+});
+test('cancelled indexed stroke snapshot rebinds unedited frames without copying source indices',()=>{
+ let doc=createDocument(2,1);doc.colorMode='indexed';doc.palette=['#00000000','#ff0000ff'];doc.transparentIndex=0;doc.frames[0].indices=[Uint8Array.of(1,1)];doc.frames.push({duration:100,cels:[[0,0]],indices:[Uint8Array.of(1,1)]});prepareDocumentPixels(doc);const original=doc;
+ doc=snapshotCel(doc,0,0);assert.equal(doc.frames[1].indices[0],original.frames[1].indices[0]);assert.notEqual(doc.frames[0].indices[0],original.frames[0].indices[0]);prepareDocumentPixels(doc);applyIndexedPalette(doc,['#00000000','#0000ffff'],[0,1]);prepareDocumentPixels(doc);releaseIndexedCaches(doc);validateColorMode(doc);
+ assert.deepEqual([...doc.frames[1].cels[0]],[0x0000ffff,0x0000ffff]);
 });

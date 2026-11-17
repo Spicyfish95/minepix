@@ -66,17 +66,18 @@ function apply(doc,entry,side){
 }
 export function snapshotMetadata(doc){
  const snapshot=copy(meta(doc));if(doc.references)snapshot.references=doc.references;
- snapshot.frames.forEach((frame,f)=>{frame.cels=doc.frames[f].cels;if(doc.frames[f].indices)frame.indices=doc.frames[f].indices;});
- scopes.set(snapshot,{metadataOnly:true,cells:new Set()});return snapshot;
+ snapshot.frames.forEach((frame,f)=>{const source=doc.frames[f];frame.cels=doc.colorMode==='indexed'?Array.from({length:source.cels.length},(_,l)=>source.indices?.[l]?null:source.cels[l]):source.cels;if(source.indices)frame.indices=source.indices.slice();});
+ scopes.set(snapshot,{metadataOnly:true,cells:new Set()});return doc.colorMode==='indexed'?prepareDocumentPixels(snapshot):snapshot;
 }
 export function snapshotCel(doc,frame,layer){
  const members=new Set(linkedMembers(doc,frame,layer)),pixels=doc.frames[frame].cels[layer].slice(),indices=doc.frames[frame].indices?.[layer]?.slice();
  const snapshot={...doc,frames:doc.frames.map((value,f)=>{
+  if(doc.colorMode==='indexed')return{...value,indices:value.indices?.map((values,l)=>members.has(f)&&l===layer?indices:values),cels:Array.from({length:value.cels.length},(_,l)=>value.indices?.[l]?null:members.has(f)&&l===layer?pixels:value.cels[l])};
   if(!members.has(f))return value;
   const cels=Object.defineProperties([],Object.getOwnPropertyDescriptors(value.cels));Object.defineProperty(cels,layer,{value:pixels,enumerable:true,configurable:true,writable:true});
   return{...value,...(value.indices?{indices:value.indices.map((values,l)=>l===layer?indices:values)}:{}),cels};
  })};
- scopes.set(snapshot,{cells:new Set([...members].map(f=>f+':'+layer))});return snapshot;
+ scopes.set(snapshot,{cells:new Set([...members].map(f=>f+':'+layer))});return doc.colorMode==='indexed'?prepareDocumentPixels(snapshot):snapshot;
 }
 export class History{
  constructor(max=40,budget=96*1024*1024){this.max=max;this.budget=budget;this.reset();}
