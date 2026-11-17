@@ -41,6 +41,10 @@ async function runChecks(){
    actions.undo();check(name+' undo restores every destination pixel',pixels().every(pixel=>pixel===0x00ff00ff));actions.redo();check(name+' redo restores only selected opaque pixels',JSON.stringify([...pixels()])===JSON.stringify(expected));
    switchDocument(irregularId);check(name+' source pixels and clipboard remain unchanged',pixels()[5*10+7]===0&&pixels().filter(pixel=>pixel===0xff0000ff).length===79&&clipboard===clip&&JSON.stringify([...clipboard.mask])===JSON.stringify(mask)&&JSON.stringify(clipboard.data)===JSON.stringify(data));
   }
+  const cropped=createDocument(5,1,'reordered cropped index');cropped.colorMode='indexed';cropped.palette=['#00000000','#ff0000ff','#ff0000ff'];cropped.transparentIndex=0;cropped.frames[0].cels[0]=Uint32Array.of(0xff0000ff);cropped.frames[0].indices=[Uint8Array.of(2)];setCelProperty(cropped,0,0,{x:1,y:0,width:1,height:1});replaceDocument(cropped,true);selection=null;
+  const held=celIndexPixels(doc,0,0);mutate(()=>applyIndexedPalette(doc,['#ff0000ff','#00000000','#ff0000ff'],[1,0,2]),'reorder transparent slot',{colorsReady:true});
+  check('cached cropped view uses current transparent slot after palette reorder',doc.transparentIndex===1&&held[0]===1&&held===celIndexPixels(doc,0,0));actions.copy();check('copy after transparent reorder keeps holes and duplicate index identity',clipboard.data.join(',')==='0,4278190335,0,0,0'&&clipboard.indexed.data.join(',')==='1,2,1,1,1');
+  const {validateColorMode}=await import('/color-modes.js');actions['flip-x']();validateColorMode(doc);check('flip after transparent reorder keeps RGBA and indices consistent',celIndexPixels(doc,0,0).slice().join(',')==='1,1,1,2,1'&&!$('error-dialog').open);actions.undo();validateColorMode(doc);check('cropped flip undo restores source bounds and duplicate slot',celProperty(doc,0,0).width===1&&celIndexPixels(doc,0,0)[1]===2);actions.redo();validateColorMode(doc);check('cropped flip redo keeps transparent edges',celIndexPixels(doc,0,0).slice().join(',')==='1,1,1,2,1');
   void newDocument();
   return{ok:true,results};
  }catch(error){return{ok:false,results,error:error.stack};}

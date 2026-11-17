@@ -25,11 +25,11 @@ function view(doc,f,l,indexed){
  const frame=doc.frames[f],p=celProperty(doc,f,l),raw=indexed?frame.indices?.[l]:frame.cels[l];if(!raw)return null;
  if(!p.x&&!p.y&&p.width===doc.width&&p.height===doc.height)return raw;
  let cache=views.get(frame);if(!cache)views.set(frame,cache=new Map());const key=l+':'+indexed+':'+doc.width+':'+doc.height;if(cache.has(key))return cache.get(key);
- const empty=indexed?doc.transparentIndex:0,target=Array(doc.width*doc.height),numeric=k=>typeof k==='string'&&/^(0|[1-9]\d*)$/.test(k);
+ const target=Array(doc.width*doc.height),numeric=k=>typeof k==='string'&&/^(0|[1-9]\d*)$/.test(k);
  const proxy=new Proxy(target,{
   has(target,key){return numeric(key)&&+key<target.length||Reflect.has(target,key);},
-  get(target,key,receiver){if(!numeric(key))return Reflect.get(target,key,receiver);const p=celProperty(doc,f,l),i=+key,x=i%doc.width-p.x,y=Math.floor(i/doc.width)-p.y;return x>=0&&y>=0&&x<p.width&&y<p.height?(indexed?frame.indices[l]:frame.cels[l])[y*p.width+x]:empty;},
-  set(target,key,value){if(!numeric(key))return Reflect.set(target,key,value);const i=+key,x=i%doc.width,y=Math.floor(i/doc.width);let p=celProperty(doc,f,l);if(x<p.x||y<p.y||x>=p.x+p.width||y>=p.y+p.height){if(value===empty)return true;growCel(doc,f,l,x,y);p=celProperty(doc,f,l);}const source=indexed?frame.indices[l]:frame.cels[l];source[(y-p.y)*p.width+x-p.x]=value;return true;}
+  get(target,key,receiver){if(!numeric(key))return Reflect.get(target,key,receiver);const p=celProperty(doc,f,l),i=+key,x=i%doc.width-p.x,y=Math.floor(i/doc.width)-p.y;return x>=0&&y>=0&&x<p.width&&y<p.height?(indexed?frame.indices[l]:frame.cels[l])[y*p.width+x]:(indexed?doc.transparentIndex:0);},
+  set(target,key,value){if(!numeric(key))return Reflect.set(target,key,value);const i=+key,x=i%doc.width,y=Math.floor(i/doc.width);let p=celProperty(doc,f,l);if(x<p.x||y<p.y||x>=p.x+p.width||y>=p.y+p.height){if(value===(indexed?doc.transparentIndex:0))return true;growCel(doc,f,l,x,y);p=celProperty(doc,f,l);}const source=indexed?frame.indices[l]:frame.cels[l];source[(y-p.y)*p.width+x-p.x]=value;return true;}
  });locations.set(proxy,{doc,frame:f,layer:l});cache.set(key,proxy);return proxy;
 }
 export const celPixels=(doc,frame,layer)=>view(doc,frame,layer,false);

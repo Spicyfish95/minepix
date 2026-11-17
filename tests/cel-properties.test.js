@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createDocument,addFrame,validateDocument,composite,History,pasteRegion} from '../src/model.js';
+import {createDocument,addFrame,validateDocument,composite,History,pasteRegion,copyRegion,flipRegion} from '../src/model.js';
 import {celPixels,celIndexPixels,celProperty,setCelProperty} from '../src/cel-properties.js';
 import {linkCels} from '../src/cel-links.js';
-import {convertColorMode} from '../src/color-modes.js';
+import {prepareDocumentPixels} from '../src/pixel-storage.js';
+import {snapshotCel} from '../src/history.js';
+import {convertColorMode,applyIndexedPalette,validateColorMode} from '../src/color-modes.js';
 import {copyCels,pasteCels} from '../src/timeline-selection.js';
 import {FrameCache} from '../src/renderer.js';
 import {readAseprite,writeAseprite} from './helpers/aseprite.js';
@@ -28,4 +30,20 @@ test('typed cel growth keeps typed buffers, row alignment, transparent slots and
  const doc=createDocument(4,4);doc.colorMode='indexed';doc.transparentIndex=2;doc.palette=['#ff0000ff','#00ff00ff','#00000000'];doc.frames[0].cels[0]=Uint32Array.of(0xff0000ff);doc.frames[0].indices=[Uint8Array.of(0)];setCelProperty(doc,0,0,{x:2,y:2,width:1,height:1});doc.frames.push({...doc.frames[0],cels:[doc.frames[0].cels[0]],indices:[doc.frames[0].indices[0]]});
  celPixels(doc,0,0)[1*4+1]=0x00ff00ff;celIndexPixels(doc,0,0)[1*4+1]=1;
  assert.ok(doc.frames[0].cels[0] instanceof Uint32Array);assert.ok(doc.frames[0].indices[0] instanceof Uint8Array);assert.deepEqual([...doc.frames[0].cels[0]],[0x00ff00ff,0,0,0xff0000ff]);assert.deepEqual([...doc.frames[0].indices[0]],[1,2,2,0]);assert.equal(doc.frames[0].cels[0],doc.frames[1].cels[0]);assert.equal(doc.frames[0].indices[0],doc.frames[1].indices[0]);
+});
+
+function reorderedCroppedCel(){
+ const doc=createDocument(5,1);doc.colorMode='indexed';doc.palette=['#00000000','#ff0000ff','#ff0000ff'];doc.transparentIndex=0;doc.frames[0].cels[0]=Uint32Array.of(0xff0000ff);doc.frames[0].indices=[Uint8Array.of(2)];setCelProperty(doc,0,0,{x:1,y:0,width:1,height:1});prepareDocumentPixels(doc);
+ const view=celIndexPixels(doc,0,0),rgba=celPixels(doc,0,0);applyIndexedPalette(doc,['#ff0000ff','#00000000','#ff0000ff'],[1,0,2]);prepareDocumentPixels(doc);return{doc,view,rgba};
+}
+test('cached cropped index view follows transparent slot changes for reads and writes',()=>{
+ const {doc,view,rgba}=reorderedCroppedCel();assert.equal(doc.transparentIndex,1);assert.equal(celIndexPixels(doc,0,0),view);assert.equal(view[0],1);assert.equal(rgba[0],0);assert.deepEqual(view.slice(0,3),[1,2,1]);
+ const before=celProperty(doc,0,0);view[4]=1;assert.deepEqual(celProperty(doc,0,0),before);assert.equal(doc.frames[0].indices[0].length,1);
+ view[4]=0;rgba[4]=0xff0000ff;assert.equal(celProperty(doc,0,0).width,4);assert.deepEqual([...doc.frames[0].indices[0]],[2,1,1,0]);validateColorMode(doc);
+});
+test('reordered cropped cel copy and flip retain transparency and duplicate slots through undo redo',()=>{
+ let {doc}=reorderedCroppedCel();const copied=copyRegion(doc,celPixels(doc,0,0),null);assert.deepEqual(copied.data,[0,0xff0000ff,0,0,0]);assert.deepEqual(copied.indexed.data,[1,2,1,1,1]);
+ const history=new History(),before=snapshotCel(doc,0,0);flipRegion(doc,celPixels(doc,0,0),null,'x');validateColorMode(doc);assert.deepEqual([...celIndexPixels(doc,0,0)],[1,1,1,2,1]);history.push(before,doc);
+ doc=history.undo(doc);validateColorMode(doc);assert.equal(celProperty(doc,0,0).width,1);assert.deepEqual([...celIndexPixels(doc,0,0)],[1,2,1,1,1]);
+ doc=history.redo(doc);validateColorMode(doc);assert.deepEqual([...celIndexPixels(doc,0,0)],[1,1,1,2,1]);
 });
