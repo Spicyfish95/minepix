@@ -138,7 +138,7 @@ function constrainCanvasPoint(kind,start,end,shift){const x=tiledMode==='x'||til
 
 let previewFootprint=brushFootprint({size:1});
 const symmetryHandles=['x','y'].map(axis=>{const handle=document.createElement('button');handle.type='button';handle.id='symmetry-axis-'+axis;handle.className='symmetry-handle';handle.textContent=axis==='x'?'↔':'↕';handle.setAttribute('aria-label',axis==='x'?'拖动左右对称轴':'拖动上下对称轴');viewport.append(handle);handle.hidden=true;
- handle.onpointerdown=event=>{event.preventDefault();event.stopPropagation();if(gesture||busy||playing||$('modal').open)return;gesture={kind:'symmetry',axis,before:clone(doc),pointerId:event.pointerId,oldSelection:selection};viewport.setPointerCapture(event.pointerId);};return handle;});
+ handle.onpointerdown=event=>{event.preventDefault();event.stopPropagation();if(gesture||busy||playing||$('modal').open)return;gesture={kind:'symmetry',axis,before:snapshotMetadata(doc),pointerId:event.pointerId,oldSelection:selection};viewport.setPointerCapture(event.pointerId);};return handle;});
 const visibleSlices=()=>doc.slices.map(s=>sliceAtFrame(s,fi)).filter(Boolean);
 const symmetryOptions=()=>({horizontal:$('symmetry').checked,vertical:$('symmetry-vertical').checked,...(doc.symmetryAxes||{x:doc.width/2,y:doc.height/2})});
 const brushPreview=document.createElement('div');brushPreview.id='brush-preview';viewport.append(brushPreview);
@@ -350,12 +350,13 @@ function syncPalettePanel(){const value=paletteTargetColor();$('hex').value=valu
 function useForegroundForPattern(){if(brushSettings.shape!=='pattern'||brushSettings.patternMode==='brush')return;brushSettings.patternMode='brush';updateBrushControls();message('图案笔刷已切换为单色（前景色）；改回源对齐或落点对齐可恢复图案原色');}
 function setColor(value,index=null){if(modeOf(doc)==='indexed'){colorIndex=index??createMapper(doc,doc.layers[li])(colorValue(normalizeColor(value))).index;}else if(modeOf(doc)==='grayscale')value='#'+grayPixel(colorValue(normalizeColor(value))).toString(16).padStart(8,'0');const next=normalizeColor(value);if(next!==color)useForegroundForPattern();color=next;saveColorPreferences();renderColors();}
 function pickColor(value){const index=paletteTargetIndex();if(index!==null)setPaletteColor(index,value,{live:gesture?.kind==='eyedropper'});setColor(value,index);}
-function beginColorPick(event,node){gesture={kind:'eyedropper',pointerId:event.pointerId,node,oldSelection:selection,foreground:color,colorIndex,...(paletteTargetIndex()!==null?{before:clone(doc)}:{})};node.setPointerCapture(event.pointerId);}
+function snapshotPaletteGesture(){return modeOf(doc)==='indexed'?snapshotDocument(doc):snapshotMetadata(doc);}
+function beginColorPick(event,node){gesture={kind:'eyedropper',pointerId:event.pointerId,node,oldSelection:selection,foreground:color,colorIndex,...(paletteTargetIndex()!==null?{before:snapshotPaletteGesture()}:{})};node.setPointerCapture(event.pointerId);}
 let screenColorPicking=false;
 async function pickScreenColor(){
  if(screenColorPicking||busy||gesture||shapeSession||!window.desktop||!documentTabs.items.length||$('modal').open)return;
  screenColorPicking=true;
- const target=documentId,index=paletteTargetIndex(),before=index!==null?clone(doc):null,foreground={color,index:colorIndex};
+ const target=documentId,index=paletteTargetIndex(),before=index!==null?snapshotPaletteGesture():null,foreground={color,index:colorIndex};
  try{
   const sampled=await window.desktop.pickScreenColor();if(!sampled||documentId!==target)return;
   if(index!==null)setPaletteColor(index,sampled,{live:true});setColor(sampled,index);
@@ -623,7 +624,7 @@ function openPaletteColor(index){
 }
 function previewPaletteColor(index,value){
   if(gesture&&gesture.kind!=='palette-color')return;
-  if(!gesture)gesture={kind:'palette-color',before:clone(doc),oldSelection:selection};
+  if(!gesture)gesture={kind:'palette-color',before:snapshotPaletteGesture(),oldSelection:selection};
   setPaletteColor(index,value,{live:true});
   renderPalette();$('hex').value=doc.palette[index].toUpperCase();
 }
@@ -999,7 +1000,7 @@ function openSelectionMenuAt(event){
 function beginSlicePointer(event){
  const raw=transformEventPoint(event),selected=visibleSlices().find(s=>s.id===activeSliceId),handle=selected&&hitSliceHandle(selected.bounds,raw,zoom),hit=handle?selected:visibleSlices().reverse().find(s=>{const b=s.bounds;return raw.x>=b.x&&raw.y>=b.y&&raw.x<b.x+b.w&&raw.y<b.y+b.h;});
  if(!hit&&(raw.x<0||raw.y<0||raw.x>=doc.width||raw.y>=doc.height))return;
- const before=clone(doc),start=point(event);let slice=hit;
+ const before=snapshotMetadata(doc),start=point(event);let slice=hit;
  if(!slice){slice={id:crypto.randomUUID(),name:'切片 '+(doc.slices.length+1),bounds:{x:start.x,y:start.y,w:1,h:1}};doc.slices.push(setSliceKey(slice,fi,slice));doc.requiredFeatures=[...new Set([...doc.requiredFeatures,'slices',...(fi?['slice-keyframes']:[])])];}
  activeSliceId=slice.id;gesture={kind:'slice',sliceId:slice.id,handle:hit?(handle||'move'):'create',original:clone(slice),start,rawStart:raw,before,oldSelection:selection,pointerId:event.pointerId};viewport.setPointerCapture(event.pointerId);drawOverlay();
 }
@@ -1678,7 +1679,7 @@ document.addEventListener('pointerdown',event=>{if(!textSession)return;const tar
 viewport.addEventListener('pointerenter',e=>{rememberPointer(e);drawOverlay();});viewport.addEventListener('pointerleave',()=>{if(pointer)pointer.inside=false;updateBrushPreview();drawOverlay();});
 viewport.addEventListener('wheel',e=>{e.preventDefault();if(gesture||shapeSession||busy||transformSession?.drag||$('modal').open&&!transformSession&&!onionSession)return;rememberPointer(e);const intent=wheelIntent(e,inputPreferences);if(!intent.delta)return;const r=viewport.getBoundingClientRect();if(intent.action==='zoom')scale(intent.delta<0?inputPreferences.zoomStep:1/inputPreferences.zoomStep,{x:e.clientX-r.left,y:e.clientY-r.top});else if(intent.action==='pan'){pan[intent.horizontal?'x':'y']-=intent.delta*inputPreferences.panSpeed;place();drawOverlay();}else if(!$('modal').open&&intent.action==='frames')dispatch(intent.delta<0?'previous':'next');else if(!$('modal').open&&intent.action==='brush')setBrush(brush+(intent.delta<0?1:-1));syncInteraction();},{passive:false});
 
-function adjustImageDialog(type){const original=doc;return imageAdjustmentDialog(type,{source:clone(doc),foreground:color,frame:fi,layer:li,selection,modal,$,preview:next=>{doc=next;render();},restore:()=>{doc=original;render();},commit:next=>mutate(()=>{doc=next;},type==='outline'?'已应用图像描边':'已应用图像颜色调整',{colorsReady:true})});}
+function adjustImageDialog(type){const original=doc;return imageAdjustmentDialog(type,{source:snapshotDocument(doc),foreground:color,frame:fi,layer:li,selection,modal,$,preview:next=>{doc=next;render();},restore:()=>{doc=original;render();},commit:next=>mutate(()=>{doc=next;},type==='outline'?'已应用图像描边':'已应用图像颜色调整',{colorsReady:true})});}
 function selectionEditDialog(kind){return editSelectionDialog(kind,{doc,pixels:pixels(),foreground:color,modal,$,getSelection:()=>selection,setSelection:value=>{selection=value;drawOverlay();},rememberSelection:value=>{previousSelection=value;}});}
 function modal(title,html,setup=null,validate=null,options={}){
   if($('modal').open)return Promise.resolve(null);$('modal-submit').disabled=false;window.focus();resetModifiers();stop();$('modal-title').textContent=title;$('modal-content').innerHTML=html+'<p class="error" id="modal-error" role="alert"></p>';const form=$('modal-form');setup?.(form);normalizeInlineControls($('modal-content'));uiAll('#modal-content input[type=checkbox]').forEach(input=>input.setAttribute('role','switch'));
@@ -2505,7 +2506,7 @@ async function tagEditor(id=null){
 function editCels(fn,text){
   if(!celRange)return message('请先选择 cel 矩形范围');
   if(playing)return message('请先暂停播放再编辑 cel');
-  const before=clone(doc);
+  const before=snapshotDocument(doc);
   try{fn();if(history.push(before,doc))changed();render();message(text);}
   catch(error){doc=before;render();showError(error.message);}
 }
@@ -2527,7 +2528,7 @@ async function transformSelection(bulk=false){
     range={...celRange};try{assertEditableCels(doc,range);}catch(error){return showError(error.message);}
     bounds=celContentBounds(doc,range);if(!bounds)return message('所选 cel 没有可见像素');
   }else{if(!editable())return;if(!selection?.w||!selection?.h)return message('请先建立非空选区');}
-  const before=clone(doc),oldSelection=selection,region=bulk?bounds:copyRegion(doc,pixels(),selection);
+  const before=snapshotDocument(doc),oldSelection=selection,region=bulk?bounds:copyRegion(doc,pixels(),selection);
   const session={before,state:{...transformState(region),algorithm:localStorage.getItem('pixel-studio-rotation-algorithm')||'fast'}};if(bulk)session.regions=new Map(celTargets(range).map(({frame,layer})=>[frame+':'+layer,copyRegion(before,celPixels(before,frame,layer),bounds)]));transformSession=session;
   setPreviewUI(true);
   $('modal').classList.add('transform-dialog');
