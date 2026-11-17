@@ -50,3 +50,11 @@ test('lazy validation rejects bad slots, wrong source lengths, mismatched cached
 test('plain validation copies each shared source only once and retains input isolation',()=>{
  const doc=createDocument(4,4);doc.frames.push({...doc.frames[0],cels:[doc.frames[0].cels[0]]});const result=validateDocument(doc);assert.equal(result.frames[0].cels[0],result.frames[1].cels[0]);assert.notEqual(result.frames[0].cels[0],doc.frames[0].cels[0]);result.frames[0].cels[0][0]=1;assert.equal(doc.frames[0].cels[0][0],0);
 });
+
+test('typed index validation scans shared buffers once per call and still rechecks later edits',()=>{
+ const doc=prepareDocumentPixels(indexed());doc.frames.push({...doc.frames[0],cels:[null],indices:[doc.frames[0].indices[0]]});prepareDocumentPixels(doc);releaseIndexedCaches(doc);
+ const validated=validateDocument(doc);assert.equal(pixelStorageStats(validated).rgbaBytes,0);doc.frames[0].indices[0][0]=255;assert.throws(()=>validateDocument(doc),/索引像素越界/);
+});
+test('plain index validation rejects holes, fractions and negative values',()=>{
+ for(const values of [[-1,0,0],[1.2,0,0],Array(3)]){const doc=indexed();doc.frames[0].indices[0]=values;assert.throws(()=>validateColorMode(doc),/索引像素越界/);}
+});
