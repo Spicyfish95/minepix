@@ -20,6 +20,27 @@ async function runChecks(){
   clipboard=null;pending=newDocument();check('clipboard size does not overwrite application defaults',values().width===64&&values().height===48);$('modal').close('cancel');await pending;
   switchDocument(sourceId);selection=null;actions.copy();pending=newDocument();check('copying without selection uses the whole copied canvas dimensions',values().width===10&&values().height===8);$('modal').close('cancel');await pending;
   selection={x:7,y:5,w:3,h:2,mask:new Uint8Array([0,0,0,0,1,0])};actions.copy();pending=newDocument();check('masked selection and transparent edges keep full copied bounds',values().width===3&&values().height===2);$('modal').close('cancel');await pending;
+  switchDocument(sourceId);selection={x:7,y:5,w:3,h:2};actions.copy();const originalClipboard=clipboard,sourcePixels=[...pixels()];
+  pending=newDocument();form.requestSubmit($('modal-submit'));await pending;const smallId=documentId;actions.paste();
+  check('paste into a clipboard-sized new project is visible despite source offsets',doc.width===3&&doc.height===2&&pixels()[4]===0xff0000ff);
+  actions.undo();check('destination paste can be undone',pixels().every(pixel=>pixel===0));actions.redo();check('destination paste can be redone',pixels()[4]===0xff0000ff);
+  switchDocument(sourceId);check('switching back preserves source pixels and global clipboard',JSON.stringify(pixels())===JSON.stringify(sourcePixels)&&clipboard===originalClipboard);
+  switchDocument(smallId);check('switching back to destination preserves its paste and history',pixels()[4]===0xff0000ff&&history.undoStack.length===1);
+  replaceDocument(createDocument(12,10,'large-target'),true,null,crypto.randomUUID(),true);actions.paste();check('a larger target preserves fitting source coordinates',pixels()[6*12+8]===0xff0000ff);
+  replaceDocument(createDocument(6,5,'selected-target'),true,null,crypto.randomUUID(),true);selection={x:1,y:1,w:1,h:1};actions.paste();check('explicit target selection anchors the pasted region',pixels()[2*6+2]===0xff0000ff);
+  for(const mode of ['indexed','grayscale']){
+   const target=createDocument(3,2,mode);target.palette=['#00000000','#ff0000ff','#ffffffff'];convertColorMode(target,mode,{palette:'current'});replaceDocument(target,true,null,crypto.randomUUID(),true);actions.paste();
+   check(mode+' target retains its mode and shows pasted pixels',doc.colorMode===mode&&pixels()[4]!==0);actions.undo();check(mode+' paste supports undo',pixels().every(pixel=>pixel===0));actions.redo();check(mode+' paste supports redo',pixels()[4]!==0);
+  }
+  for(const [name,contains]of[['L shape',(x,y)=>x===0||y===2],['hole',(x,y)=>x!==1||y!==1],['disconnected',(x,y)=>x===y]]){
+   const irregular=createDocument(10,8,name);irregular.frames[0].cels[0].fill(0xff0000ff);irregular.frames[0].cels[0][5*10+7]=0;replaceDocument(irregular,true,null,crypto.randomUUID(),true);const irregularId=documentId;
+   selection=selectionFrom(doc,(x,y)=>x>=7&&x<=9&&y>=5&&y<=7&&contains(x-7,y-5));actions.copy();const clip=clipboard,mask=[...clip.mask],data=[...clip.data];
+   pending=newDocument();check(name+' new dimensions use the actual selection bounding rectangle',values().width===3&&values().height===3);form.requestSubmit($('modal-submit'));await pending;
+   pixels().fill(0x00ff00ff);const expected=Array.from({length:9},(_,i)=>contains(i%3,Math.floor(i/3))&&i!==0?0xff0000ff:0x00ff00ff);actions.paste();
+   check(name+' paste preserves mask holes and transparent pixels',JSON.stringify(pixels())===JSON.stringify(expected));check(name+' pasted selection retains its translated irregular mask',selection.x===0&&selection.y===0&&selection.w===3&&selection.h===3&&JSON.stringify([...selection.mask])===JSON.stringify(mask));
+   actions.undo();check(name+' undo restores every destination pixel',pixels().every(pixel=>pixel===0x00ff00ff));actions.redo();check(name+' redo restores only selected opaque pixels',JSON.stringify(pixels())===JSON.stringify(expected));
+   switchDocument(irregularId);check(name+' source pixels and clipboard remain unchanged',pixels()[5*10+7]===0&&pixels().filter(pixel=>pixel===0xff0000ff).length===79&&clipboard===clip&&JSON.stringify([...clipboard.mask])===JSON.stringify(mask)&&JSON.stringify(clipboard.data)===JSON.stringify(data));
+  }
   void newDocument();
   return{ok:true,results};
  }catch(error){return{ok:false,results,error:error.stack};}
