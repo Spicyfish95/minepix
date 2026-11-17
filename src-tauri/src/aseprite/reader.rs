@@ -96,6 +96,23 @@ fn palette_entry(
     Ok(if background { pixel | 255 } else { pixel })
 }
 
+// Only copied pixels need palette validation; clipped tilemap pixels retain the
+// existing decoder semantics. Transparent slots are legal without a palette value.
+fn copy_indexed_rows(raw: &[u8], source_w: usize, source_h: usize, target: &mut [u8], w: usize, h: usize, dx: i64, dy: i64, valid: &[bool; 256]) -> io::Result<()> {
+    let left = 0.max(-dx) as usize;
+    let right = (source_w as i64).min(w as i64 - dx).max(0) as usize;
+    let top = 0.max(-dy) as usize;
+    let bottom = (source_h as i64).min(h as i64 - dy).max(0) as usize;
+    if right <= left || bottom <= top { return Ok(()); }
+    for y in top..bottom {
+        let row = &raw[y * source_w + left..y * source_w + right];
+        if row.iter().any(|index| !valid[*index as usize]) { return Err(invalid("ASE 像素引用缺失色板项")); }
+        let start = (y as i64 + dy) as usize * w + (left as i64 + dx) as usize;
+        target[start..start + row.len()].copy_from_slice(row);
+    }
+    Ok(())
+}
+
 struct TileFormat {
     bits: usize,
     id: u32,
@@ -658,6 +675,10 @@ fn decode_internal(bytes:&[u8],name:&str,binary:bool)->io::Result<(Value,Vec<cra
             }
         }
     }
+    let mut indexed_valid = [false; 256];
+    for (index, value) in palette.iter().enumerate().take(256) { indexed_valid[index] = value.is_some(); }
+    let mut transparent_valid = indexed_valid;
+    transparent_valid[transparent as usize] = true;
     let mut images: Vec<HashMap<usize, Rc<Image>>> = Vec::new();
     let mut output_frames: Vec<Value> = Vec::new();
     let mut planes=Vec::new();
@@ -745,6 +766,10 @@ fn decode_internal(bytes:&[u8],name:&str,binary:bool)->io::Result<(Value,Vec<cra
                 {
                     properties.insert((l+1).to_string(),json!({"x":cel.x,"y":cel.y,"width":w,"height":h,"opacity":cel.opacity as f64*100.0/255.0}));
                 }
+                if binary && depth == 8 {
+                    let (dx, dy) = if image.tilemap { (cel.x as i64, cel.y as i64) } else { (0, 0) };
+                    copy_indexed_rows(&image.raw, image.w, image.h, indexed.as_mut().unwrap(), w, h, dx, dy, if background { &indexed_valid } else { &transparent_valid })?;
+                } else {
                 for y in 0..image.h {
                     for x in 0..image.w {
                         let px = x as i64 + if image.tilemap { cel.x as i64 } else { 0 };
@@ -781,6 +806,7 @@ fn decode_internal(bytes:&[u8],name:&str,binary:bool)->io::Result<(Value,Vec<cra
                         };
                         if !out.is_empty(){out[at]=pixel;}
                     }
+                }
                 }
             }
             if binary {
@@ -889,6 +915,19 @@ fn postorder(layers: &[Value], parent: Option<u64>, out: &mut Vec<usize>) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn indexed_rows_clip_copy_and_reject_missing_palette_entries() {
+        let raw = [1, 2, 3, 4, 5, 6];
+        let mut valid = [false; 256];for index in 1..=6 { valid[index] = true; }
+        let mut target = [9; 8];
+        super::copy_indexed_rows(&raw, 3, 2, &mut target, 4, 2, -1, 1, &valid).unwrap();
+        assert_eq!(target, [9, 9, 9, 9, 2, 3, 9, 9]);
+        valid[2] = false;
+        assert!(super::copy_indexed_rows(&raw, 3, 2, &mut target, 4, 2, -1, 1, &valid).is_err());
+        super::copy_indexed_rows(&raw, 3, 2, &mut target, 4, 2, 8, 0, &valid).unwrap();
+        valid[2] = true;valid[1] = false;
+        super::copy_indexed_rows(&raw, 3, 2, &mut target, 4, 2, -1, 1, &valid).unwrap();
+    }
     use super::super::{Writer, chunk, encode};
     use super::*;
     use flate2::{Compression, write::ZlibEncoder};
