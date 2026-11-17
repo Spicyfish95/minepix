@@ -1,5 +1,5 @@
 import {celProperty} from './cel-properties.js';
-import {isReference,isBackground,rasterReference,overBackground} from './layer-types.js';
+import {isReference,isBackground,referenceSampler,overBackground} from './layer-types.js';
 export const BLEND_MODES=[['normal','正常'],['multiply','正片叠底'],['screen','滤色'],['overlay','叠加'],['darken','变暗'],['lighten','变亮'],['color-dodge','颜色减淡'],['color-burn','颜色加深'],['hard-light','强光'],['soft-light','柔光'],['difference','差值'],['exclusion','排除'],['hue','色相'],['saturation','饱和度'],['color','颜色'],['luminosity','明度'],['addition','相加'],['subtract','减去'],['divide','相除']];
 export const blendId=mode=>BLEND_MODES.findIndex(([id])=>id===(mode||'normal'));
 const lum=c=>.3*c[0]+.59*c[1]+.11*c[2],sat=c=>Math.max(...c)-Math.min(...c);
@@ -28,20 +28,21 @@ export function compositeInto(doc,index,rect,target,{includeReference=false}={})
    if(!layer.visible||!layer.opacity||isReference(layer)&&!includeReference)continue;
    if(layer.type==='group'&&layer.passThrough){paint(children.get(layer.id)||[],output,stride,originX,originY);continue;}
    let groupBuffer;
-   let pixels;
+   let pixels;const reference=isReference(layer)?referenceSampler(doc,l,index):null;
    const indexed=indexedPalette&&!isReference(layer)?doc.frames[index].indices?.[l]:null;
    if(layer.type==='group'){
     // Isolated groups only need the dirty region, in the same RGBA layout as output.
     groupBuffer=new Uint8ClampedArray(regionWidth*regionHeight*4);
     paint(children.get(layer.id)||[],groupBuffer,regionWidth,x0,y0);
-   }else pixels=isReference(layer)?rasterReference(doc,l,index,{x:x0,y:y0,w:regionWidth,h:regionHeight}):indexed||doc.frames[index].cels[l];
+   }else pixels=reference?null:indexed||doc.frames[index].cels[l];
    const property=celProperty(doc,index,l),bg=isBackground(layer),opacity=layer.opacity/100*property.opacity/100,mode=layer.blendMode||'normal';
    for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){
     let source;
     if(groupBuffer){
      const offset=((y-y0)*regionWidth+x-x0)*4;
      source=((groupBuffer[offset]<<24)|(groupBuffer[offset+1]<<16)|(groupBuffer[offset+2]<<8)|groupBuffer[offset+3])>>>0;
-    }else{
+    }else if(reference)source=reference(x,y);
+    else{
      const sx=x-property.x,sy=y-property.y;
      if(sx>=0&&sy>=0&&sx<property.width&&sy<property.height){const value=pixels[sy*property.width+sx];source=indexed?(bg?(indexedPalette[value]|255)>>>0:value===doc.transparentIndex?0:indexedPalette[value]):value;}else source=0;
     }
