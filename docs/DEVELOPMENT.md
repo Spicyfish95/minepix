@@ -226,3 +226,9 @@ Rust 构建缓存优化范围：默认分支按依赖与缓存配置变化预热
 保存阶段验证：Node 保存／传输／引用／类型像素 45 项、真实 Worker 保存浏览器 55 项通过；验证独立快照缓冲转移、活动像素不分离、索引 RGBA getter 不读取、重复槽、异步保存编辑与跨项目隔离，以及单图保存和参考重载。
 
 恢复合并阶段验证：恢复客户端与保存快照 Node 18 项通过，覆盖连续版本只打包首／末、待处理像素独立性、相同版本去重、参考修订、多文档、干净状态取代、丢弃屏障、失败后续处理及二进制恢复读取。
+
+历史阶段定向验证：元数据快照不读取像素 getter、单 cel 跳过无关图层、触及块差量、链接像素去重／预算及索引结构快照不派生 RGBA。跨模块关联回归扩大至 Node 全部 657 项，均通过；类型数组回放对应的旧测试改为比较完整语义内容，并增加显式类型及别名断言。浏览器优化专项 16 项、取色历史 140 项、不规则剪贴板 41 项、保存 55 项通过。8M 像素专项本机测得冷合成 P95 65.8 ms、热绘制 P95 4.4 ms、绘画处理 P95 6.3 ms、提交 12.4 ms；不作为不同硬件的固定承诺。
+
+本地 Debug 通过 `scripts/cargo.ps1 build --locked --manifest-path src-tauri/Cargo.toml --bin minepix-tauri --features tauri/custom-protocol` 构建，嵌入生产前端。`node scripts/optimization-desktop-smoke.mjs` 使用临时作品，原生验证 14 项通过，包含索引链接笔画／撤销／重做、保存与恢复的重复色槽和快照隔离、文件状态及缩略图刷新、窗口迁移与清理屏障；结束恢复 WebView 本机设置并移除临时最近项。前端构建、生产资源、仓库与 LF 检查通过。构建产物与报告保留在本地 artifacts／target，不纳入 Git，不更新版本或发布。
+
+生产资源检查按实际 Worker 文件及构建后引用验证客户端，不依赖 Rollup 自动选择的共享 chunk 名称。完整浏览器及原生性能报告分别位于本地 `artifacts/optimization-browser.json`、`artifacts/optimization-desktop/report.json`；复验使用对应脚本，不把报告副本提交为指南。

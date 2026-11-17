@@ -133,10 +133,10 @@ test('链接索引 cel 只计数一次且重复目标索引支持单步撤销重
     assert.equal(history.push(before, doc, {colorsReady: true}), true);
     assert.equal(history.undoStack.length, 1);
     const undone = history.undo(doc);
-    assert.deepEqual(undone.frames[0].indices[0], [1, 2, 1, 0]);
+    assert.deepEqual([...undone.frames[0].indices[0]], [1, 2, 1, 0]);
     assert.equal(undone.frames[0].indices[0], undone.frames[1].indices[0]);
     const redone = history.redo(undone);
-    assert.deepEqual(redone.frames[0].indices[0], [2, 2, 2, 0]);
+    assert.deepEqual([...redone.frames[0].indices[0]], [2, 2, 2, 0]);
     assert.equal(redone.frames[0].indices[0], redone.frames[1].indices[0]);
     assert.equal(redone.frames[0].cels[0], redone.frames[1].cels[0]);
     assert.deepEqual(redone.palette, before.palette);

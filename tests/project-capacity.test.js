@@ -1,3 +1,4 @@
+import {documentJSON} from '../src/pixel-storage.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createDocument,validateDocument,clone,addFrame,addLayer} from '../src/model.js';
@@ -30,7 +31,7 @@ test('超过旧预算的稀疏项目可验证、复制帧并独立撤销重做',
  let doc=validateDocument(sparseDocument());const before=clone(doc),history=new History();
  assert.ok(doc.width*doc.height*doc.frames.length>oldLimit);duplicateFrames(doc,new Set([0]),1);history.push(before,doc);
  assert.equal(doc.frames.length,34);assert.ok(doc.frames.every(frame=>frame.cels[0].length===1&&frame.cels[0][0]===0x448844ff));validateDocument(doc);
- doc=history.undo(doc);assert.deepEqual(doc,before);doc=history.redo(doc);assert.equal(doc.frames.length,34);validateDocument(doc);
+ doc=history.undo(doc);assert.deepEqual(JSON.parse(documentJSON(doc)),JSON.parse(documentJSON(before)));doc=history.redo(doc);assert.equal(doc.frames.length,34);validateDocument(doc);
 });
 for(const [name,edit]of[
  ['新增帧',d=>addFrame(d,0)],['复制单帧',d=>addFrame(d,0,true)],['复制多帧',d=>duplicateFrames(d,new Set([0]),1)],

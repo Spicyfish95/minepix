@@ -1,3 +1,4 @@
+import {documentJSON} from '../src/pixel-storage.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -42,7 +43,7 @@ for(const mode of ['rgba','indexed','grayscale'])test(`${mode}: picking updates 
   assert.equal(context.doc.frames[0].cels[0][0],colorValue(expected));
  }
  validateColorMode(context.doc);
- context.doc=context.history.undo(context.doc);assert.deepEqual(context.doc,before);
+ context.doc=context.history.undo(context.doc);assert.deepEqual(JSON.parse(documentJSON(context.doc)),JSON.parse(documentJSON(before)));
  context.doc=context.history.redo(context.doc);assert.equal(context.doc.palette[1],expected);validateColorMode(context.doc);
 });
 test('indexed picking retains active index when sampled color already belongs to another slot',()=>{
@@ -85,7 +86,7 @@ test('indexed two picks survive leaving editing with a 2048 reference',()=>{
  assert.equal(context.history.undoStack.length,2);assert.ok(context.history.memoryBytes<16384);
  assert.equal(context.history.undoStack[0].before.references,undefined);
  context.doc=context.history.undo(context.doc);assert.equal(context.doc.palette[1],'#123456');validateColorMode(context.doc);
- context.doc=context.history.undo(context.doc);assert.deepEqual(context.doc,original);validateColorMode(context.doc);
+ context.doc=context.history.undo(context.doc);assert.deepEqual(JSON.parse(documentJSON(context.doc)),JSON.parse(documentJSON(original)));validateColorMode(context.doc);
  context.doc=context.history.redo(context.doc);assert.equal(context.doc.palette[1],'#123456');
  context.doc=context.history.redo(context.doc);assert.equal(context.doc.palette[1],'#abcdef');validateColorMode(context.doc);
  assert.equal(context.doc.references[0].data,data);

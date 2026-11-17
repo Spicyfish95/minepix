@@ -14,9 +14,9 @@ assert.ok(!files.some(file=>file.name.includes('-smoke-')),'发行资源不含�
 const app=files.find(file=>/^app-.*\.js$/.test(path.basename(file.name)));
 const source=await readFile(app.name,'utf8');
 const saveWorker=files.find(file=>/^project-save-worker-.*\.js$/.test(path.basename(file.name)));
-const saveClient=files.find(file=>/^project-save-client-.*\.js$/.test(path.basename(file.name)));
-assert.ok(saveWorker&&saveClient,'发行资源包含项目保存 Worker 和客户端');
-assert.ok((await readFile(saveClient.name,'utf8')).includes(path.basename(saveWorker.name)),'保存客户端引用构建后的 Worker 路径');
+assert.ok(saveWorker,'发行资源包含项目保存 Worker');
+const clientChunks=await Promise.all(files.filter(file=>file.name.endsWith('.js')&&file!==saveWorker).map(async file=>({file,source:await readFile(file.name,'utf8')})));
+assert.ok(clientChunks.some(chunk=>chunk.source.includes(path.basename(saveWorker.name))&&chunk.source.includes('new Worker(')),'保存客户端引用构建后的 Worker 路径，不依赖自动生成的 chunk 名称');
 for(const name of ['runTilemapSmoke','runSettingsSmoke','runParitySmoke','prepareUpdateSmoke','runPaletteWorkflowSmoke']){
  assert.ok(!source.includes(name),'发行主包不含 '+name);
 }

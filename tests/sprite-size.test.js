@@ -95,7 +95,8 @@ test('精灵缩放可单步撤销且恢复原尺寸与像素', () => {
   const undone = history.undo(doc);
   assert.equal(undone.width, 2);
   assert.equal(undone.height, 2);
-  assert.deepEqual(undone.frames[0].cels[0], [red, 0, 0, blue]);
+  assert.ok(undone.frames[0].cels[0] instanceof Uint32Array);
+  assert.deepEqual([...undone.frames[0].cels[0]], [red, 0, 0, blue]);
   const redone = history.redo(undone);
   assert.equal(redone.width, 8);
 });

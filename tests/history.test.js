@@ -1,6 +1,8 @@
+import {documentJSON,prepareDocumentPixels,pixelStorageStats} from '../src/pixel-storage.js';
+import {linkCels} from '../src/cel-links.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {History,snapshotCel} from '../src/history.js';
+import {History,snapshotCel,snapshotMetadata} from '../src/history.js';
 import {createDocument,clone,addLayer} from '../src/model.js';
 import {convertColorMode} from '../src/color-modes.js';
 import {toTileset,toPixels} from '../src/tilemap.js';
@@ -17,13 +19,13 @@ test('旧式 pending 无差量历史可撤销重做，快照与预算保持独�
  history.push(doc);
  const pendingBytes=history.memoryBytes;
  doc=history.undo(doc);
- assert.deepEqual(doc,original);
+ assert.deepEqual(JSON.parse(documentJSON(doc)),JSON.parse(documentJSON(original)));
  assert.equal(history.revision,0);
  assert.equal(history.redoStack[0].kind,'snapshot');
  assert.equal(history.memoryBytes,pendingBytes*2);
  doc.frames[0].cels[0][5]=0;
  doc=history.redo(doc);
- assert.deepEqual(doc,original);
+ assert.deepEqual(JSON.parse(documentJSON(doc)),JSON.parse(documentJSON(original)));
  assert.equal(history.revision,1);
 });
 
@@ -40,7 +42,7 @@ test('重复色槽在索引块交界及不满256的尾块可精确撤销重做',
  doc=history.undo(doc);
  assert.ok(doc.frames[0].indices[0].every(index=>index===1));
  doc=history.redo(doc);
- assert.deepEqual(doc.frames[0].indices[0],Array.from({length:513},(_,i)=>changed.includes(i)?2:1));
+ assert.deepEqual([...doc.frames[0].indices[0]],Array.from({length:513},(_,i)=>changed.includes(i)?2:1));
  assert.ok(doc.frames[0].cels[0].every(pixel=>pixel===0xff0000ff));
 });
 
@@ -106,4 +108,32 @@ test('pending绘画条目回放也只影响绘画而保留当前参考',()=>{
  let doc=createDocument(2,2);addBoardReference(doc,'old');const history=new History();history.push(doc);doc.frames[0].cels[0][0]=1;
  removeReference(doc,'old');addBoardReference(doc,'new',24);doc=history.undo(doc);assert.equal(doc.frames[0].cels[0][0],0);assert.equal(doc.references[0].id,'new');
  moveReference(doc,'new',32,16);doc=history.redo(doc);assert.equal(doc.frames[0].cels[0][0],1);assert.equal(doc.references[0].x,32);
+});
+test('metadata snapshots and history commits never read or copy pixel planes',()=>{
+ const doc=createDocument(1024,1024),history=new History();
+ Object.defineProperty(doc.frames[0].cels,0,{configurable:true,enumerable:true,get(){throw Error('unexpected pixel read');}});
+ const before=snapshotMetadata(doc);doc.layers[0].name='renamed';doc.frames[0].duration=200;assert.ok(history.push(before,doc));
+ assert.equal(history.undoStack[0].changes.length,0);assert.equal(history.undoStack[0].before.layers[0].name,'图层 1');assert.ok(history.memoryBytes<10000);
+});
+test('a cel snapshot avoids unrelated pixel getters and compares only supplied blocks',()=>{
+ const doc=createDocument(1024,1);addLayer(doc,0);const history=new History();
+ Object.defineProperty(doc.frames[0].cels,1,{configurable:true,enumerable:true,get(){throw Error('unrelated cel read');}});
+ const before=snapshotCel(doc,0,0);doc.frames[0].cels[0][900]=0x123456ff;assert.ok(history.push(before,doc,{blocks:new Set([768])}));
+ assert.deepEqual(history.undoStack[0].changes.map(change=>[change.f,change.l,change.start]),[[0,0,768]]);
+});
+test('linked structural snapshots deduplicate planes and replay typed independent buffers',()=>{
+ let doc=createDocument(512,1);doc.frames.push({...doc.frames[0],cels:[doc.frames[0].cels[0]]});linkCels(doc,0,[0,1]);
+ const history=new History(),before=clone(doc);addLayer(doc,0);history.push(before,doc);const entry=history.undoStack[0];
+ assert.equal(entry.before.cels[0][0],entry.before.cels[1][0]);assert.ok(entry.bytes<512*4*7);
+ doc=history.undo(doc);assert.ok(doc.frames[0].cels[0] instanceof Uint32Array);assert.equal(doc.frames[0].cels[0],doc.frames[1].cels[0]);doc.frames[0].cels[0][0]=123;assert.equal(entry.before.cels[0][0][0],0);
+ doc=history.redo(doc);assert.equal(doc.frames[0].cels[0][0],0);
+});
+test('indexed structural snapshots store indices without materializing RGBA and preserve duplicate slots',()=>{
+ let doc=createDocument(3,1);doc.palette=['#00000000','#123456ff','#123456ff'];doc.colorMode='indexed';doc.transparentIndex=0;doc.frames[0].indices=[Uint8Array.of(0,2,1)];prepareDocumentPixels(doc);
+ const history=new History();history.push(doc);const snapshot=history.undoStack[0].before;assert.equal(snapshot.cels[0][0],null);assert.equal(pixelStorageStats(doc).rgbaBytes,0);
+ doc=history.undo(doc);assert.ok(doc.frames[0].indices[0] instanceof Uint8Array);assert.deepEqual([...doc.frames[0].indices[0]],[0,2,1]);assert.deepEqual([...doc.frames[0].cels[0]],[0,0x123456ff,0x123456ff]);
+});
+test('linked delta blocks share stored buffers while invalidation retains every member',()=>{
+ const doc=createDocument(512,1);doc.frames.push({...doc.frames[0],cels:[doc.frames[0].cels[0]]});linkCels(doc,0,[0,1]);const history=new History(),before=snapshotCel(doc,0,0);doc.frames[0].cels[0][256]=0xffffffff;history.push(before,doc,{blocks:new Set([256])});
+ const changes=history.undoStack[0].changes;assert.equal(changes.length,2);assert.equal(changes[0].before,changes[1].before);assert.equal(changes[0].after,changes[1].after);
 });

@@ -1,3 +1,4 @@
+import {documentJSON} from '../src/pixel-storage.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createDocument,colorValue,copyRegion,pasteRegion,composite} from '../src/model.js';
@@ -21,7 +22,7 @@ for(const [name,contains]of[
  assert.deepEqual(target,{x:0,y:0});pasteRegion(b,b.frames[0].cels[0],region,target.x,target.y);history.push(before,b);
  const expected=Array.from({length:9},(_,i)=>contains(i%3,Math.floor(i/3))&&i!==0?red:green);
  assert.deepEqual(b.frames[0].cels[0],expected);assert.deepEqual(region,original);assert.deepEqual(a,sourceBefore);
- b=history.undo(b);assert.deepEqual(b,before);b=history.redo(b);assert.deepEqual(b.frames[0].cels[0],expected);
+ b=history.undo(b);assert.deepEqual(JSON.parse(documentJSON(b)),JSON.parse(documentJSON(before)));b=history.redo(b);assert.deepEqual(b.frames[0].cels[0],expected);
 });
 test('不规则选区大于目标时按原掩码裁切而不缩放或填充孔洞',()=>{
  const a=createDocument(8,8);a.frames[0].cels[0].fill(red);
@@ -89,7 +90,7 @@ test('跨项目负的源坐标约束到画布，显式目标选区继续优先',
 for(const mode of ['rgba','indexed','grayscale'])test(`跨项目 ${mode} 粘贴保留目标模式并可撤销重做`,()=>{
  const a=createDocument(8,8);a.frames[0].cels[0][6*8+6]=red;const region=copyRegion(a,a.frames[0].cels[0],{x:6,y:6,w:2,h:2});let b=createDocument(2,2);b.palette=['#00000000','#ff0000ff','#ffffffff'];if(mode!=='rgba')convertColorMode(b,mode,{palette:'current'});
  const before=structuredClone(b),history=new History(),target=pasteTarget(b,region,null,false);pasteRegion(b,b.frames[0].cels[0],region,target.x,target.y);history.push(before,b);validateColorMode(b);assert.equal(b.frames[0].cels[0][0],mode==='grayscale'?grayPixel(red):red);
- b=history.undo(b);assert.deepEqual(b,before);b=history.redo(b);validateColorMode(b);assert.ok(b.frames[0].cels[0][0]);assert.equal(a.frames[0].cels[0][6*8+6],red);
+ b=history.undo(b);assert.deepEqual(JSON.parse(documentJSON(b)),JSON.parse(documentJSON(before)));b=history.redo(b);validateColorMode(b);assert.ok(b.frames[0].cels[0][0]);assert.equal(a.frames[0].cels[0][6*8+6],red);
 });
 test('跨项目复制索引色像素到不同顺序色板时按颜色映射而非复用旧 index',()=>{
  const a=createDocument(8,8);a.palette=['#00000000','#ff0000ff','#00ff00ff'];a.frames[0].cels[0][6*8+6]=red;convertColorMode(a,'indexed',{palette:'current'});const region=copyRegion(a,a.frames[0].cels[0],{x:6,y:6,w:2,h:2}),b=createDocument(2,2);b.palette=['#00000000','#00ff00ff','#ff0000ff'];convertColorMode(b,'indexed',{palette:'current'});const target=pasteTarget(b,region,null,false);pasteRegion(b,b.frames[0].cels[0],region,target.x,target.y);assert.equal(b.frames[0].indices[0][0],2);assert.equal(b.frames[0].cels[0][0],red);validateColorMode(b);
