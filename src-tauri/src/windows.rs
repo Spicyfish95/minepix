@@ -5,7 +5,7 @@ use std::{
         Mutex,
         atomic::{AtomicU64, Ordering},
     },
-    time::Duration,
+    time::{Duration,Instant},
 };
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow};
 use tokio::sync::oneshot;
@@ -14,6 +14,7 @@ struct Pending {
     sender: String,
     reply: oneshot::Sender<Result<Value, String>>,
 }
+struct Transfer { bytes:Vec<u8>, receiver:Option<String>, created:Instant }
 
 pub struct Editor {
     pub home: Option<String>,
@@ -25,6 +26,7 @@ pub struct Windows {
     serial: AtomicU64,
     pending: Mutex<HashMap<u64, Pending>>,
     ready: Mutex<HashMap<String, oneshot::Sender<()>>>,
+    transfers: Mutex<HashMap<String,Transfer>>,
     pub editors: Mutex<HashMap<String, Editor>>,
 }
 
@@ -45,12 +47,37 @@ pub fn event<R: tauri::Runtime>(
 }
 
 impl Windows {
+    pub fn put_transfer(&self,source:&str,request_id:u64,bytes:&[u8])->Result<Value,String>{
+        if self.pending.lock().unwrap().get(&request_id).is_none_or(|pending|pending.sender!=source){return Err("文档传输请求已失效".into());}
+        let mut transfers=self.transfers.lock().unwrap();transfers.retain(|_,value|value.created.elapsed()<Duration::from_secs(60));
+        let token=uuid::Uuid::new_v4().to_string();transfers.insert(token.clone(),Transfer{bytes:bytes.to_vec(),receiver:None,created:Instant::now()});
+        Ok(json!({"$binary":token}))
+    }
+
+    fn grant_transfers(&self,receiver:&str,value:&Value)->Result<(),String>{
+        if let Some(token)=value["$binary"].as_str(){
+            let mut transfers=self.transfers.lock().unwrap();let transfer=transfers.get_mut(token).ok_or("文档传输已过期")?;
+            if transfer.created.elapsed()>=Duration::from_secs(60){return Err("文档传输已过期".into());}
+            transfer.receiver=Some(receiver.into());
+        }else if let Some(array)=value.as_array(){for value in array{self.grant_transfers(receiver,value)?;}}
+        else if let Some(object)=value.as_object(){for value in object.values(){self.grant_transfers(receiver,value)?;}}
+        Ok(())
+    }
+
+    pub fn take_transfer(&self,receiver:&str,token:&str)->Result<Vec<u8>,String>{
+        let mut transfers=self.transfers.lock().unwrap();
+        let transfer=transfers.get(token).ok_or("文档传输已失效")?;
+        if transfer.receiver.as_deref()!=Some(receiver)||transfer.created.elapsed()>=Duration::from_secs(60){return Err("文档传输目标不匹配或已过期".into());}
+        Ok(transfers.remove(token).unwrap().bytes)
+    }
+
     pub async fn request(
         &self,
         window: &WebviewWindow,
         operation: &str,
         data: Value,
     ) -> Result<Value, String> {
+        if operation=="adopt"{self.grant_transfers(window.label(),&data)?;}
         let id = self.serial.fetch_add(1, Ordering::Relaxed) + 1;
         let (sender, receiver) = oneshot::channel();
         self.pending.lock().unwrap().insert(
@@ -310,4 +337,21 @@ pub fn build_editor(app: &AppHandle, label: &str) -> tauri::Result<WebviewWindow
         }
     });
     Ok(window)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn binary_transfer_requires_live_source_and_granted_destination(){
+        let windows=Windows::default();let(sender,_receiver)=oneshot::channel();
+        windows.pending.lock().unwrap().insert(7,Pending{sender:"source".into(),reply:sender});
+        assert!(windows.put_transfer("other",7,b"pixels").is_err());
+        assert!(windows.put_transfer("source",8,b"pixels").is_err());
+        let descriptor=windows.put_transfer("source",7,b"pixels").unwrap();let token=descriptor["$binary"].as_str().unwrap();
+        assert!(windows.take_transfer("target",token).is_err());
+        windows.grant_transfers("target",&json!({"states":[descriptor.clone()]})).unwrap();
+        assert!(windows.take_transfer("other",token).is_err());assert_eq!(windows.take_transfer("target",token).unwrap(),b"pixels");
+        assert!(windows.take_transfer("target",token).is_err());
+    }
 }

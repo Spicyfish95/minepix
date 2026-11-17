@@ -88,6 +88,20 @@ async fn read_project_packed(
 }
 
 #[tauri::command]
+async fn document_transfer_put(request:tauri::ipc::Request<'_>,window:tauri::WebviewWindow,state:tauri::State<'_,Backend>)->Result<Value,String>{
+    let tauri::ipc::InvokeBody::Raw(bytes)=request.body()else{return Err("窗口传输需要原始字节".into())};
+    let packet=binary_packet::Packet::parse(bytes).map_err(|error|error.to_string())?;
+    let id=packet.metadata["requestId"].as_u64().ok_or("窗口请求标识无效")?;
+    if packet.payloads.len()!=1{return Err("窗口传输数据缺失".into());}
+    state.windows.put_transfer(window.label(),id,packet.payloads[0])
+}
+
+#[tauri::command]
+async fn document_transfer_get(token:String,window:tauri::WebviewWindow,state:tauri::State<'_,Backend>)->Result<tauri::ipc::Response,String>{
+    state.windows.take_transfer(window.label(),&token).map(tauri::ipc::Response::new)
+}
+
+#[tauri::command]
 async fn capture_pixels(window: tauri::WebviewWindow) -> Result<tauri::ipc::Response, String> {
     if window.label() != "screen-capture" {
         return Err("只能由截图窗口读取截图".into());
@@ -830,6 +844,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             desktop_call,
             export_packed,
+            document_transfer_put,
+            document_transfer_get,
             capture_pixels,
             read_project_packed,
             save_project_packed,

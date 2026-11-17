@@ -1,4 +1,6 @@
 import {createExportClient} from './export-client.js';
+import {packBinaryPacket} from './binary-packet.js';
+import {packDocumentWire,unpackDocumentWire} from './document-wire.js';
 import {createRecoveryClient} from './recovery-client.js';
 ﻿import {createDocumentSaver} from './document-save.js';
 import {encodeSingleImage} from './single-image-save.js';
@@ -141,7 +143,17 @@ export async function initializeDesktop(){
  let incoming=Promise.resolve();
  bridge.onOpenFile=callback=>subscribe('open-file-data',file=>{incoming=incoming.then(async()=>callback(await resolveOpened(file))).catch(error=>dispatch('editor:error',error.message));});
  bridge.onDocumentRequest=callback=>subscribe('editor:request',async({requestId,operation,data})=>{
-  try{await call('editorReply',{requestId,result:encodeWire(await callback(operation,decodeWire(data)))});}
+  async function resolve(value){
+   if(value?.$binary)return unpackDocumentWire(await invokeBackend('document_transfer_get',{token:value.$binary}));
+   if(Array.isArray(value))return Promise.all(value.map(resolve));
+   if(value&&typeof value==='object')return Object.fromEntries(await Promise.all(Object.entries(value).map(async([key,value])=>[key,await resolve(value)])));
+   return value;
+  }
+  try{
+   const result=await callback(operation,operation==='adopt'?await resolve(data):decodeWire(data));
+   const encoded=['take','take-all'].includes(operation)?await invokeBackend('document_transfer_put',packBinaryPacket({requestId},[packDocumentWire(result)])):encodeWire(result);
+   await call('editorReply',{requestId,result:encoded});
+  }
   catch(error){await call('editorReply',{requestId,error:error.message});}
  });
  Object.assign(bridge,windowBridge(current));

@@ -61,6 +61,14 @@ unsafe extern "system" fn subclass(
 }
 
 pub fn register(window: &WebviewWindow) -> tauri::Result<()> {
+    // SetWindowSubclass must run on the thread that owns the HWND.
+    let (sender,receiver)=std::sync::mpsc::sync_channel(1);
+    let target=window.clone();
+    window.run_on_main_thread(move||{let _=sender.send(register_on_window_thread(&target));})?;
+    receiver.recv().map_err(|error|std::io::Error::other(error.to_string()))?
+}
+
+fn register_on_window_thread(window:&WebviewWindow)->tauri::Result<()>{
     let hwnd = HWND(window.hwnd()?.0);
     let state = Arc::new(Mutex::new(MoveState::default()));
     let context = Box::into_raw(Box::new(Context {
