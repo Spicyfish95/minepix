@@ -1,6 +1,8 @@
 import {projectForSave} from './reference-files.js';
+import {snapshotDocument,snapshotMessage} from './document-snapshot.js';
 import {releaseIndexedCaches} from './pixel-storage.js';
-export function snapshotProject(document){const snapshot=structuredClone(projectForSave(document));releaseIndexedCaches(document);return snapshot;}
+const owned=new WeakSet();
+export function snapshotProject(document){const snapshot=snapshotDocument(projectForSave(document));owned.add(snapshot);releaseIndexedCaches(document);return snapshot;}
 
 export function createProjectSaveClient({createWorker=()=>new Worker(new URL('./project-save-worker.js',import.meta.url),{type:'module'})}={}){
  let worker=null,nextId=0;
@@ -17,7 +19,8 @@ export function createProjectSaveClient({createWorker=()=>new Worker(new URL('./
       worker.onerror=event=>{event.preventDefault();stop(new Error(event.message||'项目保存打包失败'));};
       worker.onmessageerror=()=>stop(new Error('项目保存数据传输失败'));
      }
-     pending.set(id,{resolve,reject});worker.postMessage({id,document,name,saveAs,target});releaseIndexedCaches(document);
+     const snapshot=owned.has(document)?document:snapshotProject(document),message=snapshotMessage(snapshot);owned.delete(snapshot);
+     pending.set(id,{resolve,reject});worker.postMessage({id,document:message.document,name,saveAs,target},message.transfer);releaseIndexedCaches(document);
     }catch(error){pending.delete(id);reject(error);}
    });
   },
