@@ -55,6 +55,14 @@ try{
  observed=await session.evaluate(`({mode:window.documentWindowAudit().mode,layers:document.querySelectorAll('.layer').length,frames:document.querySelectorAll('.frame-head').length,status:document.getElementById('status').textContent,modal:document.getElementById('modal').open})`);
  check('native Open loads indexed decorates without a modal',observed.mode==='indexed'&&observed.layers===3&&observed.frames===1&&!observed.modal);
  check('native status has no palette truncation warning',!observed.status.includes('仅保留前 256 项'));
+ check('opening a saved ASE has no dirty marker in tab or title',await session.evaluate(`!window.documentWindowAudit().dirty&&!document.querySelector('.document-tab.active [role="tab"]').textContent.includes('●')&&!document.title.startsWith('●')`));
+ await session.evaluate(`document.querySelector('[data-menu-command="rename-layer"]').click()`);
+ await wait(()=>session.evaluate(`document.getElementById('modal').open`),'rename dialog');
+ await session.evaluate(`(()=>{const form=document.getElementById('modal-form');form.elements.name.value+=' test';form.requestSubmit(document.getElementById('modal-submit'));})()`);
+ await wait(()=>session.evaluate('window.documentWindowAudit().dirty'),'ASE edited');
+ check('editing the opened ASE shows its dirty dot',await session.evaluate(`document.querySelector('.document-tab.active [role="tab"]').textContent.includes('●')&&document.title.startsWith('●')`));
+ await session.evaluate(`document.querySelector('[data-menu-command="undo"]').click()`);
+ check('undoing to ASE open save point clears all dirty markers',await session.evaluate(`!window.documentWindowAudit().dirty&&!document.querySelector('.document-tab.active [role="tab"]').textContent.includes('●')&&!document.title.startsWith('●')`));
  const wire=await session.evaluate(`(async()=>Array.from(new Uint8Array(await window.__TAURI_INTERNALS__.invoke('read_project_packed',{filePath:${JSON.stringify(sample)},record:false}))))()`);
  const packet=unpackProjectReadPacket(Uint8Array.from(wire)),doc=verify(packet);
  check('all source cel positions indices RGBA and all 263 palette slots match',true);
