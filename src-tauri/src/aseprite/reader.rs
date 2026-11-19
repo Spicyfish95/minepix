@@ -502,17 +502,23 @@ fn decode_internal(bytes:&[u8],name:&str,binary:bool)->io::Result<(Value,Vec<cra
                     let first = chunk.u32()? as usize;
                     let last = chunk.u32()? as usize;
                     chunk.skip(8)?;
-                    if n > 256 || last >= n || first > last {
-                        return Err(invalid("ASE 色板超出 256 或范围无效"));
+                    if last >= n || first > last {
+                        return Err(invalid("ASE 色板范围无效"));
                     }
                     let mut next = palette.clone();
-                    next.resize(n, None);
-                    for item in next.iter_mut().take(last + 1).skip(first) {
+                    next.resize(n.min(256), None);
+                    // Palette records can exceed the 8-bit index range. Consume every
+                    // entry (including names), but keep the editor's addressable slots.
+                    for index in first..=last {
                         let pf = chunk.u16()?;
-                        *item = Some(color(&mut chunk)?);
+                        let value = color(&mut chunk)?;
+                        if index < next.len() { next[index] = Some(value); }
                         if pf & 1 != 0 {
                             chunk.string()?;
                         }
+                    }
+                    if n > 256 {
+                        warn(&mut warnings, "ASE 色板超过 256 项，仅保留前 256 项");
                     }
                     if f > 0 && depth == 8 && next != palette {
                         return Err(invalid("索引色逐帧色板尚不支持，请先转换 RGBA"));
@@ -656,10 +662,11 @@ fn decode_internal(bytes:&[u8],name:&str,binary:bool)->io::Result<(Value,Vec<cra
         palette = legacy_palette;
     }
     if depth == 8 {
-        if palette.is_empty() || colors > 256 || transparent as usize >= colors.max(palette.len()) {
+        let size = colors.min(256).max(palette.len());
+        if palette.is_empty() || transparent as usize >= size {
             return Err(invalid("ASE 色板或透明索引无效"));
         }
-        palette.resize(colors.max(palette.len()), Some(255));
+        palette.resize(size, Some(255));
     }
     for layer in &mut layers {
         if layer["type"] == "background" {
@@ -971,6 +978,69 @@ mod tests {
         out[134..136].copy_from_slice(&count.to_le_bytes());
         out[140..144].copy_from_slice(&(count as u32).to_le_bytes());
         out
+    }
+    fn extended_palette(bytes: &[u8], first: u32, last: u32, count: u32) -> Vec<u8> {
+        let mut body = Writer::default();
+        body.u32(count);
+        body.u32(first);
+        body.u32(last);
+        body.zero(8);
+        for index in first..=last {
+            body.u16(u16::from(index >= 256));
+            body.0.extend([index as u8, 37, 91, 255]);
+            if index >= 256 { body.string("额外色槽").unwrap(); }
+        }
+        append(bytes, 0x2019, &body.0)
+    }
+    #[test]
+    fn oversized_indexed_palette_keeps_addressable_slots_and_binary_pixels() {
+        let mut doc = document(include_bytes!("../../../tests/fixtures/indexed-linked.aseprite"));
+        doc["palette"] = json!((0..256).map(|i| hex((i << 24) | 0x00255bff)).collect::<Vec<_>>());
+        doc["frames"][0]["indices"][0][0] = json!(255);
+        let source = encode(&doc).unwrap();
+        let expected = document(&source);
+        // A partial palette update beyond the addressable range must retain the first 256 slots.
+        let mut bytes = extended_palette(&source, 256, 262, 263);
+        bytes[32..34].copy_from_slice(&263u16.to_le_bytes());
+        let imported = decode(&bytes, "test").unwrap();
+        assert_eq!(imported["doc"], expected);
+        assert_eq!(imported["doc"]["frames"][0]["indices"][0][0], 255);
+        assert_eq!(imported["warnings"].as_array().unwrap().len(), 1);
+        assert!(imported["warnings"][0].as_str().unwrap().contains("256"));
+        let wire = decode_transfer(&bytes, "test").unwrap();
+        let baseline = decode_transfer(&source, "test").unwrap();
+        let end = 12 + u32::from_le_bytes(wire[8..12].try_into().unwrap()) as usize;
+        let base_end = 12 + u32::from_le_bytes(baseline[8..12].try_into().unwrap()) as usize;
+        let metadata: Value = serde_json::from_slice(&wire[12..end]).unwrap();
+        let base_metadata: Value = serde_json::from_slice(&baseline[12..base_end]).unwrap();
+        assert_eq!(metadata["document"], base_metadata["document"]);
+        assert_eq!(metadata["info"]["warnings"], imported["warnings"]);
+        assert_eq!(metadata["info"]["indexedSource"], true);
+        assert_eq!(&wire[end..], &baseline[base_end..]);
+    }
+    #[test]
+    fn oversized_palette_reads_all_entries_and_rejects_invalid_ranges_or_truncation() {
+        for source in [RGBA, include_bytes!("../../../tests/fixtures/grayscale-linked.aseprite").as_slice(), include_bytes!("../../../tests/fixtures/indexed-linked.aseprite").as_slice()] {
+            let bytes = extended_palette(source, 0, 262, 263);
+            let imported = decode(&bytes, "test").unwrap();
+            let doc = &imported["doc"];
+            assert_eq!(doc["palette"].as_array().unwrap().len(), 256);
+            assert_eq!(doc["palette"][255], "#ff255bff");
+            let wire = decode_transfer(&bytes, "test").unwrap();
+            let end = 12 + u32::from_le_bytes(wire[8..12].try_into().unwrap()) as usize;
+            let metadata: Value = serde_json::from_slice(&wire[12..end]).unwrap();
+            assert_eq!(metadata["document"]["palette"], doc["palette"]);
+            assert_eq!(metadata["info"]["warnings"], imported["warnings"]);
+            for (first, last, count) in [(263, 263, 263), (262, 261, 263)] {
+                assert!(decode(&extended_palette(source, first, last, count), "bad").is_err());
+            }
+            let mut truncated = bytes.clone();
+            let (offset, _) = offsets(&truncated).into_iter().filter(|(_, kind)| *kind == 0x2019).last().unwrap();
+            truncated[offset + 6..offset + 10].copy_from_slice(&264u32.to_le_bytes());
+            truncated[offset + 14..offset + 18].copy_from_slice(&263u32.to_le_bytes());
+            assert!(decode(&truncated, "bad").is_err());
+            assert!(decode_transfer(&truncated, "bad").is_err());
+        }
     }
     fn tile_fixture(values: &[u32], set_flags: u32) -> Vec<u8> {
         let mut layer = Writer::default();
