@@ -59,6 +59,7 @@ fn pixels(w: usize, h: usize) -> io::Result<usize> {
     Ok(count)
 }
 fn inflate(data: &[u8], size: usize) -> io::Result<Vec<u8>> {
+    crate::storage::check_size(size as u64)?;
     let mut result = Vec::new();
     let mut decoder = ZlibDecoder::new(data).take(size as u64 + 1);
     decoder.read_to_end(&mut result)?;
@@ -204,6 +205,7 @@ fn rasterize(
         .checked_mul(set.h)
         .ok_or_else(|| invalid("ASE tilemap 尺寸越界"))?;
     let n = pixels(w, h)?;
+    crate::storage::check_size((n as u64) * bpp as u64)?;
     let stride = format.bits / 8;
     let tiles = inflate(cel.data, pixels(cel.w, cel.h)? * stride)?;
     let mut raw = vec![if bpp == 1 { transparent } else { 0 }; n * bpp];
@@ -260,14 +262,18 @@ fn rasterize(
 
 /// Decode an ASE file into the editor memory model; native PIX storage stays independent.
 pub fn decode(bytes: &[u8], name: &str) -> io::Result<Value> {
-    Ok(decode_internal(bytes,name,false)?.0)
+    Ok(decode_internal(bytes,name,false,false)?.0)
 }
 pub fn decode_transfer(bytes:&[u8],name:&str)->io::Result<Vec<u8>>{
-    let (mut value,planes)=decode_internal(bytes,name,true)?;
+    let (mut value,planes)=decode_internal(bytes,name,true,false)?;
     let info=json!({"warnings":value["warnings"].take(),"indexedSource":value["doc"]["colorMode"]=="indexed"});
     crate::project::raw_document_read_transfer(value["doc"].take(),planes,info)
 }
-fn decode_internal(bytes:&[u8],name:&str,binary:bool)->io::Result<(Value,Vec<crate::project::ReadPlane>)>{
+pub fn preview_transfer(bytes:&[u8])->io::Result<Vec<u8>>{
+    let (mut value,planes)=decode_internal(bytes,"thumbnail",true,true)?;
+    crate::project::raw_document_read_transfer(value["doc"].take(),planes,json!({}))
+}
+fn decode_internal(bytes:&[u8],name:&str,binary:bool,preview:bool)->io::Result<(Value,Vec<crate::project::ReadPlane>)>{
     crate::storage::check_size(bytes.len() as u64)?;
     let mut r = Reader::new(bytes);
     if bytes.len() < 128 || r.u32()? as usize != bytes.len() || r.u16()? != 0xa5e0 {
@@ -306,7 +312,7 @@ fn decode_internal(bytes:&[u8],name:&str,binary:bool)->io::Result<(Value,Vec<cra
     let mut warnings = Vec::new();
     let mut layer_sets = HashMap::new();
     let mut sets = HashMap::new();
-    for f in 0..count {
+    for f in 0..if preview { 1 } else { count } {
         let length = r.u32()? as usize;
         if length < 16 {
             return Err(invalid("ASE 帧长度无效"));
@@ -506,6 +512,7 @@ fn decode_internal(bytes:&[u8],name:&str,binary:bool)->io::Result<(Value,Vec<cra
                         return Err(invalid("ASE 色板范围无效"));
                     }
                     crate::storage::check_size((n as u64) * 4)?;
+                    if preview { crate::storage::check_size((n as u64) * 40)?; }
                     let mut next = palette.clone();
                     next.resize(n, None);
                     for index in first..=last {
@@ -635,6 +642,7 @@ fn decode_internal(bytes:&[u8],name:&str,binary:bool)->io::Result<(Value,Vec<cra
                 }
                 0x2023 => {
                     let (id, set) = tileset(&mut chunk, bpp)?;
+                    if preview { crate::storage::check_size(sets.values().map(|s:&Tileset|s.data.len()as u64).sum::<u64>()+set.data.len()as u64)?; }
                     if sets.insert(id, set).is_some() {
                         return Err(invalid("ASE 重复瓦片集 ID"));
                     }
@@ -648,7 +656,7 @@ fn decode_internal(bytes:&[u8],name:&str,binary:bool)->io::Result<(Value,Vec<cra
         }
         frames.push(frame);
     }
-    if !r.rest().is_empty() {
+    if !preview && !r.rest().is_empty() {
         return Err(invalid("ASE 文件尾存在额外数据"));
     }
     if layers.is_empty() {
@@ -749,7 +757,8 @@ fn decode_internal(bytes:&[u8],name:&str,binary:bool)->io::Result<(Value,Vec<cra
             } else {
                 0
             };
-            let mut out = if binary&&depth==8&&!group{Vec::new()}else{vec![default; w * h]};
+            if preview&&!group {crate::storage::check_size((w as u64)*(h as u64)*if depth==8{1}else{4})?;}
+            let mut out = if binary&&depth==8&&!group||preview&&group{Vec::new()}else{vec![default; w * h]};
             let mut indexed = if depth == 8 && !group {
                 Some(vec![if background { 0 } else { transparent }; w * h])
             } else {
@@ -818,6 +827,7 @@ fn decode_internal(bytes:&[u8],name:&str,binary:bool)->io::Result<(Value,Vec<cra
                 }
                 if let Some(indexed)=indexed{planes.push((frame_index,l,"u8",indexed));}
                 cels.push(Value::Null);indices.push(Value::Null);
+                if preview {crate::storage::check_size(planes.iter().map(|(_,_,_,bytes)|bytes.len()as u64).sum())?;}
             }else{cels.push(json!(out));indices.push(json!(indexed));}
         }
         let mut output = json!({"duration":frame.duration});

@@ -4,8 +4,9 @@ use std::{
     collections::HashMap,
     io::{self, Write},
 };
+#[path = "aseprite/reader.rs"]
 mod reader;
-pub use reader::{decode,decode_transfer};
+pub use reader::{decode,decode_transfer,preview_transfer};
 
 const BLENDS: [&str; 19] = [
     "normal",

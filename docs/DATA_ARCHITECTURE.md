@@ -2,6 +2,12 @@
 
 以当前编辑语义、文件格式和数据完整性为约束，小型结构与配置继续采用 JSON，大块像素及历史走原始字节。
 
+## Windows Shell缩略图
+
+独立`minepix_thumbnailer.dll`仅依赖解析、压缩及Win32 COM，不链接Tauri或WebView；通过只读IStream收取内容，在Shell默认隔离进程生成首帧透明缩略图，不访问外部参考路径，不启动编辑器或写入作品。实现采用[Microsoft推荐的流初始化缩略图Provider](https://learn.microsoft.com/en-us/windows/win32/shell/building-thumbnail-providers)。
+
+共享PIX／ASE解析器及u8／u16／u32原始块，避免先把全部像素变成serde_json数值数组。ASE预览只解析首帧；PIX复用容器校验，目前解压全部块。合成按输出像素采样，组中间缓冲亦按缩略图尺寸，支持与前端相同的19种混合模式；返回预乘BGRA HBITMAP。64 MiB任务预算和1024最长边仅针对缩略图，失败交由Shell显示图标，不变更源文件及编辑器容量。
+
 ## 大色板与16-bit索引
 
 色板完整保留额外色槽，不再按256项截断；索引主缓冲、保存快照、历史和旋转使用Uint16Array，PIX及正常保存IPC使用小端u16块，恢复和窗口迁移保持高索引。索引可引用前65,536项，更多色槽仍作为RGBA选色保留。必需特性`indexed-16`使旧版明确拒绝新索引文档；旧u8像素块仍可读取并扩展。

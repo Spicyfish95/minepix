@@ -1,0 +1,4 @@
+LIBRARY minepix_thumbnailer
+EXPORTS
+    DllGetClassObject PRIVATE
+    DllCanUnloadNow PRIVATE

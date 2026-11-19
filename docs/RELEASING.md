@@ -6,6 +6,10 @@
 
 版本号维护在 package.json、package-lock.json、src-tauri/tauri.conf.json、Cargo.toml 和 Cargo.lock。Windows x64 NSIS 安装器采用当前用户安装，运行依赖 WebView2。执行 npm ci、npm run build、npm run package。
 
+Tauri的beforeBuildCommand执行`scripts/build-desktop.ps1`：构建前端后，使用独立锁文件、明确x64 MSVC目标及静态CRT编译`src-tauri/thumbnailer`的Release DLL到主target目录，避免Shell扩展依赖额外安装VC运行库。NSIS钩子将DLL嵌入安装器并安装到`thumbnails/<版本>/`，不将它作为Tauri运行时依赖；普通Cargo单元测试不要求已有Release DLL。版本化路径避免新版本覆盖Shell正在使用的旧映像，同版本重装跳过未更新的DLL。
+
+当前用户注册IInitializeWithStream／IThumbnailProvider，保留Windows默认的进程隔离，不修改用户默认打开程序或已有第三方缩略图处理器。卸载只删除指向自身CLSID的扩展项及对应版本的COM注册；旧卸载器不能移除更新版本注册。被Windows占用的DLL使用NSIS重启清理机制。发布流水线新增独立DLL测试及原生COM／合成对照门禁；本机可用`scripts/test-thumbnail-registration.ps1`运行隔离安装／更新／卸载与Shell缓存测试。
+
 签名使用环境变量 TAURI_SIGNING_PRIVATE_KEY 和 TAURI_SIGNING_PRIVATE_KEY_PASSWORD。私钥可为 Tauri 支持的文件路径或内容，不得提交或输出。固定公钥保存在 tauri.conf.json，签名必须绑定版本。
 
 本机私钥存放于 `$env:USERPROFILE\.ssh\minepix-tauri.key`，独立公钥文件为同目录的 `minepix-tauri.key.pub`。本地签名前设置路径即可，无需复制密钥到项目目录：

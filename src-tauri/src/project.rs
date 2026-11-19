@@ -349,6 +349,9 @@ struct Decoded {
 }
 
 fn decode_parts(bytes: &[u8]) -> io::Result<Decoded> {
+    decode_parts_bounded(bytes,MAX_RAW)
+}
+fn decode_parts_bounded(bytes: &[u8], raw_limit:usize) -> io::Result<Decoded> {
     if bytes.len() < HEADER_SIZE || &bytes[..8] != MAGIC {
         return Err(invalid("不是新版 MinePix 二进制项目；不支持旧 JSON .pix"));
     }
@@ -384,8 +387,8 @@ fn decode_parts(bytes: &[u8]) -> io::Result<Decoded> {
         let packed_len = u32_at(header, 8) as usize;
         let raw_len = u32_at(header, 12) as usize;
         raw_total += raw_len;
-        if raw_total > MAX_RAW {
-            return Err(invalid("项目解压后超过 512 MiB"));
+        if raw_total > raw_limit {
+            return Err(invalid("项目解压后超过容量限制"));
         }
         cursor += CHUNK_HEADER_SIZE;
         let packed = bytes
@@ -448,6 +451,11 @@ pub fn read_transfer(bytes: &[u8]) -> io::Result<Vec<u8>> {
     let decoded = decode_parts(bytes)?;
     let metadata = serde_json::to_vec(&json!({"document":decoded.document,"blocks":decoded.blocks}))?;
     Ok(read_packet(&metadata, decoded.payloads))
+}
+pub fn thumbnail_transfer(bytes:&[u8])->io::Result<Vec<u8>> {
+    let decoded=decode_parts_bounded(bytes,64*1024*1024)?;
+    let metadata=serde_json::to_vec(&json!({"document":decoded.document,"blocks":decoded.blocks}))?;
+    Ok(read_packet(&metadata,decoded.payloads))
 }
 
 fn read_packet(metadata: &[u8], payloads: Vec<Vec<u8>>) -> Vec<u8> {
@@ -693,5 +701,12 @@ mod tests {
         let packed=PackedSave::parse(&packed).unwrap();packed.validate_planes().unwrap();
         assert_eq!(packed.document("wide").unwrap()["frames"],doc["frames"]);
         assert_eq!(decode(&packed.encode("wide").unwrap()).unwrap()["frames"],doc["frames"]);
+    }
+    #[test]
+    fn thumbnail_decode_budget_does_not_change_normal_project_limits() {
+        let doc=json!({"format":"pixel-studio","frames":[{"cels":[[1,2,3,4]]}]});
+        let bytes=encode(&doc).unwrap();
+        assert!(decode_parts_bounded(&bytes,8).is_err());
+        assert_eq!(decode(&bytes).unwrap(),doc);
     }
 }

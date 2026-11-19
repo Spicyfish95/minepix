@@ -1,4 +1,5 @@
 ; Register Open With entries. Preserve existing user choices; initialize PIX only when unassigned.
+!include "${__FILEDIR__}\thumbnail-hooks.nsh"
 !macro MinePixRegisterType EXT PROG DESCRIPTION
   WriteRegStr SHCTX "Software\Classes\${PROG}" "" "${DESCRIPTION}"
   WriteRegStr SHCTX "Software\Classes\${PROG}\DefaultIcon" "" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\",0"
@@ -27,6 +28,7 @@
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
+  !insertmacro MinePixInstallThumbnails
   !insertmacro MinePixRegisterType "pix" "MinePixTauri.Project" "MinePix project"
   !insertmacro MinePixRegisterType "ase" "MinePixTauri.Aseprite" "Aseprite animation"
   !insertmacro MinePixRegisterType "aseprite" "MinePixTauri.Aseprite" "Aseprite animation"
@@ -55,6 +57,7 @@
 !macroend
 
 !macro NSIS_HOOK_POSTUNINSTALL
+  !insertmacro MinePixUninstallThumbnails
   ; An update may uninstall the old version first; preserve its verified pending package.
   ${If} $UpdateMode <> 1
     Delete "$APPDATA\${BUNDLEID}\update-cache\pending.json"
