@@ -7,8 +7,8 @@ import {linkCels} from '../src/cel-links.js';
 import {packProjectSave,unpackProjectReadPacket} from '../src/project-transfer.js';
 import {History} from '../src/history.js';
 function indexed(){const doc=createDocument(3,1);doc.palette=['#00000000','#ff0000ff','#ff0000ff','#00ff00ff'];doc.frames[0].cels[0]=[0xff0000ff,0,0x00ff00ff];convertColorMode(doc,'indexed',{palette:'current'});return doc;}
-test('editing pixels use Uint32 and Uint8 while indexed caches are lazy and disposable',()=>{
- const doc=prepareDocumentPixels(indexed());assert.equal(pixelStorageStats(doc).rgbaBytes,0);assert.ok(doc.frames[0].indices[0] instanceof Uint8Array);
+test('editing pixels use Uint32 and Uint16 while indexed caches are lazy and disposable',()=>{
+ const doc=prepareDocumentPixels(indexed());assert.equal(pixelStorageStats(doc).rgbaBytes,0);assert.ok(doc.frames[0].indices[0] instanceof Uint16Array);
  assert.ok(doc.frames[0].cels[0] instanceof Uint32Array);assert.equal(pixelStorageStats(doc).rgbaBytes,12);
  releaseIndexedCaches(doc);assert.equal(pixelStorageStats(doc).rgbaBytes,0);assert.deepEqual([...doc.frames[0].cels[0]],[0xff0000ff,0,0x00ff00ff]);
  assert.deepEqual([...composite(doc,0)],[255,0,0,255,0,0,0,0,0,255,0,255]);validateDocument(doc);
@@ -26,7 +26,7 @@ test('duplicate palette slot edits, palette remap and history keep exact indices
 });
 test('typed document save/read and color mode conversion preserve pixels',()=>{
  const doc=prepareDocumentPixels(indexed()),wire=packProjectSave(doc,'typed');wire.set(new TextEncoder().encode('MPXREAD1'));
- const restored=unpackProjectReadPacket(wire,{typed:true}).document;assert.ok(restored.frames[0].indices[0] instanceof Uint8Array);assert.equal(restored.frames[0].cels[0][0],0xff0000ff);
+ const restored=unpackProjectReadPacket(wire,{typed:true}).document;assert.ok(restored.frames[0].indices[0] instanceof Uint16Array);assert.equal(restored.frames[0].cels[0][0],0xff0000ff);
  convertColorMode(restored,'rgba');assert.equal(restored.frames[0].cels[0][0],0xff0000ff);assert.equal(restored.frames[0].indices,undefined);
  prepareDocumentPixels(restored);pixelSet(restored,restored.frames[0].cels[0],1,0,0xffffffff);assert.equal(restored.frames[0].cels[0][1],0xffffffff);materializeDocumentPixels(restored);validateDocument(restored);
 });

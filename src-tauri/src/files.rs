@@ -307,7 +307,10 @@ impl Files {
             _ => return Err(error("项目保存仅支持 PIX / ASE / ASEPRITE")),
         };
         let previous = self.active.get(window).cloned();
-        let result = self.save_encoded(window, target, &name, &bytes);
+        let mut result = self.save_encoded(window, target, &name, &bytes);
+        if extension != "pix" && packed.metadata()["colorMode"] == "indexed" && bytes[12..14] == 32u16.to_le_bytes() {
+            if let Ok(value) = &mut result { value["aseRgba"] = json!(true); }
+        }
         // Snapshot saves may finish after this window switched to another document.
         if packed.target().is_some() {
             if let Some(path) = previous { self.active.insert(window.into(), path); }

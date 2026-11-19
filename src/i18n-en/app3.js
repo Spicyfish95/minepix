@@ -19,7 +19,7 @@ export default {
 "名称": "Name",
 "预设包含尺寸、形状、角度、透明度、墨水、像素完美及自定义图案，保存到本机。确认应用选中预设。": "Presets store size, shape, angle, opacity, ink, pixel-perfect and custom patterns on this machine. Confirm applies the selected preset.",
 "模式": "Mode",
-"8位索引色": "8-bit indexed",
+"16位索引色": "16-bit indexed",
 "灰度 + Alpha": "Grayscale + Alpha",
 "索引色板": "Indexed palette",
 "从全部帧自适应生成": "Adaptive from every frame",

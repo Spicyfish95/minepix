@@ -13,7 +13,7 @@ export function snapshotDocument(document){
  const plane=(pixels,Type)=>{
   if(!pixels)return pixels;
   if(!planes.has(pixels)){
-   const max=Type===Uint8Array?255:0xffffffff;
+   const max=Type===Uint16Array?65535:0xffffffff;
    if(!(pixels instanceof Type)&&pixels.some(pixel=>!Number.isInteger(pixel)||pixel<0||pixel>max))throw new Error('项目像素值越界');
    planes.set(pixels,Type.from(pixels));
   }
@@ -21,7 +21,7 @@ export function snapshotDocument(document){
  };
  document.frames.forEach((frame,f)=>{
   const target=snapshot.frames[f];if(completed.has(target))return;completed.add(target);
-  if(frame.indices)target.indices=frame.indices.map(values=>plane(values,Uint8Array));
+  if(frame.indices)target.indices=frame.indices.map(values=>plane(values,Uint16Array));
   target.cels=Array.from({length:frame.cels.length},(_,l)=>document.colorMode==='indexed'&&frame.indices?.[l]?null:plane(frame.cels[l],Uint32Array));
  });
  return prepareDocumentPixels(snapshot);

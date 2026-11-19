@@ -34,7 +34,7 @@ const pixelLayer = layer => !isGroup(layer) && !isReference(layer);
 
 export function replaceColorInDocument(doc, {from, to, fromIndex, toIndex, tolerance = DEFAULT_TOLERANCE, scope = 'cel', frame = 0, layer = 0, selection = null}) {
   const indexed = modeOf(doc) === 'indexed';
-  if (indexed && [fromIndex, toIndex].some(index => !Number.isInteger(index) || index < 0 || index >= doc.palette.length)) throw new Error('替换颜色索引无效');
+  if (indexed && [fromIndex, toIndex].some(index => !Number.isInteger(index) || index < 0 || index >= Math.min(65536,doc.palette.length))) throw new Error('替换颜色索引无效');
   const targets = [];
   if (scope === 'cel') {
     if (pixelLayer(doc.layers[layer])) targets.push([frame, layer]);

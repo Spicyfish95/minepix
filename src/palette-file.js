@@ -1,25 +1,31 @@
 import {normalizeColor,rgba,fromRgba,parsePalette} from './colors.js';
 
-// PIX palette v1: eight-byte signature, u16 version/count, then ordered RGBA slots.
+// PIX palette: v1 has a u16 count; v2 extends it to u32. Slots are ordered RGBA.
 export const PALETTE_MAGIC=Uint8Array.of(77,80,73,88,80,65,76,0);
 export const isPaletteFile=bytes=>PALETTE_MAGIC.every((value,index)=>bytes[index]===value);
 function checked(colors){
- if(!colors.length||colors.length>256)throw new Error('色板需包含 1–256 个颜色');
+ if(!Array.isArray(colors)||!colors.length)throw new Error('色板至少需要一个颜色');
  return colors.map(normalizeColor);
 }
 export function encodePalette(colors){
  colors=checked(colors);
- const bytes=new Uint8Array(12+colors.length*4),view=new DataView(bytes.buffer);
- bytes.set(PALETTE_MAGIC);view.setUint16(8,1,true);view.setUint16(10,colors.length,true);
- colors.forEach((color,index)=>{const {r,g,b,a}=rgba(color);bytes.set([r,g,b,a],12+index*4);});
+ const wide=colors.length>65535,header=wide?14:12;
+ if(header+colors.length*4>512*1024*1024)throw new Error('色板文件超过512 MiB');
+ const bytes=new Uint8Array(header+colors.length*4),view=new DataView(bytes.buffer);
+ bytes.set(PALETTE_MAGIC);view.setUint16(8,wide?2:1,true);
+ if(wide)view.setUint32(10,colors.length,true);else view.setUint16(10,colors.length,true);
+ colors.forEach((color,index)=>{const {r,g,b,a}=rgba(color);bytes.set([r,g,b,a],header+index*4);});
  return bytes;
 }
 export function decodePalette(bytes){
  const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
- if(!isPaletteFile(bytes)||bytes.length<12||view.getUint16(8,true)!==1)throw new Error('无效或不支持的 PIX 色板');
- const count=view.getUint16(10,true);
- if(bytes.length!==12+count*4)throw new Error('PIX 色板长度无效');
- return checked(Array.from({length:count},(_,i)=>fromRgba({r:bytes[12+i*4],g:bytes[13+i*4],b:bytes[14+i*4],a:bytes[15+i*4]})));
+ if(!isPaletteFile(bytes)||bytes.length<12)throw new Error('无效或不支持的 PIX 色板');
+ const version=view.getUint16(8,true),header=version===2?14:12;
+ if(![1,2].includes(version))throw new Error('无效或不支持的 PIX 色板');
+ if(bytes.length<header)throw new Error('PIX 色板长度无效');
+ const count=version===2?view.getUint32(10,true):view.getUint16(10,true);
+ if(bytes.length!==header+count*4)throw new Error('PIX 色板长度无效');
+ return checked(Array.from({length:count},(_,i)=>fromRgba({r:bytes[header+i*4],g:bytes[header+i*4+1],b:bytes[header+i*4+2],a:bytes[header+i*4+3]})));
 }
 export function paletteBase64(bytes){
  let text='';
@@ -42,8 +48,8 @@ export function asepritePalette(bytes){
   const need=n=>{if(at+n>limit)throw new Error('Aseprite 色板数据不完整');};
   if(type===0x2019){
    need(20);const count=view.getUint32(at,true),first=view.getUint32(at+4,true),last=view.getUint32(at+8,true);at+=20;
-   if(!count||count>256||first>last||last>=count)throw new Error('Aseprite 色板范围无效');
-   colors.length=count;colors.fill('#000000',0,count);modern=true;
+   if(!count||count>0x7fffffff||count*4>512*1024*1024||first>last||last>=count)throw new Error('Aseprite 色板范围或容量无效');
+   const previous=colors.length;colors.length=count;if(count>previous)colors.fill('#000000',previous);modern=true;
    for(let i=first;i<=last;i++){
     need(6);const flags=view.getUint16(at,true);colors[i]=fromRgba({r:bytes[at+2],g:bytes[at+3],b:bytes[at+4],a:bytes[at+5]});at+=6;
     if(flags&1){need(2);const length=view.getUint16(at,true);at+=2;need(length);at+=length;}

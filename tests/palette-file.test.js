@@ -11,9 +11,9 @@ test('PIX binary roundtrip preserves slot order, duplicates and alpha',()=>{
  assert.deepEqual(decodePalette(bytes),colors);
  assert.deepEqual(paletteBytes(paletteBase64(bytes)),bytes);
  assert.throws(()=>decodePalette(bytes.subarray(0,27)),/长度/);
- const bad=bytes.slice();bad[8]=2;assert.throws(()=>decodePalette(bad),/不支持/);
- assert.throws(()=>encodePalette([]),/1–256/);
- assert.throws(()=>encodePalette(Array(257).fill('#000000')),/1–256/);
+ const bad=bytes.slice();bad[8]=3;assert.throws(()=>decodePalette(bad),/不支持/);
+ assert.throws(()=>encodePalette([]),/至少需要/);
+ assert.equal(decodePalette(encodePalette(Array(257).fill('#000000'))).length,257);
 });
 
 test('workspace lost-century Adobe ASE imports its actual palette',async()=>{

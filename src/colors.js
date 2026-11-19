@@ -30,10 +30,10 @@ export function parsePalette(text) {
       const [r,g,b]=match.slice(1).map(Number);if([r,g,b].some(v=>v>255))throw new Error('GPL 色板中的 RGB 超出范围');return [fromRgba({r,g,b})];
     });
   }else{const value=JSON.parse(text);colors=Array.isArray(value)?value:value.colors;}
-  if(!Array.isArray(colors)||colors.length<1||colors.length>256)throw new Error('色板需包含 1–256 个颜色');
+  if(!Array.isArray(colors)||colors.length<1)throw new Error('色板至少需要一个颜色');
   return colors.map(normalizeColor);
 }
 export function extractPalette(pixels) {
   const counts=new Map();for(let i=0;i<pixels.length;i+=4){if(!pixels[i+3])continue;const color=fromRgba({r:pixels[i],g:pixels[i+1],b:pixels[i+2],a:pixels[i+3]});counts.set(color,(counts.get(color)||0)+1);}
-  return [...counts].sort((a,b)=>b[1]-a[1]).slice(0,256).map(([color])=>color);
+  return [...counts].sort((a,b)=>b[1]-a[1]).map(([color])=>color);
 }

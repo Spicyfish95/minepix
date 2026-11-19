@@ -505,20 +505,16 @@ fn decode_internal(bytes:&[u8],name:&str,binary:bool)->io::Result<(Value,Vec<cra
                     if last >= n || first > last {
                         return Err(invalid("ASE 色板范围无效"));
                     }
+                    crate::storage::check_size((n as u64) * 4)?;
                     let mut next = palette.clone();
-                    next.resize(n.min(256), None);
-                    // Palette records can exceed the 8-bit index range. Consume every
-                    // entry (including names), but keep the editor's addressable slots.
+                    next.resize(n, None);
                     for index in first..=last {
                         let pf = chunk.u16()?;
                         let value = color(&mut chunk)?;
-                        if index < next.len() { next[index] = Some(value); }
+                        next[index] = Some(value);
                         if pf & 1 != 0 {
                             chunk.string()?;
                         }
-                    }
-                    if n > 256 {
-                        warn(&mut warnings, "ASE 色板超过 256 项，仅保留前 256 项");
                     }
                     if f > 0 && depth == 8 && next != palette {
                         return Err(invalid("索引色逐帧色板尚不支持，请先转换 RGBA"));
@@ -1003,17 +999,19 @@ mod tests {
         let mut bytes = extended_palette(&source, 256, 262, 263);
         bytes[32..34].copy_from_slice(&263u16.to_le_bytes());
         let imported = decode(&bytes, "test").unwrap();
-        assert_eq!(imported["doc"], expected);
+        assert_eq!(imported["doc"]["palette"].as_array().unwrap().len(), 263);
+        assert_eq!(&imported["doc"]["palette"].as_array().unwrap()[..256], expected["palette"].as_array().unwrap());
+        assert_eq!(imported["doc"]["frames"], expected["frames"]);
         assert_eq!(imported["doc"]["frames"][0]["indices"][0][0], 255);
-        assert_eq!(imported["warnings"].as_array().unwrap().len(), 1);
-        assert!(imported["warnings"][0].as_str().unwrap().contains("256"));
+        assert_eq!(imported["warnings"], json!([]));
         let wire = decode_transfer(&bytes, "test").unwrap();
         let baseline = decode_transfer(&source, "test").unwrap();
         let end = 12 + u32::from_le_bytes(wire[8..12].try_into().unwrap()) as usize;
         let base_end = 12 + u32::from_le_bytes(baseline[8..12].try_into().unwrap()) as usize;
         let metadata: Value = serde_json::from_slice(&wire[12..end]).unwrap();
         let base_metadata: Value = serde_json::from_slice(&baseline[12..base_end]).unwrap();
-        assert_eq!(metadata["document"], base_metadata["document"]);
+        assert_eq!(metadata["document"]["frames"], base_metadata["document"]["frames"]);
+        assert_eq!(metadata["document"]["palette"], imported["doc"]["palette"]);
         assert_eq!(metadata["info"]["warnings"], imported["warnings"]);
         assert_eq!(metadata["info"]["indexedSource"], true);
         assert_eq!(&wire[end..], &baseline[base_end..]);
@@ -1024,7 +1022,7 @@ mod tests {
             let bytes = extended_palette(source, 0, 262, 263);
             let imported = decode(&bytes, "test").unwrap();
             let doc = &imported["doc"];
-            assert_eq!(doc["palette"].as_array().unwrap().len(), 256);
+            assert_eq!(doc["palette"].as_array().unwrap().len(), 263);
             assert_eq!(doc["palette"][255], "#ff255bff");
             let wire = decode_transfer(&bytes, "test").unwrap();
             let end = 12 + u32::from_le_bytes(wire[8..12].try_into().unwrap()) as usize;

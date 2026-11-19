@@ -8,11 +8,11 @@ const meta=({references,...doc})=>({...doc,frames:doc.frames.map(({cels,indices,
 const scopes=new WeakMap();
 function packed(doc){
  const planes=new Map(),plane=(pixels,Type)=>{if(!planes.has(pixels))planes.set(pixels,Type.from(pixels));return planes.get(pixels);};
- return{meta:copy(meta(doc)),cels:doc.frames.map(frame=>Array.from({length:frame.cels.length},(_,l)=>doc.colorMode==='indexed'&&frame.indices?.[l]?null:plane(frame.cels[l],Uint32Array))),indices:doc.frames.map(frame=>frame.indices?.map(cel=>cel?plane(cel,Uint8Array):null))};
+ return{meta:copy(meta(doc)),cels:doc.frames.map(frame=>Array.from({length:frame.cels.length},(_,l)=>doc.colorMode==='indexed'&&frame.indices?.[l]?null:plane(frame.cels[l],Uint32Array))),indices:doc.frames.map(frame=>frame.indices?.map(cel=>cel?plane(cel,Uint16Array):null))};
 }
 function unpack(state){
  const planes=new Map(),plane=(pixels,Type)=>{if(!pixels)return pixels;if(!planes.has(pixels))planes.set(pixels,Type.from(pixels));return planes.get(pixels);};
- return hydrateLinks(prepareDocumentPixels({...copy(state.meta),frames:state.meta.frames.map((frame,i)=>({...copy(frame),cels:state.cels[i].map(cel=>plane(cel,Uint32Array)),...(state.indices[i]?{indices:state.indices[i].map(cel=>plane(cel,Uint8Array))}:{})}))}));
+ return hydrateLinks(prepareDocumentPixels({...copy(state.meta),frames:state.meta.frames.map((frame,i)=>({...copy(frame),cels:state.cels[i].map(cel=>plane(cel,Uint32Array)),...(state.indices[i]?{indices:state.indices[i].map(cel=>plane(cel,Uint16Array))}:{})}))}));
 }
 function pixelBytes(planes){const seen=new Set();let bytes=0;for(const plane of planes)if(plane&&!seen.has(plane)){seen.add(plane);bytes+=plane.byteLength;}return bytes;}
 const packedBytes=state=>JSON.stringify(state.meta).length*2+pixelBytes([...state.cels.flat(),...state.indices.flat().filter(Boolean)]);
@@ -51,7 +51,7 @@ function difference(before,after,{blocks=null}={}){
  for(let f=0;f<before.frames.length;f++)for(let l=0;l<before.layers.length;l++){
   if(scope&&!scope.cells.has(f+':'+l))continue;
   for(const block of delta(before.frames[f].cels[l],after.frames[f].cels[l],Uint32Array))changes.push({f,l,...block});
-  if(after.colorMode==='indexed')for(const block of delta(before.frames[f].indices?.[l],after.frames[f].indices?.[l],Uint8Array))indexChanges.push({f,l,...block});
+  if(after.colorMode==='indexed')for(const block of delta(before.frames[f].indices?.[l],after.frames[f].indices?.[l],Uint16Array))indexChanges.push({f,l,...block});
  }
  const beforeMeta=JSON.stringify(bm),afterMeta=JSON.stringify(am);if(!changes.length&&!indexChanges.length&&beforeMeta===afterMeta)return null;
  const all=[...changes,...indexChanges];return{kind:'delta',before:copy(bm),after:copy(am),changes,indexChanges,bytes:beforeMeta.length*2+afterMeta.length*2+pixelBytes(all.flatMap(c=>[c.before,c.after]))+all.length*32};

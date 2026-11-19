@@ -13,7 +13,7 @@ export function unpackProjectReadPacket(input,{typed=false}={}){
  if(document.format!=='pixel-studio'||!Array.isArray(blocks))throw new Error('项目读取元数据无效');
  let offset=metadataEnd;
  for(const block of blocks){
-  const width=block.kind==='u32'?4:1,size=block.count*width;
+  const width=block.kind==='u32'?4:block.kind==='u16'?2:1,size=block.count*width;
   if(!Number.isSafeInteger(block.count)||block.count<0||!Number.isSafeInteger(size)||offset+size>bytes.length)throw new Error('项目读取像素截断或长度无效');
   if(typeof block.path!=='string'||!block.path.startsWith('/'))throw new Error('项目读取块映射无效');
   const parts=block.path.slice(1).split('/').map(key=>key.replaceAll('~1','/').replaceAll('~0','~'));
@@ -28,6 +28,10 @@ export function unpackProjectReadPacket(input,{typed=false}={}){
   if(block.kind==='u32'){
    const view=new DataView(raw.buffer,raw.byteOffset,raw.byteLength),pixels=typed?new Uint32Array(block.count):new Array(block.count);
    for(let i=0;i<pixels.length;i++)pixels[i]=view.getUint32(i*4,true);
+   parent[key]=pixels;
+  }else if(block.kind==='u16'){
+   const view=new DataView(raw.buffer,raw.byteOffset,raw.byteLength),pixels=typed?new Uint16Array(block.count):new Array(block.count);
+   for(let i=0;i<pixels.length;i++)pixels[i]=view.getUint16(i*2,true);
    parent[key]=pixels;
   }else if(block.kind==='u8')parent[key]=typed?raw.slice():Array.from(raw);
   else if(block.kind==='base64'){
@@ -55,15 +59,15 @@ export function packProjectSave(data,name,saveAs=false,target){
  const blocks=[],payloads=[];let rawBytes=0;
  function add(path,kind,pixels){
   if(!isPixelArray(pixels))throw new Error('像素块不是数组');
-  const width=kind==='u32'?4:1,size=pixels.length*width;
+  const width=kind==='u32'?4:2,size=pixels.length*width;
   if(rawBytes+size>MAX_BYTES)throw new Error('项目解压后超过 512 MiB');
-  const native=kind==='u32'?pixels instanceof Uint32Array&&littleEndian:pixels instanceof Uint8Array,max=kind==='u32'?0xffffffff:255;
+  const native=littleEndian&&(kind==='u32'?pixels instanceof Uint32Array:pixels instanceof Uint16Array),max=kind==='u32'?0xffffffff:65535;
   if(!native&&pixels.some(pixel=>!Number.isInteger(pixel)||pixel<0||pixel>max))throw new Error('项目像素值越界');
   rawBytes+=size;blocks.push({path,kind,count:pixels.length});payloads.push({pixels,kind,size,native});
  }
  const metadata={...document,frames:document.frames.map((frame,f)=>{
   const copy=Object.fromEntries(Object.entries(frame).filter(([key])=>key!=='cels'&&key!=='indices'));
-  for(const [field,kind]of [['cels','u32'],['indices','u8']]){
+  for(const [field,kind]of [['cels','u32'],['indices','u16']]){
    if(frame[field]===undefined)continue;
    if(frame[field]===null){copy[field]=null;continue;}
    if(!Array.isArray(frame[field]))throw new Error('项目 cel 列表无效');
@@ -77,7 +81,7 @@ export function packProjectSave(data,name,saveAs=false,target){
  let offset=12+json.length;const view=new DataView(output.buffer);
  for(const {pixels,kind,size,native}of payloads){
   if(native)output.set(new Uint8Array(pixels.buffer,pixels.byteOffset,pixels.byteLength),offset);
-  else for(let i=0;i<pixels.length;i++)if(kind==='u32')view.setUint32(offset+i*4,pixels[i],true);else output[offset+i]=pixels[i];
+  else for(let i=0;i<pixels.length;i++)if(kind==='u32')view.setUint32(offset+i*4,pixels[i],true);else view.setUint16(offset+i*2,pixels[i],true);
   offset+=size;
  }
  return output;

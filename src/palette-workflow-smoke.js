@@ -107,6 +107,19 @@ export async function paletteWorkflowSmoke(samples,api){
   applyLocale('en');await nextFrame();check('英文图案弹窗两列文字保持对齐',alignedPatternText());applyLocale('zh');await nextFrame();
   $('pattern-menu').hidePopover();$('brush-shape').value='square';$('brush-shape').dispatchEvent(new Event('change',{bubbles:true}));await nextFrame();
   check('离开图案笔形隐藏图案按钮',host.hidden);
+  const wide=createDocument(2,1,'wide-index-ui');wide.palette=Array.from({length:300},(_,i)=>'#'+i.toString(16).padStart(6,'0'));wide.colorMode='indexed';wide.transparentIndex=299;wide.frames[0].indices=[[256,299]];wide.frames[0].cels=[[0x000100ff,0]];
+  replaceDocument(wide,true);setTool('pencil');await nextFrame();
+  check('完整大色板显示300槽及16位索引标记',$('palette').querySelectorAll('.swatch').length===300&&$('doc-color-mode').dataset.mode==='INDEXED 16');
+  $('palette').querySelector('[data-index="257"]').click();
+  const viewport=$('viewport'),capture=viewport.setPointerCapture;viewport.setPointerCapture=()=>{};
+  try{
+   const r=$('canvas').getBoundingClientRect(),z=window.documentWindowAudit().zoom;
+   for(const type of ['pointerdown','pointerup'])viewport.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,clientX:r.left+z*.5,clientY:r.top+z*.5,pointerId:91,button:0}));
+  }finally{viewport.setPointerCapture=capture;}
+  check('实际色槽点击及笔画写入257而不回绕',state().doc.frames[0].indices[0][0]===257&&state().doc.frames[0].indices[0] instanceof Uint16Array);
+  actions.undo();check('16位笔画撤销恢复256',state().doc.frames[0].indices[0][0]===256);
+  actions.redo();check('16位笔画重做恢复257',state().doc.frames[0].indices[0][0]===257);
+  const paletteRoundtrip=decodePalette(encodePalette(state().doc.palette));check('实际项目色板导出保留全部300槽',paletteRoundtrip.length===300&&paletteRoundtrip[299]===wide.palette[299]);
   if(samples.inspectPattern){pattern();host.querySelector('button').click();await nextFrame();}
 
   return {ok:true,results};

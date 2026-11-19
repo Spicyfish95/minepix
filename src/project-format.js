@@ -1,6 +1,6 @@
 import {isPixelArray} from './pixel-storage.js';
 export const PROJECT_VERSION=2;
-export const SUPPORTED_FEATURES=new Set(['cel-properties','slice-keyframes','slices','layer-blending','layer-groups','layer-types','linked-cels','color-modes','reference-board','tileset']);
+export const SUPPORTED_FEATURES=new Set(['cel-properties','slice-keyframes','slices','layer-blending','layer-groups','layer-types','linked-cels','color-modes','indexed-16','reference-board','tileset']);
 export function normalizeProject(input,{copyPixels=true}={}){
   if(!input||input.format!=='pixel-studio')throw new Error('不是 MinePix 项目');
   if(input.version!==PROJECT_VERSION)throw new Error(`不支持项目版本 ${input.version}，请使用匹配版本的应用`);

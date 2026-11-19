@@ -155,7 +155,7 @@ export default {
 "索引色板已满 256 色，无法加入新颜色": "The indexed palette is full (256 colors); no room for new colors",
 "颜色需为 HEX，例如 #EDB75B 或 #EDB75B80": "Colors must be HEX, for example #EDB75B or #EDB75B80",
 "GPL 色板中的 RGB 超出范围": "RGB out of range in the GPL palette",
-"色板需包含 1–256 个颜色": "A palette must hold 1-256 colors",
+"色板至少需要一个颜色": "A palette must contain at least one color",
 "正常": "Normal",
 "正片叠底": "Multiply",
 "滤色": "Screen",

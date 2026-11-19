@@ -10,7 +10,7 @@ const optionStyle = color => {
 
 export async function replacementColorDialog({doc, modal, from, to, fromIndex = 0, toIndex = 0, frame = 0, layer = 0, selection = null, preview = null, restore = null}) {
   const indexed = modeOf(doc) === 'indexed';
-  const paletteOptions = doc.palette.map((color, index) => `<option value="${index}" style="${optionStyle(color)}">${index}: ${color}${indexed && index === doc.transparentIndex ? '（透明索引）' : ''}</option>`).join('');
+  const paletteOptions = (indexed?doc.palette.slice(0,65536):doc.palette).map((color, index) => `<option value="${index}" style="${optionStyle(color)}">${index}: ${color}${indexed && index === doc.transparentIndex ? '（透明索引）' : ''}</option>`).join('');
   const colorField = (name, label) => indexed
     ? `<label>${label}索引 <select name="${name}Index">${paletteOptions}</select></label>`
     : `<label>${label} <input name="${name}" type="color" required></label><label>${label}色板 <select name="${name}Palette"><option value="">手动颜色</option>${paletteOptions}</select></label>`;
@@ -21,7 +21,7 @@ export async function replacementColorDialog({doc, modal, from, to, fromIndex = 
     + '画布实时预览替换结果，确定后才应用；仅影响选区内像素（如有选区）。可撤销。</p>';
   const validate = values => {
     if (indexed) {
-      if ([values.fromIndex, values.toIndex].some(value => !/^\d+$/.test(value) || +value >= doc.palette.length)) throw new Error('替换颜色索引无效');
+      if ([values.fromIndex, values.toIndex].some(value => !/^\d+$/.test(value) || +value >= Math.min(65536,doc.palette.length))) throw new Error('替换颜色索引无效');
     } else if (!Number.isInteger(+values.tolerance) || +values.tolerance < 0 || +values.tolerance > 255) throw new Error('容差需在 0-255 之间');
   };
   const options = values => ({...(indexed ? {fromIndex: +values.fromIndex, toIndex: +values.toIndex} : {

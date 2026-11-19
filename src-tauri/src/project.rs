@@ -24,7 +24,7 @@ pub struct ReadPlane { pub path:String, pub kind:&'static str, pub bytes:Vec<u8>
 pub fn raw_document_read_transfer(document:Value,planes:Vec<ReadPlane>,info:Value)->io::Result<Vec<u8>>{
     let mut blocks=Vec::with_capacity(planes.len());let mut payloads=Vec::with_capacity(planes.len());let mut total=0usize;
     for plane in planes{
-        let width=if plane.kind=="u32"{4}else{1};
+        let width=match plane.kind{"u32"=>4,"u16"=>2,"u8"|"base64"=>1,_=>return Err(invalid("项目块类型无效"))};
         total=total.checked_add(plane.bytes.len()).filter(|&value|value<=MAX_RAW).ok_or_else(||invalid("项目解压后超过 512 MiB"))?;
         if plane.bytes.len()%width!=0{return Err(invalid("像素块长度无效"));}
         blocks.push(Block{path:plane.path,kind:plane.kind.into(),count:plane.bytes.len()/width});payloads.push(plane.bytes);
@@ -81,7 +81,7 @@ fn encode_document(document: &Value, info: Option<Value>) -> io::Result<Vec<u8>>
             frame.as_object().ok_or_else(|| invalid("动画帧不是对象"))?,
             &["cels", "indices"],
         );
-        for (field, kind) in [("cels", "u32"), ("indices", "u8")] {
+        for (field, kind) in [("cels", "u32"), ("indices", "u16")] {
             let Some(cels) = frame.get(field).and_then(Value::as_array) else {
                 if let Some(value) = frame.get(field) { frame_metadata[field] = value.clone(); }
                 continue;
@@ -94,7 +94,7 @@ fn encode_document(document: &Value, info: Option<Value>) -> io::Result<Vec<u8>>
                 }
                 let pixels = cel.as_array().ok_or_else(|| invalid("像素块不是数组"))?;
                 let count = pixels.len();
-                let mut raw = Vec::with_capacity(count * if kind == "u32" { 4 } else { 1 });
+                let mut raw = Vec::with_capacity(count * if kind == "u32" { 4 } else { 2 });
                 for pixel in pixels {
                     let value = pixel
                         .as_u64()
@@ -106,7 +106,7 @@ fn encode_document(document: &Value, info: Option<Value>) -> io::Result<Vec<u8>>
                                 .to_le_bytes(),
                         );
                     } else {
-                        raw.push(u8::try_from(value).map_err(|_| invalid("索引像素值越界"))?);
+                        raw.extend_from_slice(&u16::try_from(value).map_err(|_| invalid("索引像素值越界"))?.to_le_bytes());
                     }
                 }
                 total_raw += raw.len();
@@ -258,18 +258,18 @@ impl<'a> PackedSave<'a> {
         for block in &self.metadata.blocks{
             let target=self.metadata.document.pointer(&block.path).ok_or_else(||invalid("项目块映射无效"))?;
             if !target.is_null()||!targets.insert(target as *const Value){return Err(invalid("项目块重复或覆盖元数据"));}
-            let width=match block.kind.as_str(){"u32"=>4,"u8"|"base64"=>1,_=>return Err(invalid("项目块类型无效"))};
+            let width=match block.kind.as_str(){"u32"=>4,"u16"=>2,"u8"|"base64"=>1,_=>return Err(invalid("项目块类型无效"))};
             offset=block.count.checked_mul(width).and_then(|size|offset.checked_add(size)).filter(|&end|end<=self.payload.len()).ok_or_else(||invalid("项目像素截断"))?;
         }
         if offset!=self.payload.len(){return Err(invalid("项目保存包含多余像素"));}Ok(())
     }
-    pub fn plane(&self,frame:usize,layer:usize,indexed:bool)->io::Result<&[u8]>{
+    pub fn plane(&self,frame:usize,layer:usize,indexed:bool)->io::Result<(&[u8],usize)>{
         let path=format!("/frames/{frame}/{}/{layer}",if indexed{"indices"}else{"cels"});let mut offset=0usize;
         for block in &self.metadata.blocks{
-            let width=match block.kind.as_str(){"u32"=>4,"u8"|"base64"=>1,_=>return Err(invalid("项目块类型无效"))};
+            let width=match block.kind.as_str(){"u32"=>4,"u16"=>2,"u8"|"base64"=>1,_=>return Err(invalid("项目块类型无效"))};
             let end=block.count.checked_mul(width).and_then(|size|offset.checked_add(size)).ok_or_else(||invalid("项目块长度溢出"))?;
             let raw=self.payload.get(offset..end).ok_or_else(||invalid("项目像素截断"))?;
-            if block.path==path{if block.kind!=if indexed{"u8"}else{"u32"}{return Err(invalid("项目像素类型不匹配"));}return Ok(raw);}
+            if block.path==path{if !(if indexed{block.kind=="u8"||block.kind=="u16"}else{block.kind=="u32"}){return Err(invalid("项目像素类型不匹配"));}return Ok((raw,width));}
             offset=end;
         }
         Err(invalid("项目像素块缺失"))
@@ -285,7 +285,7 @@ impl<'a> PackedSave<'a> {
         let mut document = self.metadata.document.clone();document["name"] = json!(name);
         let mut cursor = 0usize;
         for block in &self.metadata.blocks {
-            let width = match block.kind.as_str() { "u32" => 4, "u8" | "base64" => 1, _ => return Err(invalid("项目块类型无效")) };
+            let width = match block.kind.as_str() { "u32" => 4, "u16" => 2, "u8" | "base64" => 1, _ => return Err(invalid("项目块类型无效")) };
             let size = block.count.checked_mul(width).ok_or_else(|| invalid("项目块长度溢出"))?;
             let end = cursor.checked_add(size).ok_or_else(|| invalid("项目块长度溢出"))?;
             let raw = self.payload.get(cursor..end).ok_or_else(|| invalid("项目像素截断"))?;
@@ -293,6 +293,7 @@ impl<'a> PackedSave<'a> {
             if !target.is_null() { return Err(invalid("项目块覆盖元数据")); }
             *target = match block.kind.as_str() {
                 "u32" => Value::Array(raw.chunks_exact(4).map(|bytes| json!(u32::from_le_bytes(bytes.try_into().unwrap()))).collect()),
+                "u16" => Value::Array(raw.chunks_exact(2).map(|bytes| json!(u16::from_le_bytes(bytes.try_into().unwrap()))).collect()),
                 "u8" => json!(raw),
                 _ => json!(STANDARD.encode(raw)),
             };
@@ -320,7 +321,7 @@ impl<'a> PackedSave<'a> {
                 .ok_or_else(|| invalid("项目块映射无效"))?;
             if !target.is_null() { return Err(invalid("项目块覆盖元数据")); }
             let width = match block.kind.as_str() {
-                "u32" => 4, "u8" | "base64" => 1,
+                "u32" => 4, "u16" => 2, "u8" | "base64" => 1,
                 _ => return Err(invalid("项目块数据类型无效")),
             };
             let len = block.count.checked_mul(width).ok_or_else(|| invalid("项目块长度溢出"))?;
@@ -434,6 +435,7 @@ fn decode_parts(bytes: &[u8]) -> io::Result<Decoded> {
         }
         let valid = match block.kind.as_str() {
             "u32" => block.count.checked_mul(4) == Some(raw.len()),
+            "u16" => block.count.checked_mul(2) == Some(raw.len()),
             "u8" | "base64" => block.count == raw.len(),
             _ => false,
         };
@@ -467,7 +469,8 @@ pub fn decode(bytes: &[u8]) -> io::Result<Value> {
                     .map(|bytes| json!(u32::from_le_bytes(bytes.try_into().unwrap())))
                     .collect(),
             ),
-            "u8" => json!(raw),
+            "u16" => Value::Array(raw.chunks_exact(2).map(|bytes| json!(u16::from_le_bytes(bytes.try_into().unwrap()))).collect()),
+                "u8" => json!(raw),
             "base64" => json!(STANDARD.encode(raw)),
             _ => unreachable!("validated block kind"),
         };
@@ -531,14 +534,14 @@ mod tests {
     }
 
     #[test]
-    fn packed_javascript_fixture_is_byte_identical_to_value_encoder() {
+    fn legacy_byte_indices_and_wide_value_encoder_preserve_same_document() {
         let packed = PackedSave::parse(include_bytes!("../../tests/fixtures/project-transfer/fixture.bin")).unwrap();
         assert_eq!(packed.name(), "中文 名称");
         assert!(packed.save_as());
         let mut document: Value = serde_json::from_slice(include_bytes!("../../tests/fixtures/project-transfer/fixture.json")).unwrap();
         document["name"] = json!("目标名称");
         let output = packed.encode("目标名称").unwrap();
-        assert_eq!(output, encode(&document).unwrap());
+        assert_eq!(decode(&encode(&document).unwrap()).unwrap(), document);
         assert_eq!(decode(&output).unwrap(), document);
     }
 
@@ -662,7 +665,7 @@ mod tests {
             ("cels", json!(1.5)),
             ("cels", Value::Null),
             ("cels", json!("1")),
-            ("indices", json!(256)),
+            ("indices", json!(65536)),
             ("indices", json!(-1)),
         ] {
             let mut document = json!({"format":"pixel-studio","frames":[{}]});
@@ -676,5 +679,19 @@ mod tests {
             assert!(encode(&document).is_err());
         }
         assert!(encode(&json!({"format":"pixel-studio","frames":[null]})).is_err());
+    }
+    #[test]
+    fn wide_indices_roundtrip_as_little_endian_u16_blocks() {
+        let doc=json!({"format":"pixel-studio","requiredFeatures":["indexed-16"],"frames":[{"cels":[[0,0,0]],"indices":[[255,256,65535]]}]});
+        let bytes=encode(&doc).unwrap();assert_eq!(decode(&bytes).unwrap(),doc);
+        let wire=read_transfer(&bytes).unwrap();let end=12+u32_at(&wire,8)as usize;
+        let metadata:Value=serde_json::from_slice(&wire[12..end]).unwrap();
+        assert_eq!(metadata["blocks"][1]["kind"],"u16");
+        assert_eq!(&wire[wire.len()-6..],&[255,0,0,1,255,255]);
+        let mut metadata=metadata;metadata["name"]=json!("wide");metadata["saveAs"]=json!(false);let header=serde_json::to_vec(&metadata).unwrap();
+        let packed=[b"MPXSAVE1".as_slice(),&(header.len()as u32).to_le_bytes(),&header,&wire[end..]].concat();
+        let packed=PackedSave::parse(&packed).unwrap();packed.validate_planes().unwrap();
+        assert_eq!(packed.document("wide").unwrap()["frames"],doc["frames"]);
+        assert_eq!(decode(&packed.encode("wide").unwrap()).unwrap()["frames"],doc["frames"]);
     }
 }

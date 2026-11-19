@@ -35,10 +35,10 @@ test('无法解析的行跳过并计入 skipped',()=>{
   assert.equal(skipped,1);
 });
 
-test('超出 256 色的部分被截断并报告',()=>{
+test('超过 256 色仍完整插入',()=>{
   const full=Array.from({length:255},(_,i)=>'#'+i.toString(16).padStart(6,'0'));
   const {inserted,dropped,palette:next}=insertPaletteColors(full,0,['#ff0000','#00ff00']);
-  assert.equal(inserted.length,1);
-  assert.equal(dropped,1);
-  assert.equal(next.length,256);
+  assert.equal(inserted.length,2);
+  assert.equal(dropped,0);
+  assert.equal(next.length,257);
 });

@@ -15,7 +15,7 @@ export function scale2xImage(data,width,height){
 const prepared=new WeakMap();
 export function prepareRotSprite(region){
  if(prepared.has(region))return prepared.get(region);
- let data=region.indexed?Uint8Array.from(region.indexed.data):Uint32Array.from(region.data),width=region.w,height=region.h;
+ let data=region.indexed?Uint16Array.from(region.indexed.data):Uint32Array.from(region.data),width=region.w,height=region.h;
  for(let pass=0;pass<3;pass++){data=scale2xImage(data,width,height);width*=2;height*=2;}
  const result={data,width,height};prepared.set(region,result);return result;
 }

@@ -123,6 +123,14 @@ pub fn encode_packed(packed:&crate::project::PackedSave<'_>)->io::Result<Vec<u8>
     packed.validate_planes()?;
     encode_internal(packed.metadata(),Some(packed))
 }
+fn index_value(values: &Value, raw: Option<(&[u8], usize)>, index: usize) -> io::Result<u16> {
+    if let Some((bytes, width)) = raw {
+        return Ok(if width == 1 { u16::from(bytes[index]) } else {
+            u16::from_le_bytes(bytes[index * 2..index * 2 + 2].try_into().unwrap())
+        });
+    }
+    u16::try_from(number(&values[index])?).map_err(|_| invalid("索引像素值超出16-bit"))
+}
 fn encode_internal(doc:&Value,packed:Option<&crate::project::PackedSave<'_>>)->io::Result<Vec<u8>>{
     let width = word(number(&doc["width"])?)?;
     let height = word(number(&doc["height"])?)?;
@@ -144,14 +152,40 @@ fn encode_internal(doc:&Value,packed:Option<&crate::project::PackedSave<'_>>)->i
     {
         return Err(invalid("ASE 不能同时保留隔离组与穿透组"));
     }
-    let depth = match doc["colorMode"].as_str() {
+    let mut depth = match doc["colorMode"].as_str() {
         Some("indexed") => 8,
         Some("grayscale") => 16,
         _ => 32,
     };
     let palette = doc["palette"].as_array().cloned().unwrap_or_default();
-    if palette.len() > 256 || depth == 8 && palette.is_empty() {
+    if palette.len() > i32::MAX as usize || depth == 8 && palette.is_empty() {
         return Err(invalid("ASE 色板数量无效"));
+    }
+    let indexed = depth == 8;
+    let transparent = doc["transparentIndex"].as_u64().unwrap_or(0);
+    let mut indexed_colors = Vec::new();
+    if indexed {
+        if transparent >= palette.len() as u64 || transparent > u16::MAX as u64 {
+            return Err(invalid("ASE 透明索引无效"));
+        }
+        indexed_colors = palette.iter().map(|value| color(value).map(u32::from_be_bytes)).collect::<io::Result<Vec<_>>>()?;
+        let mut wide = transparent > 255;
+        for (f, frame) in frames.iter().enumerate() {
+            for &(l, _) in &ordered {
+                if layers[l]["type"] == "group" { continue; }
+                let values = &frame["indices"][l];
+                let raw = if values.is_null() { packed.map(|p| p.plane(f, l, true)).transpose()? } else { None };
+                let count = if let Some((bytes, width)) = raw { bytes.len() / width } else { array(values)?.len() };
+                for i in 0..count {
+                    let index = usize::from(index_value(values, raw, i)?);
+                    if index >= palette.len() { return Err(invalid("ASE 索引像素超出色板")); }
+                    wide |= index > 255;
+                }
+            }
+        }
+        // ASE only supports 8-bit indexed pixels. Wider editor indices are encoded
+        // as RGBA using the authoritative palette, without changing the live document.
+        if wide { depth = 32; }
     }
     let mut initial = Vec::new();
     for &(index, level) in &ordered {
@@ -308,23 +342,23 @@ fn encode_internal(doc:&Value,packed:Option<&crate::project::PackedSave<'_>>)->i
             if w == 0 || h == 0 {
                 return Err(invalid("ASE cel 尺寸无效"));
             }
-            let raw_pixels=if frame["cels"][index].is_null(){packed.map(|packed|packed.plane(frame_index,index,false)).transpose()?}else{None};
-            let raw_indices=if depth==8&&frame["indices"][index].is_null(){packed.map(|packed|packed.plane(frame_index,index,true)).transpose()?}else{None};
+            let raw_pixels=if frame["cels"][index].is_null(){packed.map(|packed|packed.plane(frame_index,index,false).map(|(bytes,_)|bytes)).transpose()?}else{None};
+            let raw_indices=if indexed&&frame["indices"][index].is_null(){packed.map(|packed|packed.plane(frame_index,index,true)).transpose()?}else{None};
             let values=if raw_pixels.is_none(){Some(array(&frame["cels"][index])?)}else{None};
             let count=raw_pixels.map(|bytes|bytes.len()/4).unwrap_or_else(||values.unwrap().len());
-            if count != usize::from(w) * usize::from(h) || raw_indices.is_some_and(|bytes|bytes.len()!=count) {
+            if count != usize::from(w) * usize::from(h) || raw_indices.is_some_and(|(bytes,width)|bytes.len()/width!=count) {
                 return Err(invalid("ASE cel 像素尺寸不一致"));
             }
             let mut raw = Vec::with_capacity(count * (depth / 8));
             for i in 0..count {
-                let pixel = if let Some(bytes)=raw_pixels{u32::from_le_bytes(bytes[i*4..i*4+4].try_into().unwrap())}else{number(&values.unwrap()[i])?};
+                let slot = if indexed { Some(index_value(&frame["indices"][index],raw_indices,i)?) } else { None };
+                let pixel = if let Some(slot)=slot {
+                    let value=indexed_colors[usize::from(slot)];
+                    if layer["type"]=="background" { value|255 } else if u64::from(slot)==transparent { 0 } else { value }
+                } else if let Some(bytes)=raw_pixels{u32::from_le_bytes(bytes[i*4..i*4+4].try_into().unwrap())}else{number(&values.unwrap()[i])?};
                 match depth {
                     8 => {
-                        let value = if let Some(bytes)=raw_indices{bytes[i] as u32}else{number(&frame["indices"][index][i])?};
-                        if value >= palette.len() as u32 {
-                            return Err(invalid("ASE 索引像素超出色板"));
-                        }
-                        raw.push(value as u8);
+                        raw.push(slot.unwrap() as u8);
                     }
                     16 => raw.extend([(pixel >> 24) as u8, pixel as u8]),
                     _ => raw.extend(pixel.to_be_bytes()),
@@ -370,13 +404,9 @@ fn encode_internal(doc:&Value,packed:Option<&crate::project::PackedSave<'_>>)->i
     );
     header.u16(number(&frames[0]["duration"])? as u16);
     header.zero(8);
-    let transparent = doc["transparentIndex"].as_u64().unwrap_or(0);
-    if depth == 8 && transparent >= palette.len() as u64 {
-        return Err(invalid("ASE 透明索引无效"));
-    }
-    header.u8(transparent as u8);
+    header.u8(if depth == 8 { transparent as u8 } else { 0 });
     header.zero(3);
-    header.u16(palette.len() as u16);
+    header.u16(palette.len().min(u16::MAX as usize) as u16);
     header.u8(1);
     header.u8(1);
     header.zero(92);
@@ -389,6 +419,34 @@ fn encode_internal(doc:&Value,packed:Option<&crate::project::PackedSave<'_>>)->i
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn wide_indices_export_as_rgba_for_value_and_packed_sources_without_mutation() {
+        let mut doc = document();
+        doc["format"] = json!("pixel-studio");
+        doc["colorMode"] = json!("indexed");
+        doc["transparentIndex"] = json!(299);
+        doc["palette"] = json!((0..300).map(|i| format!("#{:08x}", (i << 8) | 255)).collect::<Vec<_>>());
+        for frame in doc["frames"].as_array_mut().unwrap() {
+            frame["indices"][0] = json!([256,299]);
+            // Deliberately stale RGBA: the indexed source must remain authoritative.
+            frame["cels"][0] = json!([1,2]);
+        }
+        let before = doc.clone();
+        let bytes = encode(&doc).unwrap();
+        assert_eq!(doc,before);
+        assert_eq!(u16_at(&bytes,12),32);
+        let imported = decode(&bytes,"test").unwrap();
+        assert_eq!(imported["doc"]["frames"][0]["cels"][0],json!([0x000100ffu32,0]));
+        assert_eq!(imported["doc"]["palette"],doc["palette"]);
+        assert!(imported["doc"]["colorMode"].is_null());
+        let wire=crate::project::document_read_transfer(&doc,Value::Null).unwrap();
+        let end=12+u32::from_le_bytes(wire[8..12].try_into().unwrap())as usize;
+        let mut metadata:Value=serde_json::from_slice(&wire[12..end]).unwrap();metadata["name"]=json!("test");metadata["saveAs"]=json!(false);
+        let header=serde_json::to_vec(&metadata).unwrap();let mut packed=b"MPXSAVE1".to_vec();packed.extend_from_slice(&(header.len()as u32).to_le_bytes());packed.extend_from_slice(&header);packed.extend_from_slice(&wire[end..]);
+        assert_eq!(encode_packed(&crate::project::PackedSave::parse(&packed).unwrap()).unwrap(),bytes);
+        doc["frames"][0]["indices"][0][0]=json!(65536);
+        assert!(encode(&doc).is_err());
+    }
     #[test]
     fn raw_pixel_writer_matches_value_writer_without_materializing_pixel_values(){
         for fixture in [include_bytes!("../../tests/fixtures/rgba-linked.aseprite").as_slice(),include_bytes!("../../tests/fixtures/indexed-linked.aseprite").as_slice(),include_bytes!("../../tests/fixtures/grayscale-linked.aseprite").as_slice()]{

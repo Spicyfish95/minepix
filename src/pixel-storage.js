@@ -1,6 +1,6 @@
 const entries=new WeakMap();
 const caches=new WeakMap();
-export const isPixelArray=value=>Array.isArray(value)||value instanceof Uint32Array||value instanceof Uint8Array;
+export const isPixelArray=value=>Array.isArray(value)||value instanceof Uint32Array||value instanceof Uint16Array||value instanceof Uint8Array;
 export const documentJSON=value=>JSON.stringify(value,(_key,value)=>ArrayBuffer.isView(value)?Array.from(value):value);
 // Editing buffers are materialized only when a caller needs them. Indices remain
 // authoritative at committed boundaries; caches are discarded only after commit.
@@ -10,8 +10,8 @@ export function prepareDocumentPixels(doc){
  const holder=indices=>{if(!shared.has(indices))shared.set(indices,{cache:null});return shared.get(indices);};
  for(const frame of doc.frames){
   if(frame.indices)frame.indices=frame.indices.map(values=>{
-   if(!values||values instanceof Uint8Array)return values;
-   if(!indexed.has(values))indexed.set(values,Uint8Array.from(values));return indexed.get(values);
+   if(!values||values instanceof Uint16Array)return values;
+   if(!indexed.has(values))indexed.set(values,Uint16Array.from(values));return indexed.get(values);
   });
   let slots=entries.get(frame.cels);if(!slots)entries.set(frame.cels,slots=new Map());
   for(let l=0;l<frame.cels.length;l++){
@@ -53,7 +53,7 @@ export function releaseIndexedCaches(doc,keepFrame=-1){
 }
 export function pixelStorageStats(doc){
  let indexBytes=0,rgbaBytes=0,cachedCels=0;const seen=new Set();
- for(const frame of doc.frames){for(const indices of frame.indices||[])if(indices&&!seen.has(indices)){seen.add(indices);indexBytes+=indices.byteLength||indices.length;}
+ for(const frame of doc.frames){for(const indices of frame.indices||[])if(indices&&!seen.has(indices)){seen.add(indices);indexBytes+=indices.byteLength||indices.length*2;}
   for(let l=0;l<frame.cels.length;l++){const entry=entries.get(frame.cels)?.get(l),buffer=entry&&Object.getOwnPropertyDescriptor(frame.cels,l)?.get===entry.get?entry.cache:frame.cels[l];if(buffer&&!seen.has(buffer)){seen.add(buffer);rgbaBytes+=buffer.byteLength||buffer.length*4;cachedCels++;}}
  }
  return{indexBytes,rgbaBytes,cachedCels};

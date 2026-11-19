@@ -131,7 +131,7 @@ test('linked structural snapshots deduplicate planes and replay typed independen
 test('indexed structural snapshots store indices without materializing RGBA and preserve duplicate slots',()=>{
  let doc=createDocument(3,1);doc.palette=['#00000000','#123456ff','#123456ff'];doc.colorMode='indexed';doc.transparentIndex=0;doc.frames[0].indices=[Uint8Array.of(0,2,1)];prepareDocumentPixels(doc);
  const history=new History();history.push(doc);const snapshot=history.undoStack[0].before;assert.equal(snapshot.cels[0][0],null);assert.equal(pixelStorageStats(doc).rgbaBytes,0);
- doc=history.undo(doc);assert.ok(doc.frames[0].indices[0] instanceof Uint8Array);assert.deepEqual([...doc.frames[0].indices[0]],[0,2,1]);assert.deepEqual([...doc.frames[0].cels[0]],[0,0x123456ff,0x123456ff]);
+ doc=history.undo(doc);assert.ok(doc.frames[0].indices[0] instanceof Uint16Array);assert.deepEqual([...doc.frames[0].indices[0]],[0,2,1]);assert.deepEqual([...doc.frames[0].cels[0]],[0,0x123456ff,0x123456ff]);
 });
 test('linked delta blocks share stored buffers while invalidation retains every member',()=>{
  const doc=createDocument(512,1);doc.frames.push({...doc.frames[0],cels:[doc.frames[0].cels[0]]});linkCels(doc,0,[0,1]);const history=new History(),before=snapshotCel(doc,0,0);doc.frames[0].cels[0][256]=0xffffffff;history.push(before,doc,{blocks:new Set([256])});

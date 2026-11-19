@@ -51,7 +51,7 @@ test('只删除用户色板，内置色板删不掉',()=>{
 test('旧 JSON 色板库迁移到二进制且保留名称和标识',()=>{
  reset();store.set(PALETTE_LIBRARY_KEY,JSON.stringify([{id:'old',name:'旧色板',colors:['#112233']}]));
  assert.deepEqual(paletteById('old').colors,['#112233']);
- assert.equal(atob(store.get(PALETTE_LIBRARY_KEY)).slice(0,8),'MPIXLIB1');
+ assert.equal(atob(store.get(PALETTE_LIBRARY_KEY)).slice(0,8),'MPIXLIB2');
  assert.equal(paletteById('old').name,'旧色板');
 });
 

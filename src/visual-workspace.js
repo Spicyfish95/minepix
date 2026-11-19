@@ -121,7 +121,7 @@ const replaceCommand=moveCommand('replace-color',get('palette-menu'),'swap');rep
  const paletteSize=action('palette-size');compactButton(paletteSize,'grid','色板尺寸');
  colorActions.append(get('add-color'),paletteSize,paletteEditor,get('palette-menu-trigger'),get('doc-color-mode'));colors.prepend(colorActions);
  const modeButton=get('doc-color-mode');compactButton(modeButton,'image','文档颜色模式');
- controlUpdates.push(()=>{const mode=modeButton.dataset.mode;setButtonIcon(modeButton,mode==='INDEXED 8'?'grid':mode==='GRAY 16'?'alpha':'image');modeButton.title='文档颜色模式：'+mode;modeButton.setAttribute('aria-label',modeButton.title);});
+ controlUpdates.push(()=>{const mode=modeButton.dataset.mode;setButtonIcon(modeButton,mode==='INDEXED 16'?'grid':mode==='GRAY 16'?'alpha':'image');modeButton.title='文档颜色模式：'+mode;modeButton.setAttribute('aria-label',modeButton.title);});
  const colorCurrent=document.querySelector('.color-current');get('color-adjustments').insertBefore(colorCurrent,document.querySelector('.color-sv'));
  const channelMode=adjustHeading.querySelector('select');cycle(channelMode,colorCurrent,{hsv:'color-hsv',rgb:'color-rgb'},'颜色通道');
  document.querySelector('footer').insertBefore(get('doc-meta'),action('shortcuts'));document.querySelector('.document-bar').hidden=true;

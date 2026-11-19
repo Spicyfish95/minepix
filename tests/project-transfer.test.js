@@ -12,9 +12,9 @@ function unpack(bytes){
  const metadata=JSON.parse(new TextDecoder().decode(bytes.subarray(12,12+length)));
  let offset=12+length;
  for(const block of metadata.blocks){
-  const size=block.count*(block.kind==='u32'?4:1),raw=bytes.subarray(offset,offset+size);offset+=size;
+  const size=block.count*(block.kind==='u32'?4:block.kind==='u16'?2:1),raw=bytes.subarray(offset,offset+size);offset+=size;
   const parts=block.path.slice(1).split('/');let parent=metadata.document;for(const key of parts.slice(0,-1))parent=parent[key];
-  parent[parts.at(-1)]=block.kind==='u32'?Array.from({length:block.count},(_,i)=>new DataView(raw.buffer,raw.byteOffset,raw.byteLength).getUint32(i*4,true)):block.kind==='u8'?[...raw]:btoa(String.fromCharCode(...raw));
+  parent[parts.at(-1)]=block.kind==='u32'?Array.from({length:block.count},(_,i)=>new DataView(raw.buffer,raw.byteOffset,raw.byteLength).getUint32(i*4,true)):block.kind==='u16'?Array.from({length:block.count},(_,i)=>new DataView(raw.buffer,raw.byteOffset,raw.byteLength).getUint16(i*2,true)):block.kind==='u8'?[...raw]:btoa(String.fromCharCode(...raw));
  }
  assert.equal(offset,bytes.length);
  return metadata;
@@ -47,7 +47,7 @@ test('可选payload字段null、缺省和空frames保留',()=>{
 });
 
 test('非法数字不通过typed-array静默截断',()=>{
- for(const [field,pixel]of [['cels',-1],['cels',4294967296],['cels',1.5],['cels',null],['cels','1'],['indices',256],['indices',-1]]){
+ for(const [field,pixel]of [['cels',-1],['cels',4294967296],['cels',1.5],['cels',null],['cels','1'],['indices',65536],['indices',-1]]){
   assert.throws(()=>packProjectSave(JSON.stringify({format:'pixel-studio',frames:[{[field]:[[pixel]]}]}),'invalid'),/像素/);
  }
  for(const payload of [1,{},'pixels'])assert.throws(()=>packProjectSave(JSON.stringify({format:'pixel-studio',frames:[{cels:payload}]}),'invalid'),/cel/);
