@@ -13,6 +13,11 @@ test('large numeric arrays leave only descriptors in JSON metadata',()=>{
  const values=new Array(10000).fill(0xffffffff),wire=packDocumentWire({doc:{frames:[{cels:[values]}]},same:values}),packet=unpackBinaryPacket(wire);
  assert.ok(JSON.stringify(packet.metadata).length<1000);assert.equal(packet.payloads.length,1);assert.equal(packet.payloads[0].length,40000);assert.deepEqual(unpackDocumentWire(wire).doc.frames[0].cels[0],values);
 });
+test('large palettes migrate without exceeding the function argument limit and retain shared arrays',()=>{
+ const doc=createDocument(1,1);doc.palette=Array.from({length:200000},(_,i)=>'#'+i.toString(16).padStart(6,'0'));
+ const state=unpackDocumentWire(packDocumentWire({doc,palette:doc.palette}));
+ assert.deepEqual(state.doc.palette,doc.palette);assert.equal(state.doc.palette,state.palette);
+});
 test('migrated document can undo and redo and keeps linked pixels',()=>{
  let doc=createDocument(2,1);doc.frames[0].cels[0][0]=0xff0000ff;addFrame(doc,0,true);doc.frames[1].cels[0]=doc.frames[0].cels[0];
  const history=new History(),before=structuredClone(doc);doc.frames[0].cels[0][1]=0x00ff00ff;history.push(before,doc);

@@ -36,7 +36,7 @@ export function unpackDocumentWire(input){
  nodes.forEach((node,id)=>{
   const object=objects[id];
   if(node.type==='Object')for(const[key,value]of node.values)Object.defineProperty(object,key,{value:read(value),enumerable:true,writable:true,configurable:true});
-  if(node.type==='Array')object.push(...node.values.map(read));
+  if(node.type==='Array')for(const value of node.values)object.push(read(value));
   if(node.type==='Set')node.values.forEach(value=>object.add(read(value)));
   if(node.type==='Map')node.values.forEach(([key,value])=>object.set(read(key),read(value)));
  });
