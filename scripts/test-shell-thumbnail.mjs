@@ -5,7 +5,7 @@ import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {createDocument,composite,colorValue} from '../src/model.js';
 import {BLEND_MODES} from '../src/compositor.js';
-import {readAseprite} from '../tests/helpers/aseprite.js';
+import {readAseprite,writeAseprite} from '../tests/helpers/aseprite.js';
 
 const run=promisify(execFile),root=path.resolve('artifacts/shell-thumbnail',String(Date.now()));await mkdir(root,{recursive:true});
 const tool=path.resolve('src-tauri/target/debug/examples/project-tool.exe'),render=path.resolve('src-tauri/thumbnailer/target/debug/examples/render.exe'),probe=path.resolve('src-tauri/thumbnailer/target/debug/examples/probe.exe'),dll=path.resolve('src-tauri/thumbnailer/target/debug/minepix_thumbnailer.dll');
@@ -40,6 +40,13 @@ try{
  }
  const doc=createDocument(4,2,'indexed');doc.palette=Array.from({length:300},(_,i)=>'#'+(random()>>>0).toString(16).padStart(8,'0'));doc.colorMode='indexed';doc.transparentIndex=299;doc.requiredFeatures=['color-modes','indexed-16'];doc.frames[0].indices=[[256,299,1,257,255,0,298,256]];doc.frames[0].cels=[doc.frames[0].indices[0].map(index=>index===299?0:colorValue(doc.palette[index]))];
  const indexedFile=await pix(doc,'wide-index');
+ const edge=createDocument(4,2,'u16-boundary');edge.palette=Array.from({length:65537},(_,i)=>'#'+((i<<8)|255).toString(16).padStart(8,'0'));edge.colorMode='indexed';edge.transparentIndex=65535;edge.requiredFeatures=['color-modes','indexed-16'];
+ edge.frames[0].indices=[[0,255,256,65534,65535,65534,256,0]];edge.frames[0].cels=[edge.frames[0].indices[0].map(index=>index===65535?0:colorValue(edge.palette[index]))];
+ await pix(edge,'u16-boundary');
+ const edgeBefore=JSON.stringify(edge),edgeAse=path.join(root,'u16-boundary.ase'),edgeBytes=await writeAseprite(edge);await writeFile(edgeAse,edgeBytes);assert.equal(edgeBytes.readUInt16LE(12),32);
+ await compare(edgeAse,edge,32,'u16 ASE RGBA fallback');assert.equal(JSON.stringify(edge),edgeBefore);
+ edge.layers[0].type='background';edge.layers[0].clearIndex=65535;edge.layers[0].clearColor=colorValue(edge.palette[65535]);edge.frames[0].cels=[edge.frames[0].indices[0].map(index=>colorValue(edge.palette[index]))];
+ await pix(edge,'u16-background');
  const bg=createDocument(5,3,'background');bg.layers[0].type='background';bg.layers[0].clearColor=0x224466ff;bg.frames[0].cels[0]=[0xff000080];bg.frames[0].celProperties={1:{x:2,y:1,width:1,height:1,opacity:100}};await pix(bg,'background');
  const reference=createDocument(2,1,'reference');reference.frames[0].cels[0]=[0x123456ff,0];reference.layers.push({id:2,name:'external',visible:true,opacity:100,type:'reference',reference:{path:'C:/missing-reference.png',width:1,height:1,scale:1,x:0,y:0}});reference.frames[0].cels.push([0,0]);await pix(reference,'exclude-reference');
  for(const name of ['rgba-linked.aseprite','grayscale-linked.aseprite','indexed-linked.aseprite','grass.ase']){

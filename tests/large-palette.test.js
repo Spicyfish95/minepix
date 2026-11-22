@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createDocument,validateDocument,colorValue,copyRegion,pasteRegion} from '../src/model.js';
+import {createDocument,validateDocument,colorValue,copyRegion,pasteRegion,addFrame} from '../src/model.js';
 import {convertColorMode,applyIndexedPalette,createMapper,validateColorMode,asepriteMode} from '../src/color-modes.js';
 import {selectionFrom} from '../src/selection-mask.js';
 import {parsePalette,extractPalette} from '../src/colors.js';
@@ -9,7 +9,8 @@ import {savePaletteToLibrary,paletteById,setPalettePreset,palettePreset} from '.
 import {insertPaletteColors} from '../src/palette-clipboard.js';
 import {History} from '../src/history.js';
 import {snapshotCel} from '../src/history.js';
-import {prepareDocumentPixels,documentJSON} from '../src/pixel-storage.js';
+import {prepareDocumentPixels,documentJSON,releaseIndexedCaches} from '../src/pixel-storage.js';
+import {linkCels} from '../src/cel-links.js';
 import {snapshotDocument,snapshotMessage} from '../src/document-snapshot.js';
 import {packProjectSave,unpackProjectReadPacket} from '../src/project-transfer.js';
 import {packDocumentWire,unpackDocumentWire} from '../src/document-wire.js';
@@ -17,6 +18,21 @@ import {prepareRotSprite} from '../src/rotsprite.js';
 import {readAseprite,writeAseprite} from './helpers/aseprite.js';
 
 const colors=count=>Array.from({length:count},(_,i)=>'#'+i.toString(16).padStart(6,'0'));
+test('deleting a high palette slot remaps from original colors with cold caches and linked cels',()=>{
+ for(const linked of [false,true]){
+  let doc=createDocument(2,1);doc.palette=['#00000000','#00ff00',...Array(255).fill('#000000'),'#ff0000'];doc.frames[0].cels[0]=[0xff0000ff,0x00ff00ff];
+  convertColorMode(doc,'indexed',{palette:'current'});assert.deepEqual(doc.frames[0].indices[0],[257,1]);
+  if(linked){addFrame(doc,0,true);linkCels(doc,0,[0,1]);}
+  prepareDocumentPixels(doc);releaseIndexedCaches(doc);
+  const before=snapshotDocument(doc),history=new History();
+  applyIndexedPalette(doc,doc.palette.slice(0,-1),doc.palette.slice(0,-1).map((_,i)=>i));
+  for(const frame of doc.frames){assert.deepEqual([...frame.indices[0]],[2,1]);assert.deepEqual([...frame.cels[0]],[0x000000ff,0x00ff00ff]);}
+  history.push(before,doc,{colorsReady:true});validateDocument(doc);
+  doc=history.undo(doc);assert.deepEqual([...doc.frames[0].indices[0]],[257,1]);assert.equal(doc.palette.length,258);
+  doc=history.redo(doc);assert.deepEqual([...doc.frames[0].indices[0]],[2,1]);assert.equal(doc.palette.length,257);validateDocument(doc);
+  if(linked)assert.equal(doc.frames[0].indices[0],doc.frames[1].indices[0]);
+ }
+});
 test('large project palettes preserve all ordered slots in every color mode',()=>{
  for(const mode of ['rgba','grayscale','indexed']){
   const doc=createDocument(2,1);doc.palette=['#00000000',...colors(300)];
