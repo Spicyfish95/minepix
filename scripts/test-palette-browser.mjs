@@ -11,6 +11,19 @@ async function runPaletteEyedropperChecks(){
  const key=(type,extra={})=>document.dispatchEvent(new KeyboardEvent(type,{key:'Alt',code:'AltLeft',bubbles:true,cancelable:true,...extra}));
  const pick=x=>{const bounds=canvas.getBoundingClientRect();for(const type of ['pointerdown','pointerup'])viewport.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,clientX:bounds.left+(x+.5)*zoom,clientY:bounds.top+.5*zoom,pointerId:10,button:0,altKey:true}));};
  try{
+  for(const mode of ['rgba','indexed'])for(const editing of [false,true]){
+   const next=createDocument(1,1,'alpha-channel');next.palette=['#00000000','#123456'];next.frames[0].cels[0]=[0x123456ff];if(mode==='indexed')convertColorMode(next,mode,{palette:'current'});
+   replaceDocument(next,true);li=0;setPaletteEditing(editing);setColor('#123456',1);
+   if(editing){paletteActive=1;paletteSelection=new Set([1]);renderColors();}
+   for(const channelMode of ['hsv','rgb']){
+    const control=$('color-adjustments').querySelector('select');control.value=channelMode;control.dispatchEvent(new Event('change'));
+    const alpha=$('color-adjustments').querySelector('[data-channel="a"] input[type="range"]');alpha.value=128;alpha.dispatchEvent(new Event('input'));alpha.dispatchEvent(new Event('change'));
+    check(mode+' '+channelMode+' alpha-only adjustment preserves exact RGB '+editing,colorValue(editing?doc.palette[1]:color)===0x12345680);
+    alpha.value=255;alpha.dispatchEvent(new Event('input'));alpha.dispatchEvent(new Event('change'));
+    check(mode+' '+channelMode+' alpha roundtrip preserves exact RGB '+editing,colorValue(editing?doc.palette[1]:color)===0x123456ff);
+   }
+  }
+  setPaletteEditing(false);const initialMode=$('color-adjustments').querySelector('select');initialMode.value='hsv';initialMode.dispatchEvent(new Event('change'));
   for(const mode of ['rgba','indexed','grayscale']){
    const next=createDocument(2,1,'palette-eyedropper');next.palette=['#00000000','#ff0000','#00ff00'];next.frames[0].cels[0]=[0xff0000ff,0x00ff00ff];
    if(mode!=='rgba')convertColorMode(next,mode,{palette:'current'});
