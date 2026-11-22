@@ -13,6 +13,11 @@ import {linkCels} from '../src/cel-links.js';
 import {convertBackground} from '../src/layer-types.js';
 import {addLayer} from '../src/model.js';
 function sample(){const d=createDocument(2,1);d.palette=['#00000000','#ff0000ff','#00ff0080'];d.frames[0].cels[0]=[0xff0000ff,0x00ff0080];return d;}
+test('有序抖动仅有一个不透明候选时不会引入透明孔洞',()=>{
+ const doc=createDocument(4,4);doc.palette=['#00000000','#ff0000','#00ff0080'];doc.frames[0].cels[0].fill(0x800000ff);
+ convertColorMode(doc,'indexed',{palette:'current',dither:true});
+ assert.ok(doc.frames[0].indices[0].every(index=>index===1));assert.ok(doc.frames[0].cels[0].every(pixel=>(pixel&255)===255));validateDocument(doc);
+});
 
 test('色板重复来源取首槽，背景与普通层分别保留不透明和透明槽语义',()=>{
  const d=createDocument(3,1);d.palette=['#00000000','#ff0000ff','#00ff0080'];

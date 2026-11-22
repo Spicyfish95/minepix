@@ -138,6 +138,10 @@ export async function paletteWorkflowSmoke(samples,api){
    for(const type of ['pointerdown','pointerup'])viewport.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,clientX:r.left+z*.5,clientY:r.top+z*.5,pointerId:92,button:0}));
   }finally{viewport.setPointerCapture=swapCapture;}
   check('索引前背景交换后实际笔画使用新的绿色索引',state().doc.frames[0].indices[0][0]===2&&state().doc.frames[0].cels[0][0]===0x00ff00ff);
+  const dithered=createDocument(4,4,'opaque-dither');dithered.palette=['#00000000','#ff0000','#00ff0080'];dithered.frames[0].cels[0].fill(0x800000ff);replaceDocument(dithered,true);
+  const changingMode=actions['color-mode'](),modeForm=$('modal-form');modeForm.elements.mode.value='indexed';modeForm.elements.mode.dispatchEvent(new Event('change'));modeForm.elements.palette.value='current';modeForm.elements.dither.checked=true;modeForm.requestSubmit($('modal-submit'));await changingMode;
+  check('真实模式转换抖动不会用透明槽填充不透明像素',state().doc.frames[0].indices[0].every(index=>index===1)&&state().doc.frames[0].cels[0].every(pixel=>(pixel&255)===255));
+  actions.undo();check('抖动转换撤销恢复原RGBA',!state().doc.colorMode&&state().doc.frames[0].cels[0].every(pixel=>pixel===0x800000ff));
   if(samples.inspectPattern){pattern();host.querySelector('button').click();await nextFrame();}
 
   return {ok:true,results};
