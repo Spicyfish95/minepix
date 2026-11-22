@@ -374,6 +374,7 @@ async function pickScreenColor(){
  }catch(error){showError('屏幕取色失败：'+error.message);}finally{screenColorPicking=false;}
 }
 function pickCanvasColor(event){const raw=point(event,false);if(!insideTiledCanvas(doc,raw,tiledMode))return;const p=tiledPoint(doc,raw.x,raw.y,tiledMode),c=compositePixel(doc,fi,p.x,p.y);if(c[3])pickColor(fromRgba({r:c[0],g:c[1],b:c[2],a:c[3]}));}
+function swapColors(){const next=background;background=color;setColor(next);}
 function setBackground(value){const next=normalizeColor(value);if(next!==background)useForegroundForPattern();background=next;saveColorPreferences();renderColors();}
 function renderPalette(){
  syncPalettePresetButton();
@@ -2683,7 +2684,7 @@ const actions={
   'set-palette-preset':()=>{const entry=palettePresetCandidate();if(!entry)return;setPalettePreset(doc.palette,entry.id,entry.name);renderPaletteLibrary();message('已设为预设色板');},'palette-editor':togglePaletteEditor,'import-palette':importPalette,'export-palette':exportPalette,
   'save-palette':savePaletteLibraryEntry,'delete-palette':deletePaletteLibraryEntry,'remap-indices':remapPaletteIndices,
   'extract-palette':()=>{const palette=extractPalette(composite(doc,fi));if(!palette.length)return message('当前帧没有可提取的颜色');mutate(()=>editIndexedPalette(doc,palette),'已按使用频率提取当前帧颜色',{colorsReady:true});},
-  'swap-colors':()=>{[color,background]=[background,color];saveColorPreferences();renderColors();},
+  'swap-colors':swapColors,
   flatten:async()=>{if(await modal('扁平化全部图层？','<p>将所有帧的可见内容合成为一个透明图层，同时移除隐藏图层。可以撤销。</p>'))mutate(()=>{li=flattenSprite(doc);},'已扁平化全部帧');},
   'merge-down':()=>mutate(()=>{li=mergeDown(doc,li);},'已向下合并所有帧'),
   'merge-visible':()=>mutate(()=>{li=mergeVisible(doc);},'已合并全部可见图层，隐藏图层保持独立'),

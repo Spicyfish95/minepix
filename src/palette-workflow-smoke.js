@@ -131,6 +131,13 @@ export async function paletteWorkflowSmoke(samples,api){
   const imported=createDocument(2,1,'opaque-palette');imported.palette=['#00000000','#ff0000','#00ff00'];imported.frames[0].cels[0]=[0xff0000ff,0x00ff00ff];convertColorMode(imported,'indexed',{palette:'current'});replaceDocument(imported,true);
   await importFile({type:'palette',name:'opaque.pix',data:paletteBase64(encodePalette(['#ff0000','#00ff00']))});
   check('索引导入不透明色板保留首色并补透明槽',state().doc.palette.length===3&&state().doc.transparentIndex===0&&state().doc.frames[0].cels[0][0]===0xff0000ff&&state().doc.frames[0].cels[0][1]===0x00ff00ff);
+  $('hex').value='#ff000080';$('hex').dispatchEvent(new Event('change'));$('background-color').value='#00ff00';$('background-color').dispatchEvent(new Event('input'));actions['swap-colors']();
+  const swapCapture=viewport.setPointerCapture;viewport.setPointerCapture=()=>{};
+  try{
+   const r=$('canvas').getBoundingClientRect(),z=window.documentWindowAudit().zoom;
+   for(const type of ['pointerdown','pointerup'])viewport.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,clientX:r.left+z*.5,clientY:r.top+z*.5,pointerId:92,button:0}));
+  }finally{viewport.setPointerCapture=swapCapture;}
+  check('索引前背景交换后实际笔画使用新的绿色索引',state().doc.frames[0].indices[0][0]===2&&state().doc.frames[0].cels[0][0]===0x00ff00ff);
   if(samples.inspectPattern){pattern();host.querySelector('button').click();await nextFrame();}
 
   return {ok:true,results};

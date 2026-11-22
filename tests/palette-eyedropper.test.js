@@ -51,6 +51,14 @@ test('indexed picking retains active index when sampled color already belongs to
  assert.equal(context.colorIndex,1);assert.equal(context.color,'#00ff00');
  assert.deepEqual(context.doc.frames[0].indices[0],[1,2]);assert.equal(context.doc.palette[1],context.doc.palette[2]);
 });
+for(const mode of ['rgba','indexed','grayscale'])test(`${mode}: swapping foreground/background updates the drawing color without losing alpha`,()=>{
+ const context=editor(mode);context.paletteEditing=false;context.background='#00ff00';context.color=mode==='grayscale'?'#4c4c4c80':'#ff000080';context.colorIndex=1;
+ const previous=context.color,before=structuredClone(context.doc),action=source.match(/^\s*'swap-colors':(.*),$/m)[1];
+ vm.runInContext(`(${action})()`,context);
+ assert.equal(context.color,mode==='grayscale'?'#969696':'#00ff00');assert.equal(context.background,previous);
+ if(mode==='indexed')assert.equal(context.colorIndex,2);
+ assert.deepEqual(context.doc,before);assert.equal(context.history.undoStack.length,0);
+});
 for(const state of ['not editing','no active slot','active slot not selected'])test(`${state}: only foreground changes`,()=>{
  const context=editor('indexed'),before=structuredClone(context.doc);
  if(state==='not editing')context.paletteEditing=false;
