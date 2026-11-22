@@ -4,7 +4,7 @@ A Windows desktop editor for pixel art, frame-by-frame animation and game assets
 
 [简体中文](README.md) · [User guide (Chinese)](docs/USER_GUIDE.md)
 
-**Free and open source · Windows x64 · Chinese / English · Source version 2.0.7**
+**Free and open source · Windows x64 · Chinese / English · Source version 2.0.11**
 
 [Download the Windows x64 installer](https://github.com/Spicyfish95/minepix/releases/latest)
 
