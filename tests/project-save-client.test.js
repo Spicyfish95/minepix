@@ -51,3 +51,12 @@ test('disposing rejects in-flight saves and startup failure can retry',async()=>
 test('snapshot conversion rejects invalid numbers instead of truncating them',async()=>{
  const {client}=harness(),doc=createDocument(1,1);doc.frames[0].cels[0][0]=-1;await assert.rejects(client.pack(doc,'invalid'),/越界/);client.dispose();
 });
+test('save snapshots reject sparse RGBA and index planes without filling holes with zero',async()=>{
+ for(const field of ['cels','indices']){
+  const {client,workers}=harness(),doc=createDocument(2,1),values=new Array(2);values[1]=0;
+  doc.frames[0][field]=[values];
+  assert.throws(()=>snapshotProject(doc),/像素值越界/);
+  await assert.rejects(client.pack(doc,'sparse'),/像素值越界/);
+  assert.equal(workers[0].messages.length,0);assert.equal(0 in values,false);client.dispose();
+ }
+});

@@ -54,6 +54,14 @@ test('非法数字不通过typed-array静默截断',()=>{
  assert.throws(()=>packProjectSave('{"format":"other","frames":[]}','invalid'));
  assert.throws(()=>packProjectSave('{"format":"pixel-studio","frames":[],"references":[{"data":"%%%"}]}','invalid'));
 });
+test('直接打包拒绝稀疏RGBA和索引数组而不补零',()=>{
+ for(const field of ['cels','indices']){
+  const values=new Array(2);values[1]=0;
+  const doc={format:'pixel-studio',frames:[{[field]:[values]}]};
+  assert.throws(()=>packProjectSave(doc,'sparse'),/像素值越界/);
+  assert.equal(0 in values,false);
+ }
+});
 
 test('大块重复像素使用定长原始字节而不保留数字JSON',()=>{
  const document={format:'pixel-studio',frames:[{cels:[Array(65536).fill(0xff8844ff)]}]},json=JSON.stringify(document),wire=packProjectSave(json,'large');

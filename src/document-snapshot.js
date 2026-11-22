@@ -14,7 +14,7 @@ export function snapshotDocument(document){
   if(!pixels)return pixels;
   if(!planes.has(pixels)){
    const max=Type===Uint16Array?65535:0xffffffff;
-   if(!(pixels instanceof Type)&&pixels.some(pixel=>!Number.isInteger(pixel)||pixel<0||pixel>max))throw new Error('项目像素值越界');
+   if(!(pixels instanceof Type))for(const pixel of pixels)if(!Number.isInteger(pixel)||pixel<0||pixel>max)throw new Error('项目像素值越界');
    planes.set(pixels,Type.from(pixels));
   }
   return planes.get(pixels);

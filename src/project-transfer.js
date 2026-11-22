@@ -62,7 +62,7 @@ export function packProjectSave(data,name,saveAs=false,target){
   const width=kind==='u32'?4:2,size=pixels.length*width;
   if(rawBytes+size>MAX_BYTES)throw new Error('项目解压后超过 512 MiB');
   const native=littleEndian&&(kind==='u32'?pixels instanceof Uint32Array:pixels instanceof Uint16Array),max=kind==='u32'?0xffffffff:65535;
-  if(!native&&pixels.some(pixel=>!Number.isInteger(pixel)||pixel<0||pixel>max))throw new Error('项目像素值越界');
+  if(!native)for(const pixel of pixels)if(!Number.isInteger(pixel)||pixel<0||pixel>max)throw new Error('项目像素值越界');
   rawBytes+=size;blocks.push({path,kind,count:pixels.length});payloads.push({pixels,kind,size,native});
  }
  const metadata={...document,frames:document.frames.map((frame,f)=>{
