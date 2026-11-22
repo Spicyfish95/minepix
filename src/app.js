@@ -160,12 +160,12 @@ function stop(){playing=false;clearTimeout(playTimer);playback=null;setButtonIco
 function historyCommitStatus(text){return history.undoStack.length?text:text+' · 超出撤销预算，本次无法撤销';}
 function mutate(fn,text='已更新',options={}){
  if(gesture||shapeSession||celGesture||busy)return;stop();
- const before=options.snapshot==='metadata'?snapshotMetadata(doc):options.snapshot==='cel'?snapshotCel(doc,fi,li):snapshotDocument(doc),paletteBefore=capturePaletteUI(),frames=[...doc.frames],layers=[...doc.layers];
+ const before=options.snapshot==='metadata'?snapshotMetadata(doc):options.snapshot==='cel'?snapshotCel(doc,fi,li):snapshotDocument(doc),paletteBefore=capturePaletteUI(),foregroundBefore={color,index:colorIndex},frames=[...doc.frames],layers=[...doc.layers];
  try{
   fn();if(doc.frames.some((frame,i)=>frame!==frames[i])||doc.frames.length!==frames.length||doc.layers.some((layer,i)=>layer!==layers[i])||doc.layers.length!==layers.length)resetCelSelection();
-  const committed=history.push(before,doc,options),entry=committed&&history.undoStack.at(-1);if(entry)entry.paletteUI={before:paletteBefore,after:capturePaletteUI()};
+  const committed=history.push(before,doc,options),entry=committed&&history.undoStack.at(-1);if(entry){entry.paletteUI={before:paletteBefore,after:capturePaletteUI()};if(color!==foregroundBefore.color||colorIndex!==foregroundBefore.index)entry.colorPick={before:foregroundBefore,after:{color,index:colorIndex}};}
   changed();render();message(committed?historyCommitStatus(text):text);
- }catch(error){doc=before;normalize();render();showError(error.message);}
+ }catch(error){doc=before;color=foregroundBefore.color;colorIndex=foregroundBefore.index;normalize();render();showError(error.message);}
 }
 function mutateMetadata(fn,text,options={}){return mutate(fn,text,{...options,snapshot:'metadata',colorsReady:true});}
 function mutateCel(fn,text,options={}){return mutate(fn,text,{...options,snapshot:'cel'});}
@@ -742,8 +742,11 @@ function applyPaletteReorder(targetIndex,after){
   if(next.every((item,index)=>item.origin===index))return;
   const origins=next.map(item=>item.origin);
   paletteSelection=new Set(moved.map((_,index)=>insertAt+index));paletteActive=insertAt;
-  mutate(()=>editIndexedPalette(doc,next.map(item=>item.pixelColor),origins),'已重新排序色板',{colorsReady:true});
-  const mapped=origins.indexOf(colorIndex);colorIndex=mapped>=0&&mapped<65536?mapped:(doc.transparentIndex===0?1:0);
+  const previousIndex=colorIndex;
+  mutate(()=>{
+   editIndexedPalette(doc,next.map(item=>item.pixelColor),origins);
+   const origin=origins.indexOf(previousIndex),mapped=origin<0?-1:origin+doc.palette.length-origins.length;colorIndex=mapped>=0&&mapped<Math.min(65536,doc.palette.length)?mapped:createMapper(doc,doc.layers[li])(colorValue(color)).index;
+  },'已重新排序色板',{colorsReady:true});
   renderColors();
 }
 function removeSelectedPaletteColors(){
@@ -755,8 +758,11 @@ function removeSelectedPaletteColors(){
   doc.palette.forEach((pixelColor,index)=>{if(!paletteSelection.has(index)){colors.push(pixelColor);origins.push(index);}});
   if(!colors.length)return message('色板至少保留一种颜色');
   paletteActive=Math.min(selected[0],colors.length-1);paletteSelection=new Set([paletteActive]);
-  mutate(()=>editIndexedPalette(doc,colors,origins),'已删除色板颜色',{colorsReady:true});
-  const mapped=origins.indexOf(colorIndex);colorIndex=mapped>=0&&mapped<65536?mapped:(doc.transparentIndex===0?1:0);
+  const previousIndex=colorIndex;
+  mutate(()=>{
+   editIndexedPalette(doc,colors,origins);
+   const origin=origins.indexOf(previousIndex),mapped=origin<0?-1:origin+doc.palette.length-origins.length;colorIndex=mapped>=0&&mapped<Math.min(65536,doc.palette.length)?mapped:createMapper(doc,doc.layers[li])(colorValue(color)).index;
+  },'已删除色板颜色',{colorsReady:true});
   renderColors();
 }
 function paletteIndexAt(x,y){

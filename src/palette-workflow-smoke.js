@@ -138,6 +138,17 @@ export async function paletteWorkflowSmoke(samples,api){
    for(const type of ['pointerdown','pointerup'])viewport.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,clientX:r.left+z*.5,clientY:r.top+z*.5,pointerId:92,button:0}));
   }finally{viewport.setPointerCapture=swapCapture;}
   check('索引前背景交换后实际笔画使用新的绿色索引',state().doc.frames[0].indices[0][0]===2&&state().doc.frames[0].cels[0][0]===0x00ff00ff);
+  const deleted=createDocument(2,1,'delete-before-foreground');deleted.palette=['#00000000','#ff0000','#00ff00','#0000ff'];deleted.frames[0].cels[0]=[0xff0000ff,0x00ff00ff];convertColorMode(deleted,'indexed',{palette:'current'});replaceDocument(deleted,true);
+  $('palette').querySelector('[data-index="3"]').click();actions['palette-editor']();
+  $('palette').querySelector('[data-index="1"]').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,pointerId:93}));$('palette').querySelector('[data-palette-action="delete"]').click();actions['palette-editor']();
+  actions.undo();check('删除色槽撤销同时恢复前景蓝色槽',!!$('palette').querySelector('[data-index="3"].selected'));
+  actions.redo();check('删除色槽重做同时恢复前景蓝色槽',!!$('palette').querySelector('[data-index="2"].selected'));
+  const deleteCapture=viewport.setPointerCapture;viewport.setPointerCapture=()=>{};
+  try{
+   const r=$('canvas').getBoundingClientRect(),z=window.documentWindowAudit().zoom;
+   for(const type of ['pointerdown','pointerup'])viewport.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,clientX:r.left+z*.5,clientY:r.top+z*.5,pointerId:94,button:0}));
+  }finally{viewport.setPointerCapture=deleteCapture;}
+  check('删除前景色之前的色槽后实际笔画仍使用蓝色',state().doc.frames[0].indices[0][0]===2&&state().doc.frames[0].cels[0][0]===0x0000ffff);
   const dithered=createDocument(4,4,'opaque-dither');dithered.palette=['#00000000','#ff0000','#00ff0080'];dithered.frames[0].cels[0].fill(0x800000ff);replaceDocument(dithered,true);
   const changingMode=actions['color-mode'](),modeForm=$('modal-form');modeForm.elements.mode.value='indexed';modeForm.elements.mode.dispatchEvent(new Event('change'));modeForm.elements.palette.value='current';modeForm.elements.dither.checked=true;modeForm.requestSubmit($('modal-submit'));await changingMode;
   check('真实模式转换抖动不会用透明槽填充不透明像素',state().doc.frames[0].indices[0].every(index=>index===1)&&state().doc.frames[0].cels[0].every(pixel=>(pixel&255)===255));
