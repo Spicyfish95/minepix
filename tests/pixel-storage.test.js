@@ -6,6 +6,7 @@ import {prepareDocumentPixels,releaseIndexedCaches,pixelStorageStats,materialize
 import {linkCels} from '../src/cel-links.js';
 import {packProjectSave,unpackProjectReadPacket} from '../src/project-transfer.js';
 import {History} from '../src/history.js';
+import {packDocumentWire,unpackDocumentWire} from '../src/document-wire.js';
 function indexed(){const doc=createDocument(3,1);doc.palette=['#00000000','#ff0000ff','#ff0000ff','#00ff00ff'];doc.frames[0].cels[0]=[0xff0000ff,0,0x00ff00ff];convertColorMode(doc,'indexed',{palette:'current'});return doc;}
 test('editing pixels use Uint32 and Uint16 while indexed caches are lazy and disposable',()=>{
  const doc=prepareDocumentPixels(indexed());assert.equal(pixelStorageStats(doc).rgbaBytes,0);assert.ok(doc.frames[0].indices[0] instanceof Uint16Array);
@@ -57,4 +58,19 @@ test('typed index validation scans shared buffers once per call and still rechec
 });
 test('plain index validation rejects holes, fractions and negative values',()=>{
  for(const values of [[-1,0,0],[1.2,0,0],Array(3)]){const doc=indexed();doc.frames[0].indices[0]=values;assert.throws(()=>validateColorMode(doc),/索引像素越界/);}
+});
+test('index storage rejects invalid values before narrowing ordinary and wider typed arrays',()=>{
+ for(const values of [[65536,0,0],[-1,0,0],[1.2,0,0],Array(3),Uint32Array.of(65536,0,0)]){
+  const doc=indexed();doc.frames[0].indices[0]=values;
+  assert.throws(()=>prepareDocumentPixels(doc),/索引像素越界/);
+ }
+});
+test('project reads and window migration reject inline indices before narrowing',()=>{
+ for(const value of [65536,-1,1.2]){
+  const doc=indexed();doc.frames[0].indices[0]=[value,0,0];
+  const json=new TextEncoder().encode(JSON.stringify({document:doc,blocks:[],info:{indexedSource:true}})),wire=new Uint8Array(12+json.length);
+  wire.set(new TextEncoder().encode('MPXREAD1'));new DataView(wire.buffer).setUint32(8,json.length,true);wire.set(json,12);
+  for(const typed of [false,true])assert.throws(()=>unpackProjectReadPacket(wire,{typed}),/索引像素越界/);
+  assert.throws(()=>unpackDocumentWire(packDocumentWire(doc)),/索引像素越界/);
+ }
 });

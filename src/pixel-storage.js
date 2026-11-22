@@ -11,7 +11,10 @@ export function prepareDocumentPixels(doc){
  for(const frame of doc.frames){
   if(frame.indices)frame.indices=frame.indices.map(values=>{
    if(!values||values instanceof Uint16Array)return values;
-   if(!indexed.has(values))indexed.set(values,Uint16Array.from(values));return indexed.get(values);
+   if(!indexed.has(values)){
+    for(const value of values)if(!Number.isInteger(value)||value<0||value>65535)throw new Error('索引像素越界');
+    indexed.set(values,Uint16Array.from(values));
+   }return indexed.get(values);
   });
   let slots=entries.get(frame.cels);if(!slots)entries.set(frame.cels,slots=new Map());
   for(let l=0;l<frame.cels.length;l++){
