@@ -495,8 +495,9 @@ function applyPaletteLibrary(id){
  if(!documentTabs.items.length){message('请先打开或新建项目');return;}
  const indexed=modeOf(doc)==='indexed',previous=indexed?doc.palette.slice():null,sources=indexed?paletteRemapSources():null;
  mutate(()=>{
-  paletteLibraryId=id;paletteImportName='';doc.palette=libraryPaletteColors(entry);
-  if(indexed){paletteRemap={oldPalette:previous,newPalette:doc.palette.slice(),sources};repaintIndexedPixels();paletteRemap.applied=paletteRemapSources();}
+  paletteLibraryId=id;paletteImportName='';const colors=libraryPaletteColors(entry);
+  applyIndexedPalette(doc,colors,colors.map((_,i)=>i));
+  if(indexed){paletteRemap={oldPalette:previous,newPalette:doc.palette.slice(),sources};paletteRemap.applied=paletteRemapSources();}
  },'已应用色板 '+entry.name);
  renderPaletteLibrary();syncRemapButton();renderColors();
 }

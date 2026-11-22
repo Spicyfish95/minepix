@@ -75,7 +75,7 @@ export function applyIndexedPalette(doc,colors,origins=null){
  if(modeOf(doc)!=='indexed'){doc.palette=[...colors];return;}
  materializeDocumentPixels(doc);
  const oldTransparent=doc.transparentIndex;
- let palette=[...colors],mapping=origins?[...origins]:null,transparent=mapping?mapping.indexOf(oldTransparent):0;
+ let palette=[...colors],mapping=origins?[...origins]:null,transparent=mapping?mapping.indexOf(oldTransparent):palette.findIndex(color=>(rgbaValue(color)&255)===0);
  if(transparent<0||transparent>=65536){palette.unshift('#00000000');mapping?.unshift(null);transparent=0;}
  doc.palette=palette;doc.transparentIndex=transparent;
  // Preserve indexOf's first occurrence when an old slot appears more than once.

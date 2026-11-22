@@ -124,6 +124,13 @@ export async function paletteWorkflowSmoke(samples,api){
   check('超过256项后添加前景色按钮仍追加完整色槽',state().doc.palette.length===301&&state().doc.palette[300]==='#ffbb88'&&state().doc.frames[0].indices[0][0]===257);
   actions.undo();check('大色板添加颜色可撤销且保留原索引',state().doc.palette.length===300&&state().doc.frames[0].indices[0][0]===257);
   actions.redo();check('大色板添加颜色可重做',state().doc.palette.length===301&&state().doc.palette[300]==='#ffbb88');
+  changeLibrary('gameboy');
+  check('高索引项目切换短库色板保持有效透明槽',state().doc.palette.length===5&&state().doc.transparentIndex===0&&state().doc.frames[0].indices[0].every(index=>index<5)&&state().doc.frames[0].cels[0][1]===0);
+  actions.undo();check('短库色板切换撤销恢复完整大色板与索引',state().doc.palette.length===301&&state().doc.frames[0].indices[0][0]===257);
+  actions.redo();check('短库色板切换可重做',state().doc.palette.length===5&&state().doc.transparentIndex===0);
+  const imported=createDocument(2,1,'opaque-palette');imported.palette=['#00000000','#ff0000','#00ff00'];imported.frames[0].cels[0]=[0xff0000ff,0x00ff00ff];convertColorMode(imported,'indexed',{palette:'current'});replaceDocument(imported,true);
+  await importFile({type:'palette',name:'opaque.pix',data:paletteBase64(encodePalette(['#ff0000','#00ff00']))});
+  check('索引导入不透明色板保留首色并补透明槽',state().doc.palette.length===3&&state().doc.transparentIndex===0&&state().doc.frames[0].cels[0][0]===0xff0000ff&&state().doc.frames[0].cels[0][1]===0x00ff00ff);
   if(samples.inspectPattern){pattern();host.querySelector('button').click();await nextFrame();}
 
   return {ok:true,results};
