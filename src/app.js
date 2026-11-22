@@ -2779,7 +2779,7 @@ for(const id of ['text-family','text-size','text-bold','text-italic','text-antia
 $('wand-tolerance').onchange=e=>{e.target.value=Math.max(0,Math.min(255,Math.round(+e.target.value)));};
 $('symmetry').onchange=$('symmetry-vertical').onchange=()=>{drawOverlay();};$('symmetry-reset').onclick=()=>mutateMetadata(()=>{doc.symmetryAxes={x:doc.width/2,y:doc.height/2};},'已重置对称轴');
 $('grid').onchange=()=>{syncGridLabel();drawOverlay();};$('onion').onchange=()=>{saveOnionPreferences();draw();};
-$('add-color').onclick=()=>{if(doc.palette.includes(color))return message('此颜色已在色板中');if(doc.palette.length>=256)return message('色板最多 256 色');mutate(()=>editIndexedPalette(doc,[...doc.palette,color],doc.palette.map((_,i)=>i).concat(null)),'已添加颜色',{colorsReady:true});};
+$('add-color').onclick=()=>{if(doc.palette.includes(color))return message('此颜色已在色板中');mutate(()=>editIndexedPalette(doc,[...doc.palette,color],doc.palette.map((_,i)=>i).concat(null)),'已添加颜色',{colorsReady:true});};
 $('play-range').onchange=()=>{stop();const tag=doc.tags.find(tag=>tag.id===$('play-range').value);if(tag)activateTag(tag.id);else{renderTimeline();draw();}};
 $('play-direction').onchange=$('play-once').onchange=()=>{stop();draw();};
 $('duration').onchange=e=>{const duration=Math.max(20,Math.min(10000,Math.round(+e.target.value)||100));mutateMetadata(()=>{for(const i of frameSelection)doc.frames[i].duration=duration;},'已调整选中帧时长');};

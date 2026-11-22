@@ -120,6 +120,10 @@ export async function paletteWorkflowSmoke(samples,api){
   actions.undo();check('16位笔画撤销恢复256',state().doc.frames[0].indices[0][0]===256);
   actions.redo();check('16位笔画重做恢复257',state().doc.frames[0].indices[0][0]===257);
   const paletteRoundtrip=decodePalette(encodePalette(state().doc.palette));check('实际项目色板导出保留全部300槽',paletteRoundtrip.length===300&&paletteRoundtrip[299]===wide.palette[299]);
+  $('hex').value='#ffbb88';$('hex').dispatchEvent(new Event('change'));$('add-color').click();
+  check('超过256项后添加前景色按钮仍追加完整色槽',state().doc.palette.length===301&&state().doc.palette[300]==='#ffbb88'&&state().doc.frames[0].indices[0][0]===257);
+  actions.undo();check('大色板添加颜色可撤销且保留原索引',state().doc.palette.length===300&&state().doc.frames[0].indices[0][0]===257);
+  actions.redo();check('大色板添加颜色可重做',state().doc.palette.length===301&&state().doc.palette[300]==='#ffbb88');
   if(samples.inspectPattern){pattern();host.querySelector('button').click();await nextFrame();}
 
   return {ok:true,results};
