@@ -18,11 +18,12 @@ export function colorMatches(pixel, target, tolerance = DEFAULT_TOLERANCE) {
   ) <= tolerance;
 }
 
-export function replaceColorPixels(pixels, {from, to, tolerance = DEFAULT_TOLERANCE, selection = null, width, x = 0, y = 0}) {
+export function replaceColorPixels(pixels, {from, to, tolerance = DEFAULT_TOLERANCE, selection = null, width, x = 0, y = 0, processed = null}) {
   const target = colorValue(from), value = colorValue(to);
   let count = 0;
   for (let i = 0; i < pixels.length; i++) {
-    if (!selectionContains(selection, x + i % width, y + Math.floor(i / width))) continue;
+    if (processed?.has(i) || !selectionContains(selection, x + i % width, y + Math.floor(i / width))) continue;
+    processed?.add(i);
     if (!colorMatches(pixels[i], target, tolerance)) continue;
     pixels[i] = value;
     count++;
@@ -45,22 +46,25 @@ export function replaceColorInDocument(doc, {from, to, fromIndex, toIndex, toler
   } else throw new Error('替换范围无效');
 
   if (indexed && fromIndex === toIndex) return 0;
-  const visited = new Set();
+  const visited = new Map();
   let count = 0;
   for (const [f, l] of targets) {
     const cel = doc.frames[f].cels[l];
-    if (visited.has(cel)) continue;
-    visited.add(cel);
+    if (!selection && visited.has(cel)) continue;
+    const processed = selection ? visited.get(cel) || new Set() : null;
+    visited.set(cel, processed);
     const property = celProperty(doc, f, l);
     if (indexed) {
       const indices = doc.frames[f].indices[l], value = indexColor(doc, toIndex, doc.layers[l]);
       for (let i = 0; i < indices.length; i++) {
-        if (indices[i] !== fromIndex || !selectionContains(selection, property.x + i % property.width, property.y + Math.floor(i / property.width))) continue;
+        if (processed?.has(i) || !selectionContains(selection, property.x + i % property.width, property.y + Math.floor(i / property.width))) continue;
+        processed?.add(i);
+        if (indices[i] !== fromIndex) continue;
         indices[i] = toIndex;
         cel[i] = value;
         count++;
       }
-    } else count += replaceColorPixels(cel, {from, to, tolerance, selection, ...property});
+    } else count += replaceColorPixels(cel, {from, to, tolerance, selection, processed, ...property});
   }
   return count;
 }

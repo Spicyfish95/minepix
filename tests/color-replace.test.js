@@ -6,8 +6,20 @@ import {indexColor, validateColorMode} from '../src/color-modes.js';
 import {linkCels} from '../src/cel-links.js';
 import {setCelProperty} from '../src/cel-properties.js';
 import {replacementColorDialog} from '../src/color-replace-dialog.js';
+import {convertColorMode} from '../src/color-modes.js';
+import {snapshotDocument} from '../src/document-snapshot.js';
 
 const red = colorValue('#ff0000'), blue = colorValue('#0000ff'), green = colorValue('#00ff00');
+for(const mode of ['rgba','indexed'])for(const scope of ['layer','sprite'])test(`${mode} linked replacement unions selected pixels across different cel offsets (${scope})`,()=>{
+ let doc=createDocument(5,1);doc.palette=['#00000000','#ff0000','#00ff00'];doc.frames[0].cels[0]=[red,red,red];setCelProperty(doc,0,0,{x:0,y:0,width:3,height:1});
+ if(mode==='indexed')convertColorMode(doc,mode,{palette:'current'});
+ addFrame(doc,0,true);linkCels(doc,0,[0,1]);setCelProperty(doc,1,0,{x:1,y:0,width:3,height:1});
+ const before=snapshotDocument(doc),history=new History();
+ const count=replaceColorInDocument(doc,{from:'#ff0000',to:'#00ff00',fromIndex:1,toIndex:2,scope,selection:{x:1,y:0,w:2,h:1,mask:[1,0]}});
+ assert.equal(count,2);assert.deepEqual([...doc.frames[0].cels[0]],[green,green,red]);assert.equal(doc.frames[0].cels[0],doc.frames[1].cels[0]);
+ if(mode==='indexed')assert.deepEqual([...doc.frames[0].indices[0]],[2,2,1]);validateColorMode(doc);
+ history.push(before,doc,{colorsReady:true});doc=history.undo(doc);assert.deepEqual([...doc.frames[0].cels[0]],[red,red,red]);doc=history.redo(doc);assert.deepEqual([...doc.frames[0].cels[0]],[green,green,red]);validateColorMode(doc);
+});
 
 test('容差按四通道最大差值判定，0 表示完全相等', () => {
   assert.equal(DEFAULT_TOLERANCE, 0);
