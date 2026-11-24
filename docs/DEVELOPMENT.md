@@ -1,5 +1,11 @@
 # 开发与验证
 
+## 2.0.12 发布准备范围
+
+用户要求发布新版本，远端最新正式版为 2.0.10、`minepix-v2.0.11` 标签对应 `3ff0304`，`minepix-v2.0.12` 尚未创建。同步五处版本文件与中英文 README 至 2.0.12，并在 `CHANGELOG.md` 新增 `2.0.12` 章节，归入 `2.0.11` 之后的 4 项变更：Linux x64（AppImage + deb）打包与多平台发布流程、Linux AppImage 差分更新与桌面行为对齐、Linux “另存为”目录与文件名拆分，以及浮动面板关闭前迁回主停放容器修复。本地定向运行发布／Linux 打包／差分块图／说明／下载／安装配置 Node 测试、`--locked` Rust 后端单元测试、前端生产构建及资源／仓库检查，不重复无关全量回归；提交并推送 `main` 与 `minepix-v2.0.12` 标签后，由标签工作流并行执行 Windows 与 Linux 完整前后端回归、签名构建、固定公钥／版本绑定校验、资产发布及 `tauri-latest` 更新频道提升。
+
+本地发布前定向验证通过：发布与 Linux 打包相关 Node 34 项、Rust `--locked` 后端单元测试 97 项、前端生产构建与资源检查（`appBytes=522652`、`distBytes=1432224`）、`readReleaseNotes('2.0.12')`（379 字符）、仓库 450 文件 / 72 链接 / 815 导入及 LF / `git diff --check` 全部通过。
+
 ## Linux 安装包与 GitHub 构建发布流程补充范围
 
 补充 Linux x64（AppImage + deb）本地打包与 GitHub Actions 构建发布流程：为 `window_dpi.rs`、`drop_paths.rs` 补齐 `#[cfg(windows)]` 隔离，使 Rust 后端在 Linux 正常编译；在 `updater.rs`、`differential.rs` 单元测试清单补齐 `linux-x86_64` 目标；新增 `src-tauri/tauri.linux.conf.json`、`package.json` 的 `package:linux` / `test:linux`、`scripts/verify-linux-release.mjs`，扩展 `create-update-manifest.mjs`、`verify-release.mjs` 与 `publish-release.mjs` 支持 Windows + Linux 双平台校验、资产上传与 `latest.json` 合并；更新 `.github/workflows/release.yml`（Windows + Linux 并行构建回归后统一发布）和 `.github/workflows/rust-cache.yml`（同步预热 Ubuntu 22.04 缓存）。定向验证发布/安装/Linux 打包 Node 37 项、Rust 后端 95 项、仓库 450 文件 / 72 链接 / 815 导入及 LF/Git 差异检查全部通过；不改动版本号、不推送远程或触发实际标签发布，Linux 实际打包与运行待在 Ubuntu 环境或后续标签工作流中验证。
