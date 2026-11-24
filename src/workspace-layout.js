@@ -100,7 +100,7 @@ export function initWorkspaceLayout({canShowPanel=()=>true}={}){
   const host=child.document.getElementById('floating-root'),bar=child.document.createElement('div');bar.className='floating-header';bar.draggable=true;bar.innerHTML=iconMarkup(panelIcons[id]);bar.title=titles[id];bar.setAttribute('aria-label',titles[id]);bar.ondragstart=event=>startDrag(event,id);bar.ondragend=event=>finishDrag(event,id);bar.oncontextmenu=event=>{event.preventDefault();panelMenu(event,[['删除该栏目',()=>setPanelVisible(id,false)]]);};host.append(bar);removeFromSlot(id);state.floating[id]={home,index:floating.index};transfer(id,host);panels[id].hidden=false;render();save();
   child.addEventListener('beforeunload',()=>{if(!closing&&!floating.returning)dock(id,home,state.slots[home][floating.index]||null);unregisterLocale();unregister();floats.delete(id);});child.addEventListener('resize',()=>child.document.querySelectorAll(':popover-open').forEach(node=>node.hidePopover()));child.focus();
  }
- function reset(){for(const [id,floating]of floats){floating.returning=true;transfer(id,document.createDocumentFragment());floating.child.close();}floats.clear();state=emptyState();render();save();}
+ function reset(){for(const [id,floating]of floats){floating.returning=true;transfer(id,parking);floating.child.close();}floats.clear();state=emptyState();render();save();}
  window.addEventListener('beforeunload',()=>{closing=true;for(const {child}of floats.values())child.close();});
  const restoreFloats=Object.keys(state.floating);for(const id of restoreFloats){const home=state.floating[id].home||homes[id];state.slots[home].splice(state.floating[id].index??state.slots[home].length,0,id);delete state.floating[id];}
  // 栏目显隐：隐藏＝从所有栏位移除（独立窗口一并关掉），显示＝放回默认栏位并激活。
@@ -123,7 +123,7 @@ export function initWorkspaceLayout({canShowPanel=()=>true}={}){
    state.slots[home].push(id);if(!auto)state.active[home]=id;render();save();return;
   }
   const floating=floats.get(id);
-  if(floating){floating.returning=true;transfer(id,panels[id].ownerDocument.createDocumentFragment());floating.child.close();floats.delete(id);}
+  if(floating){floating.returning=true;transfer(id,parking);floating.child.close();floats.delete(id);}
   removeFromSlot(id);delete state.floating[id];panels[id].hidden=true;render();save();
  };
  // 栏目标签 / 栏位空白的右键菜单：删除该栏目、添加未显示的栏目。
