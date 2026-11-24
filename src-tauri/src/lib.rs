@@ -51,6 +51,26 @@ fn export_dialog(state: &Backend, destination: Option<&formats::ExportDestinatio
     }
 }
 
+fn save_dialog_target(default: &std::path::Path) -> (Option<PathBuf>, String) {
+    let directory = default
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .map(PathBuf::from);
+    let file_name = default
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| default.to_string_lossy().into_owned());
+    (directory, file_name)
+}
+
+fn with_save_target(mut picker: rfd::AsyncFileDialog, default: &std::path::Path) -> rfd::AsyncFileDialog {
+    let (directory, file_name) = save_dialog_target(default);
+    if let Some(directory) = directory {
+        picker = picker.set_directory(directory);
+    }
+    picker.set_file_name(file_name)
+}
+
 #[tauri::command]
 async fn save_project_packed(
     request: tauri::ipc::Request<'_>,
@@ -67,7 +87,7 @@ async fn save_project_packed(
         let default = std::path::Path::new(previous.as_deref().unwrap_or(packed.name())).with_extension(format);
         let mut picker = dialog(&state).add_filter(format, &[format]);
         for extension in ["pix", "aseprite", "ase"] { if extension != format { picker = picker.add_filter(extension, &[extension]); } }
-        let Some(chosen) = picker.set_file_name(default.to_string_lossy()).save_file().await else { return Ok(Value::Null) };
+        let Some(chosen) = with_save_target(picker, &default).save_file().await else { return Ok(Value::Null) };
         chosen.path().to_path_buf()
     } else { PathBuf::from(previous.unwrap()) };
     let result = state.files.lock().unwrap().save_packed(window.label(), &target, &packed)
@@ -447,7 +467,7 @@ async fn desktop_action(method:String,args:Vec<Value>,window:tauri::WebviewWindo
                 let default = std::path::Path::new(name).with_extension(format);
                 let mut picker = dialog(&state).add_filter(format, &[format]);
                 for extension in document_save::FORMATS { if *extension != format { picker = picker.add_filter(*extension, &[*extension]); } }
-                let Some(chosen) = picker.set_file_name(default.to_string_lossy()).save_file().await else { return Ok(Value::Null) };
+                let Some(chosen) = with_save_target(picker, &default).save_file().await else { return Ok(Value::Null) };
                 chosen.path().to_path_buf()
             };
             let format = document_save::format(&target).map_err(io_error)?;
@@ -487,11 +507,12 @@ async fn desktop_action(method:String,args:Vec<Value>,window:tauri::WebviewWindo
                             .to_string_lossy()
                     )
                 });
-                let Some(chosen) = dialog(&state)
-                    .add_filter("MinePix", &["pix"])
-                    .set_file_name(default)
-                    .save_file()
-                    .await
+                let Some(chosen) = with_save_target(
+                    dialog(&state).add_filter("MinePix", &["pix"]),
+                    std::path::Path::new(&default),
+                )
+                .save_file()
+                .await
                 else {
                     return Ok(Value::Null);
                 };
@@ -869,4 +890,22 @@ pub fn run() {
         ])
         .run(context)
         .expect("无法启动 MinePix");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn save_dialog_target_splits_directory_and_basename() {
+        let full = std::path::PathBuf::from("art").join("sprite.pix");
+        let (dir, name) = save_dialog_target(&full);
+        assert_eq!(dir, Some(PathBuf::from("art")));
+        assert_eq!(name, "sprite.pix");
+
+        let plain = std::path::Path::new("untitled.pix");
+        let (dir, name) = save_dialog_target(plain);
+        assert_eq!(dir, None);
+        assert_eq!(name, "untitled.pix");
+    }
 }
