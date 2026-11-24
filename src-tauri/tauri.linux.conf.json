@@ -1,0 +1,23 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "build": {
+    "beforeBuildCommand": "npm run build"
+  },
+  "bundle": {
+    "targets": [
+      "appimage",
+      "deb"
+    ],
+    "icon": [
+      "../src/assets/app-icon.png"
+    ],
+    "linux": {
+      "deb": {
+        "section": "graphics"
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    }
+  }
+}

@@ -11,10 +11,12 @@
     "tauri": "tauri",
     "desktop": "powershell -NoProfile -File scripts/tauri.ps1 dev",
     "package": "powershell -NoProfile -File scripts/tauri.ps1 build",
+    "package:linux": "tauri build --config src-tauri/tauri.linux.conf.json",
     "test:project": "node --test tests/project-format.test.js",
     "test:storage": "powershell -NoProfile -File scripts/cargo.ps1 test --manifest-path src-tauri/Cargo.toml storage::tests",
     "test:backend": "powershell -NoProfile -File scripts/cargo.ps1 test --manifest-path src-tauri/Cargo.toml --lib",
     "test": "node --test tests/*.test.js",
+    "test:linux": "node --test tests/*.test.js",
     "release:manifest": "node scripts/create-update-manifest.mjs",
     "pretest": "powershell -NoProfile -File scripts/cargo.ps1 build --locked --manifest-path src-tauri/Cargo.toml --example project-tool"
   },

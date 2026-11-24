@@ -10,7 +10,7 @@ async function release(tag){
  try{return JSON.parse(await gh('release','view',tag,'--json','isDraft,isPrerelease,targetCommitish,url'));}
  catch(error){if(/release not found|HTTP 404/.test(error.stderr))return null;throw error;}
 }
-const local=await verifyRelease(),tag=`minepix-v${local.version}`;
+const local=await verifyRelease({requireRaw:false,requireLinux:true,writeReport:false}),tag=`minepix-v${local.version}`;
 const policy=releasePolicy(local.version);
 assert.equal(process.env.GITHUB_REF,`refs/tags/${tag}`,'Publication requires the matching version tag');
 const manifestBytes=await readFile('artifacts/release/latest.json');
@@ -30,9 +30,19 @@ if(!version){
 }
 if(version.isDraft){
  const publicInstaller=`artifacts/release/${local.artifact.assetName}`;
+ const publicAppImage=`artifacts/release/${local.linux.appimage.assetName}`;
+ const publicDeb=`artifacts/release/${local.linux.deb.assetName}`;
  await copyFile(installer,publicInstaller);
  await copyFile(installer+'.sig',publicInstaller+'.sig');
- await gh('release','upload',tag,publicInstaller,publicInstaller+'.sig','artifacts/release/validation.json','--clobber');
+ await copyFile(local.linux.appimage.filePath,publicAppImage);
+ await copyFile(local.linux.appimage.filePath+'.sig',publicAppImage+'.sig');
+ await copyFile(local.linux.deb.filePath,publicDeb);
+ await gh(
+  'release','upload',tag,
+  publicInstaller,publicInstaller+'.sig','artifacts/release/validation.json',
+  publicAppImage,publicAppImage+'.sig',publicDeb,'artifacts/release/validation-linux.json',
+  '--clobber'
+ );
  await gh('release','edit',tag,'--notes-file',notesFile,'--draft=false','--latest=false',`--prerelease=${policy.prerelease}`);
 }
 // A published version is never overwritten. Its public bytes must match this build.
@@ -41,13 +51,24 @@ assert.equal(sha256(downloaded),local.artifact.sha256);
 assert.equal(downloaded.length,local.artifact.bytes);
 const publicSignature=await publicBytes(local.artifact.url+'.sig');
 assert.equal(publicSignature.toString('utf8').trim(),metadata.platforms['windows-x86_64-nsis'].signature);
+
+const downloadedAppImage=await publicBytes(local.linux.appimage.url);
+assert.equal(sha256(downloadedAppImage),local.linux.appimage.sha256);
+assert.equal(downloadedAppImage.length,local.linux.appimage.bytes);
+const publicAppImageSignature=await publicBytes(local.linux.appimage.url+'.sig');
+assert.equal(publicAppImageSignature.toString('utf8').trim(),metadata.platforms['linux-x86_64-appimage'].signature);
+
+const downloadedDeb=await publicBytes(local.linux.deb.url);
+assert.equal(sha256(downloadedDeb),local.linux.deb.sha256);
+assert.equal(downloadedDeb.length,local.linux.deb.bytes);
+
 const channel='tauri-latest';
-if(!await release(channel))await gh('release','create',channel,'--target',process.env.GITHUB_SHA,'--prerelease','--latest=false','--title','MinePix update channel','--notes','Signed Windows x64 update manifest.');
+if(!await release(channel))await gh('release','create',channel,'--target',process.env.GITHUB_SHA,'--prerelease','--latest=false','--title','MinePix update channel','--notes','Signed Windows x64 and Linux x64 update manifest.');
 // Promote only after immutable version assets have been downloaded and checked.
 await gh('release','upload',channel,'artifacts/release/latest.json','--clobber');
 const url=`https://github.com/${repository}/releases/download/${channel}/latest.json`;
 assert.deepEqual(JSON.parse(await publicBytes(url)),metadata);
-// Stable releases become Latest only after the public installer and channel pass verification.
+// Stable releases become Latest only after the public installers and channel pass verification.
 await gh('release','edit',tag,`--prerelease=${policy.prerelease}`,`--latest=${policy.latest}`);
 const published=await release(tag);
 assert.equal(published.isDraft,false);
@@ -56,4 +77,9 @@ if(policy.latest){
  const latest=JSON.parse(await publicBytes(`https://api.github.com/repos/${repository}/releases/latest`));
  assert.equal(latest.tag_name,tag);
 }
-console.log(JSON.stringify({ok:true,tag,version:local.version,prerelease:policy.prerelease,latest:policy.latest,installer:local.artifact.url,channel:url,sha256:local.artifact.sha256},null,2));
+console.log(JSON.stringify({
+ ok:true,tag,version:local.version,prerelease:policy.prerelease,latest:policy.latest,
+ installer:local.artifact.url,sha256:local.artifact.sha256,
+ linux:{appimage:local.linux.appimage.url,appimageSha256:local.linux.appimage.sha256,deb:local.linux.deb.url,debSha256:local.linux.deb.sha256},
+ channel:url
+},null,2));

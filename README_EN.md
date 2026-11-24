@@ -80,18 +80,18 @@ You can also open the [mushroom example](examples/mushroom.pix). See the [user g
 
 Keep copies of important artwork. Startup checks are enabled by default for new settings and automatically download new versions. Change this in Help → About; existing choices are preserved. Help → Check for updates also offers manual checks. Verified packages survive application restarts without another download. Click the theme-colored update icon at the bottom right (tooltip: “Update available”) to restart and update, following the prompts for unsaved projects. Successful updates remove downloaded packages and temporary installer files.
 
-For manual downloads, choose `MinePix_<version>_x64-setup.exe` from the matching `minepix-v<version>` release. The `.sig` file is used by the updater. The `tauri-latest` release hosts the update channel manifest.
+For manual downloads, choose `MinePix_<version>_x64-setup.exe` on Windows, or `MinePix_<version>_amd64.AppImage` (supports signed auto-updates) / `MinePix_<version>_amd64.deb` on Linux x64 from the matching `minepix-v<version>` release. `.sig` files are used by the updater. The `tauri-latest` release hosts the update channel manifest.
 
 ## Development
 
-Requires Node.js 24, stable Rust MSVC, Windows SDK and C++ Build Tools.
+Windows requires Node.js 24, stable Rust MSVC, Windows SDK and C++ Build Tools; Linux requires Node.js 24, stable Rust and WebKitGTK 4.1 / GTK 3 development libraries (see [Build, signing, releases and updates](docs/RELEASING.md)).
 
 ```powershell
 npm ci
 npm run desktop
 ```
 
-Ordinary main pushes and pull requests do not trigger Actions. Only `minepix-v*` tag pushes run the full tests, build signed installers and publish updates. Run relevant tests locally during development.
+Ordinary main pushes and pull requests do not trigger Actions. Only `minepix-v*` tag pushes run Windows x64 and Linux x64 tests, build signed installers in parallel and publish updates. Run relevant tests locally during development.
 
 - [User guide](docs/USER_GUIDE.md)
 - [Development and verification](docs/DEVELOPMENT.md)

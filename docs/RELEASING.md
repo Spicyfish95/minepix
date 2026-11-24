@@ -6,6 +6,16 @@
 
 版本号维护在 package.json、package-lock.json、src-tauri/tauri.conf.json、Cargo.toml 和 Cargo.lock。Windows x64 NSIS 安装器采用当前用户安装，运行依赖 WebView2。执行 npm ci、npm run build、npm run package。
 
+Linux x64 使用独立配置覆盖文件 `src-tauri/tauri.linux.conf.json`，构建 `AppImage`（用于便携运行与签名自动更新）和 `deb`（用于 Debian/Ubuntu 安装），运行依赖系统 WebKitGTK 4.1 与 GTK 3。在 Ubuntu 22.04+ 环境安装系统构建依赖（`libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf`）后执行：
+
+```bash
+export TAURI_SIGNING_PRIVATE_KEY="$HOME/.ssh/minepix-tauri.key"
+npm ci
+npm run package:linux
+```
+
+Linux 构建产物位于 `src-tauri/target/release/bundle/appimage/` 与 `src-tauri/target/release/bundle/deb/`；在无 FUSE 的容器或 CI 环境可附加 `APPIMAGE_EXTRACT_AND_RUN=1`。
+
 Tauri的beforeBuildCommand执行`scripts/build-desktop.ps1`：构建前端后，使用独立锁文件、明确x64 MSVC目标及静态CRT编译`src-tauri/thumbnailer`的Release DLL到主target目录，避免Shell扩展依赖额外安装VC运行库。NSIS钩子将DLL嵌入安装器并安装到`thumbnails/<版本>/`，不将它作为Tauri运行时依赖；普通Cargo单元测试不要求已有Release DLL。版本化路径避免新版本覆盖Shell正在使用的旧映像，同版本重装跳过未更新的DLL。
 
 当前用户注册IInitializeWithStream／IThumbnailProvider，保留Windows默认的进程隔离，不修改用户默认打开程序或已有第三方缩略图处理器。卸载只删除指向自身CLSID的扩展项及对应版本的COM注册；旧卸载器不能移除更新版本注册。被Windows占用的DLL使用NSIS重启清理机制。发布流水线新增独立DLL测试及原生COM／合成对照门禁；本机可用`scripts/test-thumbnail-registration.ps1`运行隔离安装／更新／卸载与Shell缓存测试。
@@ -25,15 +35,15 @@ npm run package
 
 发布任务使用 Rust 缓存复用 Cargo 下载依赖及测试、Release 的依赖编译产物。缓存键区分工具链、依赖与构建环境；应用源码和安装包仍重新构建，测试、签名与验证照常执行。
 
-GitHub 缓存按分支和标签隔离，不同发布标签不能直接共享彼此的缓存。因此 `rust-cache.yml` 在默认分支 main 的 Cargo 清单、锁文件、构建脚本或缓存工作流变化时预热缓存，也可在 Actions 中手动运行。两个工作流使用同一 runner 和共享键；main 保存缓存，版本标签只读取。精确命中时预热任务跳过编译，缓存未命中则执行测试依赖与不打包的 Release 编译；不读取签名密钥、不上传构建资产、不发布或修改更新频道。
+GitHub 缓存按分支和标签隔离，不同发布标签不能直接共享彼此的缓存。因此 `rust-cache.yml` 在默认分支 main 的 Cargo 清单、锁文件、构建脚本、Linux 配置或缓存工作流变化时并行预热 Windows（`windows-2025`）与 Linux（`ubuntu-22.04`）缓存，也可在 Actions 中手动运行。两个工作流使用对应的 runner 和共享键（`windows-2025-msvc-v1` / `ubuntu-22.04-linux-v1`）；main 保存缓存，版本标签只读取。精确命中时预热任务跳过编译，缓存未命中则执行测试依赖与不打包的 Release 编译；不读取签名密钥、不上传构建资产、不发布或修改更新频道。
 
 首次预热仍需冷编译，须等任务成功后后续发布才能受益；工具链或依赖变化时可能部分或全部重新编译。实际节省时间以远程缓存命中后的记录为准。
 
-构建使用 Windows runner、Node 24、Rust stable 和锁文件。仓库 Actions Secret `TAURI_SIGNING_PRIVATE_KEY` 保存私钥内容；只有私钥设置了密码时才需额外配置 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`。不将本机 `.ssh` 路径作为远程 Secret 值。
+构建使用 Windows（`windows-2025`）与 Linux（`ubuntu-22.04`）runner、Node 24、Rust stable 和锁文件。仓库 Actions Secret `TAURI_SIGNING_PRIVATE_KEY` 保存私钥内容；只有私钥设置了密码时才需额外配置 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`。不将本机 `.ssh` 路径作为远程 Secret 值。
 
-版本发布工作流 `release.yml` 仅由推送 `minepix-v*` 标签触发。普通 main 推送、PR 和手动操作均不触发该发布工作流。标签运行依次执行前后端完整回归、前端构建、资源及仓库检查、签名安装包构建、签名验证、版本发布和更新频道提升；任一步失败都会停止后续步骤。
+版本发布工作流 `release.yml` 仅由推送 `minepix-v*` 标签触发。普通 main 推送、PR 和手动操作均不触发该发布工作流。标签运行并行执行 `windows` 与 `linux` 两个构建任务：各自完成前后端回归、前端构建、资源及仓库检查、签名安装包构建与固定公钥/版本绑定校验（`verify-release.mjs` / `verify-linux-release.mjs` 与 `update-tool`）；双平台均通过后由 `publish` 任务汇总产物，生成包含 Windows NSIS 与 Linux AppImage 的多平台 `latest.json`，上传版本资产、校验公开下载并提升更新频道；任一步失败都会停止后续步骤。
 
-安装器和 .sig 归属对应版本 Release。latest.json 指向版本资产，更新频道标签为 tauri-latest；它不匹配 `minepix-v*`，不会再次触发构建。先上传并验证版本资产，最后提升频道。已发布版本资产不覆盖；频道拒绝被较低版本回退。正式版在公开资产与频道验证通过后标为 Latest，预发布版保持 Prerelease 且不占用正式版 Latest 入口。
+安装器和 .sig 归属对应版本 Release。latest.json 指向版本资产（包含 `windows-x86_64-nsis`、`windows-x86_64`、`linux-x86_64-appimage` 与 `linux-x86_64` 平台项，Windows 保留差分块图 `minepixBlockmap`），更新频道标签为 tauri-latest；它不匹配 `minepix-v*`，不会再次触发构建。先上传并验证全部平台版本资产，最后提升频道。已发布版本资产不覆盖；频道拒绝被较低版本回退。正式版在公开资产与频道验证通过后标为 Latest，预发布版保持 Prerelease 且不占用正式版 Latest 入口。
 
 版本标签统一使用 `minepix-v<版本号>`，例如 `minepix-v2.0.1`。已有预览版使用的 `tauri-latest` 频道地址继续保留，它与版本标签前缀分开管理。
 
@@ -41,7 +51,12 @@ GitHub 缓存按分支和标签隔离，不同发布标签不能直接共享彼�
 
 需要单独提供本次说明时，可在生成清单前设置 `MINEPIX_RELEASE_NOTES` 为 UTF-8 文件路径；该文件整体作为当前版本正文，需仅包含本次说明。发布脚本仍直接复用更新清单中的内容。
 
-安装包统一命名为 `MinePix_<版本>_x64-setup.exe`，签名附加 `.sig`。本地构建、公开资产、更新 URL 和差分块图使用同一名称。已发布资产不改名；名称规则在下个新版本生效。
+安装包统一命名为：
+- Windows x64：`MinePix_<版本>_x64-setup.exe`（签名附加 `.sig`）
+- Linux x64 AppImage：`MinePix_<版本>_amd64.AppImage`（签名附加 `.sig`，接入自动更新）
+- Linux x64 Debian/Ubuntu：`MinePix_<版本>_amd64.deb`
+
+本地构建、公开资产、更新 URL 和差分块图使用同一名称。已发布资产不改名；名称规则在下个新版本生效。
 
 日常修改先在本地执行相关定向测试，再提交并执行 `git push origin main`，此时不会运行 Actions。准备发布时，同步上述五处版本号并提高版本，在 main 的待发布提交上创建与应用版本一致的新标签，再单独推送标签：
 

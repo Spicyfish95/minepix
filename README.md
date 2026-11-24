@@ -82,18 +82,18 @@ Windows安装包包含独立文件夹缩略图扩展，支持PIX／ASE／ASEPRIT
 
 重要作品建议保留副本。首次使用默认启用启动检查，发现新版本后自动下载；可在“帮助 → 关于”关闭，已有的开关选择会保留。也可通过“帮助 → 检查更新”手动检查。下载验证通过后会保留更新包，下次启动直接复用；点击右下角主题色更新图标（悬停提示“有可用更新”），按提示处理未保存项目。更新成功后自动清理下载包及安装临时文件。
 
-手动下载请进入对应的 `minepix-v<版本>` Release，选择 `MinePix_<版本>_x64-setup.exe`；`.sig` 由更新器使用，无需手动打开。`tauri-latest` 保存更新频道清单。
+手动下载请进入对应的 `minepix-v<版本>` Release：Windows 选择 `MinePix_<版本>_x64-setup.exe`，Linux x64 选择 `MinePix_<版本>_amd64.AppImage`（支持签名自动更新）或 `MinePix_<版本>_amd64.deb`；`.sig` 由更新器使用，无需手动打开。`tauri-latest` 保存更新频道清单。
 
 ## 开发
 
-需要 Node.js 24、Rust stable MSVC、C++ Build Tools 和 Windows SDK。
+Windows 需要 Node.js 24、Rust stable MSVC、C++ Build Tools 和 Windows SDK；Linux 需要 Node.js 24、Rust stable 以及 WebKitGTK 4.1 / GTK 3 开发库（见[构建与发布指南](docs/RELEASING.md)）。
 
 ```powershell
 npm ci
 npm run desktop
 ```
 
-普通 main 推送和 PR 不触发 Actions。仅推送 `minepix-v*` 标签时，工作流执行完整测试、构建签名安装包并发布更新；日常开发在本地运行相关测试。
+普通 main 推送和 PR 不触发 Actions。仅推送 `minepix-v*` 标签时，工作流并行构建并测试 Windows x64 与 Linux x64 签名安装包后统一发布更新；日常开发在本地运行相关测试。
 
 - [使用指南](docs/USER_GUIDE.md)
 - [开发与验证](docs/DEVELOPMENT.md)

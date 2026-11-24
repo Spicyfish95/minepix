@@ -1,5 +1,9 @@
 # 开发与验证
 
+## Linux 安装包与 GitHub 构建发布流程补充范围
+
+补充 Linux x64（AppImage + deb）本地打包与 GitHub Actions 构建发布流程：为 `window_dpi.rs`、`drop_paths.rs` 补齐 `#[cfg(windows)]` 隔离，使 Rust 后端在 Linux 正常编译；在 `updater.rs`、`differential.rs` 单元测试清单补齐 `linux-x86_64` 目标；新增 `src-tauri/tauri.linux.conf.json`、`package.json` 的 `package:linux` / `test:linux`、`scripts/verify-linux-release.mjs`，扩展 `create-update-manifest.mjs`、`verify-release.mjs` 与 `publish-release.mjs` 支持 Windows + Linux 双平台校验、资产上传与 `latest.json` 合并；更新 `.github/workflows/release.yml`（Windows + Linux 并行构建回归后统一发布）和 `.github/workflows/rust-cache.yml`（同步预热 Ubuntu 22.04 缓存）。定向验证发布/安装/Linux 打包 Node 37 项、Rust 后端 95 项、仓库 450 文件 / 72 链接 / 815 导入及 LF/Git 差异检查全部通过；不改动版本号、不推送远程或触发实际标签发布，Linux 实际打包与运行待在 Ubuntu 环境或后续标签工作流中验证。
+
 ## 2.0.11发布准备范围
 
 用户确认升级并发布，远端正式版2.0.10、minepix-v2.0.11标签未占用。同步五处版本文件与中英文README，将色板／颜色和前两轮自检修复归入2.0.11说明。已有颜色Node292项、浏览器59／156项通过；本地只运行发布协议／说明／公开下载／安装配置、版本／仓库／生产资源检查，不重复无关全量回归。提交后推送main及minepix-v2.0.11标签，由标签工作流运行完整前后端与原生缩略图回归、签名构建、固定公钥／版本绑定验证、版本资产发布及频道提升；跟踪完成并核验公开下载哈希、签名、篡改拒绝及更新频道，不执行真实安装覆盖专项。

@@ -4,8 +4,11 @@ import {createHash} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import path from 'node:path';
 import {blockmap} from './update-blockmap.mjs';
+import {linuxAppImageAssetName,linuxDebAssetName,verifyLinuxRelease} from './verify-linux-release.mjs';
+
 export const repository='Spicyfish95/minepix';
 export const releaseAssetName=version=>`MinePix_${version}_x64-setup.exe`;
+export {linuxAppImageAssetName,linuxDebAssetName};
 export const sha256=bytes=>createHash('sha256').update(bytes).digest('hex');
 export const releasePolicy=version=>({prerelease:version.includes('-'),latest:!version.includes('-')});
 export function compareVersions(a,b){
@@ -25,7 +28,7 @@ export function compareVersions(a,b){
  }
  return 0;
 }
-export function verifyManifest(manifest,version,bytes,signature){
+export function verifyManifest(manifest,version,bytes,signature,linux=null){
  const filename=`MinePix_${version}_x64-setup.exe`;
  const assetName=releaseAssetName(version);
  const url=`https://github.com/${repository}/releases/download/minepix-v${version}/${assetName}`;
@@ -36,9 +39,18 @@ export function verifyManifest(manifest,version,bytes,signature){
   assert.deepEqual(manifest.platforms[platform],{signature:signature.trim(),url});
  }
  assert.deepEqual(manifest.minepixBlockmap,blockmap(bytes,version,url));
- return {filename,assetName,bytes:bytes.length,sha256:sha256(bytes),url};
+ let linuxInfo=null;
+ if(linux){
+  const linuxAsset=linuxAppImageAssetName(version);
+  const linuxUrl=`https://github.com/${repository}/releases/download/minepix-v${version}/${linuxAsset}`;
+  for(const platform of ['linux-x86_64-appimage','linux-x86_64']){
+   assert.deepEqual(manifest.platforms[platform],{signature:linux.signature.trim(),url:linuxUrl});
+  }
+  linuxInfo={assetName:linuxAsset,url:linuxUrl};
+ }
+ return {filename,assetName,bytes:bytes.length,sha256:sha256(bytes),url,...(linuxInfo?{linux:linuxInfo}:{})};
 }
-export async function verifyRelease(){
+export async function verifyRelease({requireRaw=true,requireLinux=false,writeReport=requireRaw}={}){
  const read=async name=>JSON.parse(await readFile(name,'utf8'));
  const config=await read('src-tauri/tauri.conf.json'),pkg=await read('package.json'),lock=await read('package-lock.json');
  assert.equal(config.version,pkg.version);
@@ -55,14 +67,25 @@ export async function verifyRelease(){
  assert.equal(bytes.toString('ascii',0,2),'MZ');
  const pe=bytes.readUInt32LE(0x3c);
  assert.equal(bytes.toString('hex',pe,pe+4),'50450000');
- const raw=await readFile('src-tauri/target/release/minepix-tauri.exe');
- const rawPe=raw.readUInt32LE(0x3c);
- assert.equal(raw.readUInt16LE(rawPe+4),0x8664);
+ let raw=null;
+ if(requireRaw){
+  const rawBytes=await readFile('src-tauri/target/release/minepix-tauri.exe');
+  const rawPe=rawBytes.readUInt32LE(0x3c);
+  assert.equal(rawBytes.readUInt16LE(rawPe+4),0x8664);
+  raw={bytes:rawBytes.length,sha256:sha256(rawBytes)};
+ }
+ const linux=requireLinux?await verifyLinuxRelease({requireRaw:false,writeReport:false}):null;
  const manifest=await read('artifacts/release/latest.json');
- const artifact=verifyManifest(manifest,pkg.version,bytes,signature);
- const result={ok:true,version:pkg.version,artifact,raw:{bytes:raw.length,sha256:sha256(raw)},signatureVerification:'Run the fixed-key Rust update-tool separately'};
- await mkdir('artifacts/release',{recursive:true});
- await writeFile('artifacts/release/validation.json',JSON.stringify(result,null,2)+'\n');
+ const artifact=verifyManifest(manifest,pkg.version,bytes,signature,linux?{signature:linux.appimage.signature}:null);
+ const result={ok:true,version:pkg.version,artifact,...(linux?{linux}:{}),...(raw?{raw}:{}),signatureVerification:'Run the fixed-key Rust update-tool separately'};
+ if(writeReport){
+  await mkdir('artifacts/release',{recursive:true});
+  await writeFile('artifacts/release/validation.json',JSON.stringify(result,null,2)+'\n');
+ }
  return result;
 }
-if(process.argv[1]&&pathToFileURL(path.resolve(process.argv[1])).href===import.meta.url)console.log(JSON.stringify(await verifyRelease(),null,2));
+if(process.argv[1]&&pathToFileURL(path.resolve(process.argv[1])).href===import.meta.url){
+ const requireRaw=!process.argv.includes('--skip-raw');
+ const requireLinux=process.argv.includes('--require-linux');
+ console.log(JSON.stringify(await verifyRelease({requireRaw,requireLinux}),null,2));
+}

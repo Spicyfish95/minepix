@@ -190,7 +190,8 @@ pub(crate) mod tests {
         let listener=TcpListener::bind("127.0.0.1:0").unwrap();listener.set_nonblocking(true).unwrap();
         let endpoint=format!("http://{}/manifest",listener.local_addr().unwrap());let url=format!("http://{}/payload",listener.local_addr().unwrap());
         let signature=include_str!("../../tests/fixtures/updater-differential.bin.sig").trim();
-        let mut manifest=json!({"version":"2.0.0-alpha.2","platforms":{"windows-x86_64":{"url":url,"signature":signature}},"minepixBlockmap":map(TARGET,&url)});
+        let target=json!({"url":url,"signature":signature});
+        let mut manifest=json!({"version":"2.0.0-alpha.2","platforms":{"windows-x86_64":target,"linux-x86_64":target},"minepixBlockmap":map(TARGET,&url)});
         match mode {
             "bad-map"=>manifest["minepixBlockmap"]["chunks"][0]["offset"]=json!(1),
             "bad-hash"=>manifest["minepixBlockmap"]["sha256"]=json!("0".repeat(64)),

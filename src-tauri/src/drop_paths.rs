@@ -1,14 +1,6 @@
-use serde_json::{Value, json};
 use tauri::WebviewWindow;
-use webview2_com::{
-    CoTaskMemPWSTR,
-    Microsoft::Web::WebView2::Win32::{
-        ICoreWebView2File, ICoreWebView2WebMessageReceivedEventArgs2,
-    },
-    WebMessageReceivedEventHandler,
-};
-use windows::core::{Interface, PWSTR};
 
+#[cfg_attr(not(any(windows, test)), allow(dead_code))]
 fn local_source(source: &str) -> bool {
     let Ok(url) = tauri::Url::parse(source) else {
         return false;
@@ -23,7 +15,18 @@ fn local_source(source: &str) -> bool {
 }
 
 // Keep HTML drag/drop enabled. WebView2 exposes the actual path only for an OS-backed File.
+#[cfg(windows)]
 pub fn register(window: &WebviewWindow) -> tauri::Result<()> {
+    use serde_json::{Value, json};
+    use webview2_com::{
+        CoTaskMemPWSTR,
+        Microsoft::Web::WebView2::Win32::{
+            ICoreWebView2File, ICoreWebView2WebMessageReceivedEventArgs2,
+        },
+        WebMessageReceivedEventHandler,
+    };
+    use windows::core::{Interface, PWSTR};
+
     let target = window.clone();
     window.with_webview(move |webview| unsafe {
         let result = (|| -> windows::core::Result<()> {
@@ -84,6 +87,11 @@ pub fn register(window: &WebviewWindow) -> tauri::Result<()> {
             eprintln!("无法注册WebView2文件路径接收器：{error}");
         }
     })
+}
+
+#[cfg(not(windows))]
+pub fn register(_window: &WebviewWindow) -> tauri::Result<()> {
+    Ok(())
 }
 
 #[cfg(test)]

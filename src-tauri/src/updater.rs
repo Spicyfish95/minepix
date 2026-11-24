@@ -172,8 +172,10 @@ impl Updates {
     }
     fn updater<R: tauri::Runtime>(&self, app: &AppHandle<R>) -> tauri_plugin_updater::Result<tauri_plugin_updater::Updater> {
         let mut builder = app.updater_builder().timeout(Duration::from_secs(120));
-        if let Some(tail) = nsis_restart_tail(&std::env::args().collect::<Vec<_>>()) {
-            builder = builder.installer_arg(tail);
+        if cfg!(windows) {
+            if let Some(tail) = nsis_restart_tail(&std::env::args().collect::<Vec<_>>()) {
+                builder = builder.installer_arg(tail);
+            }
         }
         builder.build()
     }
@@ -410,7 +412,8 @@ mod tests {
             } else {
                 "2.0.0-alpha.2"
             };
-            let manifest=serde_json::to_vec(&json!({"version":version,"platforms":{"windows-x86_64":{"url":artifact,"signature":signature}}})).unwrap();
+            let target = json!({"url":artifact,"signature":signature});
+            let manifest=serde_json::to_vec(&json!({"version":version,"platforms":{"windows-x86_64":target,"linux-x86_64":target}})).unwrap();
             let calls = if mode == "current" {
                 1
             } else if mode == "cancel" {
@@ -664,7 +667,11 @@ mod tests {
                 _ => {
                     let mut raw: Value = serde_json::from_slice(&std::fs::read(&metadata).unwrap()).unwrap();
                     if mode == "version" { raw["version"] = json!("9.0.0"); }
-                    else { raw["platforms"]["windows-x86_64"]["signature"] = json!("bad signature"); }
+                    else {
+                        for platform in raw["platforms"].as_object_mut().unwrap().values_mut() {
+                            platform["signature"] = json!("bad signature");
+                        }
+                    }
                     crate::storage::write_json(&metadata, &raw).unwrap();
                 }
             }
