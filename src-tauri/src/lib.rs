@@ -680,6 +680,18 @@ async fn desktop_action(method:String,args:Vec<Value>,window:tauri::WebviewWindo
 }
 
 #[tauri::command]
+async fn open_dropped_bytes(request: tauri::ipc::Request<'_>) -> Result<Value, String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("拖入文件需要原始字节".into());
+    };
+    let packet = binary_packet::Packet::parse(bytes).map_err(|error| error.to_string())?;
+    let name = packet.metadata["name"].as_str().ok_or("缺少拖入文件名")?;
+    let payload = packet.payloads.first().ok_or("缺少拖入文件内容")?;
+    storage::check_size(payload.len() as u64).map_err(|error| error.to_string())?;
+    files::decode_bytes(name, payload, None).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn recovery_write(record: RecoveryInput, state: tauri::State<Backend>) -> Result<(), String> {
     state
         .recovery
@@ -840,6 +852,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             desktop_call,
+            open_dropped_bytes,
             export_packed,
             document_transfer_put,
             document_transfer_get,

@@ -3,7 +3,7 @@ import {createExportClient} from './export-client.js';
 import {packBinaryPacket} from './binary-packet.js';
 import {packDocumentWire,unpackDocumentWire} from './document-wire.js';
 import {createRecoveryClient} from './recovery-client.js';
-﻿import {createDocumentSaver} from './document-save.js';
+import {createDocumentSaver} from './document-save.js';
 import {encodeSingleImage} from './single-image-save.js';
 import {readSaveFormat} from './save-format.js';
 import {encodeReference} from './layer-types.js';
@@ -97,11 +97,28 @@ function windowBridge(target){
  return bridge;
 }
 
+async function readBrowserClipboardImages(){
+ if(!navigator.clipboard?.read)throw new Error('当前环境不支持读取图片剪贴板');
+ const items=await navigator.clipboard.read(),images=[];
+ for(const item of items){
+  const mime=item.types.find(type=>type.startsWith('image/'));if(!mime)continue;
+  const bytes=new Uint8Array(await (await item.getType(mime)).arrayBuffer());
+  let binary='';for(let i=0;i<bytes.length;i+=0x8000)binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));
+  const ext=mime.split('/')[1]?.replace('jpeg','jpg')||'png';
+  images.push({name:'clipboard.'+ext,mime,sourcePath:null,data:btoa(binary)});
+ }
+ return images;
+}
+
 export async function initializeDesktop(){
  const bridge={testing:false,secondary:current.label!=='main'},projectSaveClient=createProjectSaveClient();
  const exports=createExportClient({invoke:bytes=>invokeBackend('export_packed',bytes),packProject:(...args)=>projectSaveClient.pack(...args)});
  const methods=['cancelScreenColor','readReference','saveReference','captureScreen','clipboardImages','openRepository','appInfo','editorInfo','editorReady','detachDocument','moveDocument','recordInputAudit','testNotification','recentFiles','recentThumbs','removeRecent','clearRecent','openRecent','startupFiles','openKeymap','openPalette','open','exportAseprite','pickExportDirectory','exportSheetMetadata','exportSheet','exportAnimation','save','saveProject','activateDocument','setDirty','checkUpdates','installUpdate','downloadUpdate','cancelUpdate','updateState','openUpdateRelease','setAutoUpdate','setLocale'];
  for(const method of methods)bridge[method]=(...args)=>call(method,...args);
+ bridge.clipboardImages=async()=>{
+  try{return await call('clipboardImages');}
+  catch(error){if(/仅支持 Windows/.test(error.message))return readBrowserClipboardImages();throw error;}
+ };
  bridge.readReference=readReference;
  bridge.pickScreenColor=()=>new Promise((resolve,reject)=>{
   const unsubscribe=subscribe('capture:color',value=>{unsubscribe();resolve(value);});
@@ -176,14 +193,17 @@ export async function initializeDesktop(){
  const pendingPaths=new Map();
  subscribe('drop:path',({id,path,error})=>{const pending=pendingPaths.get(id);if(!pending)return;pendingPaths.delete(id);clearTimeout(pending.timer);error?pending.reject(new Error(error)):pending.resolve(path);});
  bridge.openDroppedFile=async file=>{
-  if(!window.chrome?.webview?.postMessageWithAdditionalObjects)throw new Error('当前 WebView2 不支持本地文件路径，请更新 WebView2');
-  const id=++dropSerial,path=await new Promise((resolve,reject)=>{
-   const timer=setTimeout(()=>{pendingPaths.delete(id);reject(new Error('读取拖入文件路径超时'));},10000);
-   pendingPaths.set(id,{resolve,reject,timer});
-   try{window.chrome.webview.postMessageWithAdditionalObjects(JSON.stringify({minepixFilePath:id}),[file]);}
-   catch(error){pendingPaths.delete(id);clearTimeout(timer);reject(error);}
-  });
-  return call('openDroppedPath',path);
+  if(window.chrome?.webview?.postMessageWithAdditionalObjects){
+   const id=++dropSerial,path=await new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>{pendingPaths.delete(id);reject(new Error('读取拖入文件路径超时'));},10000);
+    pendingPaths.set(id,{resolve,reject,timer});
+    try{window.chrome.webview.postMessageWithAdditionalObjects(JSON.stringify({minepixFilePath:id}),[file]);}
+    catch(error){pendingPaths.delete(id);clearTimeout(timer);reject(error);}
+   });
+   return call('openDroppedPath',path);
+  }
+  const bytes=new Uint8Array(await file.arrayBuffer());
+  return decodeWire(await invokeBackend('open_dropped_bytes',packBinaryPacket({name:file.name||''},[bytes])));
  };
  await getCurrentWebviewWindow().listen('desktop:event',({payload})=>dispatch(payload.name,payload.data));
  document.addEventListener('pointerdown',event=>{

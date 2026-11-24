@@ -43,9 +43,10 @@ export function verifyManifest(manifest,version,bytes,signature,linux=null){
  if(linux){
   const linuxAsset=linuxAppImageAssetName(version);
   const linuxUrl=`https://github.com/${repository}/releases/download/minepix-v${version}/${linuxAsset}`;
-  for(const platform of ['linux-x86_64-appimage','linux-x86_64']){
-   assert.deepEqual(manifest.platforms[platform],{signature:linux.signature.trim(),url:linuxUrl});
-  }
+  assert.deepEqual(manifest.platforms['linux-x86_64-appimage'],{signature:linux.signature.trim(),url:linuxUrl});
+  assert.equal(manifest.platforms['linux-x86_64'],undefined,'Linux 清单不应提供通用 linux-x86_64 回退项，避免 deb 误下载 AppImage');
+  assert.ok(linux.bytes,'校验多平台清单必须提供 Linux AppImage 字节');
+  assert.deepEqual(manifest.minepixBlockmaps?.['linux-x86_64-appimage'],blockmap(linux.bytes,version,linuxUrl));
   linuxInfo={assetName:linuxAsset,url:linuxUrl};
  }
  return {filename,assetName,bytes:bytes.length,sha256:sha256(bytes),url,...(linuxInfo?{linux:linuxInfo}:{})};
@@ -75,8 +76,9 @@ export async function verifyRelease({requireRaw=true,requireLinux=false,writeRep
   raw={bytes:rawBytes.length,sha256:sha256(rawBytes)};
  }
  const linux=requireLinux?await verifyLinuxRelease({requireRaw:false,writeReport:false}):null;
+ const linuxBytes=linux?await readFile(linux.appimage.filePath):null;
  const manifest=await read('artifacts/release/latest.json');
- const artifact=verifyManifest(manifest,pkg.version,bytes,signature,linux?{signature:linux.appimage.signature}:null);
+ const artifact=verifyManifest(manifest,pkg.version,bytes,signature,linux?{signature:linux.appimage.signature,bytes:linuxBytes}:null);
  const result={ok:true,version:pkg.version,artifact,...(linux?{linux}:{}),...(raw?{raw}:{}),signatureVerification:'Run the fixed-key Rust update-tool separately'};
  if(writeReport){
   await mkdir('artifacts/release',{recursive:true});

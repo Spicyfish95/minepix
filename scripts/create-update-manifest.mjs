@@ -26,6 +26,7 @@ const bytes=await readFile(installer);
 const platforms={'windows-x86_64-nsis':target,'windows-x86_64':target};
 
 let linuxReport=null;
+let linuxBlockmap=null;
 const appimageDir=path.resolve('src-tauri/target/release/bundle/appimage');
 let hasLinuxDir=false;
 try{await access(appimageDir);hasLinuxDir=true;}catch{}
@@ -37,11 +38,18 @@ if(requireLinux||hasLinuxDir){
  const linuxUrl=`https://github.com/${repository}/releases/download/minepix-v${version}/${linuxAppImageAssetName(version)}`;
  const linuxTarget={signature:linuxSignature,url:linuxUrl};
  platforms['linux-x86_64-appimage']=linuxTarget;
- platforms['linux-x86_64']=linuxTarget;
+ linuxBlockmap=blockmap(linuxBytes,version,linuxUrl);
  linuxReport={installer:appimageFile.filePath,bytes:linuxBytes.length,sha256:createHash('sha256').update(linuxBytes).digest('hex'),signatureBindsVersion:true};
 }
 
-const manifest={version,pub_date:new Date().toISOString(),notes,platforms,minepixBlockmap:blockmap(bytes,version,url)};
+const manifest={
+ version,
+ pub_date:new Date().toISOString(),
+ notes,
+ platforms,
+ minepixBlockmap:blockmap(bytes,version,url),
+ ...(linuxBlockmap?{minepixBlockmaps:{'linux-x86_64-appimage':linuxBlockmap}}:{}),
+};
 await mkdir('artifacts/release',{recursive:true});
 await writeFile('artifacts/release/latest.json',JSON.stringify(manifest,null,2)+'\n');
 const report={version,installer,bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),signatureBindsVersion:true,...(linuxReport?{linux:linuxReport}:{}),published:false};

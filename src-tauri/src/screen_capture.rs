@@ -180,39 +180,47 @@ fn start_mode(window: &WebviewWindow, color_picker: bool) -> Result<(), String> 
 }
 
 pub fn prepare(app: &AppHandle) -> Result<(), String> {
-    if app.get_webview_window("screen-capture").is_some() {
-        return Ok(());
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        Ok(())
     }
-    let overlay = tauri::WebviewWindowBuilder::new(
-        app,
-        "screen-capture",
-        WebviewUrl::App("capture.html".into()),
-    )
-    .title("MinePix · 截图")
-    .decorations(false)
-    .shadow(false)
-    .resizable(false)
-    .transparent(true)
-    .always_on_top(true)
-    .skip_taskbar(true)
-    .visible(false)
-    .disable_drag_drop_handler()
-    .build()
-    .map_err(|e| e.to_string())?;
-    let handle = app.clone();
-    overlay.on_window_event(move |event| match event {
-        tauri::WindowEvent::CloseRequested { api, .. } => {
-            api.prevent_close();
-            if handle.state::<Capture>().0.lock().unwrap().is_some() {
-                let _ = finish(&handle, None);
+    #[cfg(windows)]
+    {
+        if app.get_webview_window("screen-capture").is_some() {
+            return Ok(());
+        }
+        let overlay = tauri::WebviewWindowBuilder::new(
+            app,
+            "screen-capture",
+            WebviewUrl::App("capture.html".into()),
+        )
+        .title("MinePix · 截图")
+        .decorations(false)
+        .shadow(false)
+        .resizable(false)
+        .transparent(true)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .visible(false)
+        .disable_drag_drop_handler()
+        .build()
+        .map_err(|e| e.to_string())?;
+        let handle = app.clone();
+        overlay.on_window_event(move |event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                api.prevent_close();
+                if handle.state::<Capture>().0.lock().unwrap().is_some() {
+                    let _ = finish(&handle, None);
+                }
             }
-        }
-        tauri::WindowEvent::Destroyed => {
-            handle.state::<Capture>().0.lock().unwrap().take();
-        }
-        _ => (),
-    });
-    Ok(())
+            tauri::WindowEvent::Destroyed => {
+                handle.state::<Capture>().0.lock().unwrap().take();
+            }
+            _ => (),
+        });
+        Ok(())
+    }
 }
 
 pub fn active(app: &AppHandle) -> bool {

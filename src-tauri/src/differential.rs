@@ -92,6 +92,54 @@ pub fn cache_verified(root: &Path, bytes: &[u8]) -> std::io::Result<()> {
     crate::storage::write_atomic(&path,bytes)
 }
 
+fn blockmap_candidates(target: &str) -> Vec<String> {
+    let mut keys=Vec::new();
+    let arch=std::env::consts::ARCH;
+    let push=|keys:&mut Vec<String>,key:String|{ if !keys.contains(&key) { keys.push(key); } };
+    push(&mut keys,target.to_owned());
+    if let Some(base)=target.strip_suffix("-appimage").or_else(||target.strip_suffix("-nsis")) {
+        push(&mut keys,base.to_owned());
+    }
+    if !target.contains('-') {
+        let with_arch=format!("{target}-{arch}");
+        if target=="linux" { push(&mut keys,format!("{with_arch}-appimage")); }
+        else if target=="windows" { push(&mut keys,format!("{with_arch}-nsis")); }
+        push(&mut keys,with_arch);
+    }
+    keys
+}
+
+fn select_blockmap<'a>(update: &'a Update) -> Option<&'a serde_json::Value> {
+    if let Some(maps)=update.raw_json.get("minepixBlockmaps").and_then(|value|value.as_object()) {
+        for key in blockmap_candidates(&update.target) {
+            if let Some(value)=maps.get(&key) { return Some(value); }
+        }
+        if !update.target.starts_with("windows") { return None; }
+    }
+    let legacy=update.raw_json.get("minepixBlockmap")?;
+    if !update.target.starts_with("windows")
+        && legacy.get("url").and_then(|value|value.as_str()).is_some_and(|url|url.ends_with(".exe")) {
+        return None;
+    }
+    Some(legacy)
+}
+
+fn read_base(root: &Path, appimage: Option<&Path>) -> Result<Option<Vec<u8>>,String> {
+    let path=cache_path(root);
+    match crate::storage::read_file(&path) {
+        Ok(bytes)=>return Ok(Some(bytes)),
+        Err(error) if error.kind()==std::io::ErrorKind::NotFound=>{},
+        Err(error)=>return Err(format!("无法读取差分缓存：{error}")),
+    }
+    if let Some(appimage_path)=appimage {
+        match crate::storage::read_file(appimage_path) {
+            Ok(bytes)=>return Ok(Some(bytes)),
+            Err(_)=>return Ok(None),
+        }
+    }
+    Ok(None)
+}
+
 async fn differential(
     update: &Update, map: &Blockmap, base: &[u8], stats: &mut Transfer,
     report: &mut impl FnMut(&Transfer),
@@ -138,19 +186,24 @@ async fn differential(
 }
 
 pub async fn download(
-    update: &Update, root: &Path, mut report: impl FnMut(&Transfer),
+    update: &Update, root: &Path, report: impl FnMut(&Transfer),
+) -> Result<(Vec<u8>,Transfer),String> {
+    #[cfg(target_os = "linux")]
+    let appimage=std::env::var_os("APPIMAGE").filter(|value|!value.is_empty()).map(PathBuf::from);
+    #[cfg(not(target_os = "linux"))]
+    let appimage:Option<PathBuf>=None;
+    download_with_base(update,root,appimage.as_deref(),report).await
+}
+
+async fn download_with_base(
+    update: &Update, root: &Path, appimage: Option<&Path>, mut report: impl FnMut(&Transfer),
 ) -> Result<(Vec<u8>,Transfer),String> {
     let mut stats=Transfer {mode:"full",..Transfer::default()};
-    if let Some(value)=update.raw_json.get("minepixBlockmap") {
+    if let Some(value)=select_blockmap(update) {
         let attempt=async {
             let map:Blockmap=serde_json::from_value(value.clone()).map_err(|e|e.to_string())?;
             map.validate(update)?;
-            let path=cache_path(root);
-            let base=match crate::storage::read_file(&path) {
-                Ok(bytes)=>bytes,
-                Err(error) if error.kind()==std::io::ErrorKind::NotFound=>return Ok(None),
-                Err(error)=>return Err(format!("无法读取差分缓存：{error}")),
-            };
+            let Some(base)=read_base(root,appimage)? else { return Ok(None); };
             differential(update,&map,&base,&mut stats,&mut report).await
         }.await;
         match attempt {
@@ -294,5 +347,48 @@ pub(crate) mod tests {
             assert!(tauri::async_runtime::block_on(download(&update(&feed),root.path(),|_|{})).is_err());
             assert_eq!(feed.traffic.lock().unwrap().full,1);assert_eq!(crate::storage::read_file(&cache_path(root.path())).unwrap(),base());
         }
+    }
+
+    #[test]
+    fn linux_target_selects_platform_blockmap_and_reuses_running_appimage_baseline(){
+        let feed=feed("normal");
+        let signature=include_str!("../../tests/fixtures/updater-differential.bin.sig").trim();
+        let linux_url=feed.manifest["platforms"]["linux-x86_64"]["url"].as_str().unwrap().to_owned();
+        let windows_url="https://github.com/Spicyfish95/minepix/releases/download/minepix-v2.0.0-alpha.2/MinePix_2.0.0-alpha.2_x64-setup.exe";
+        let multi=json!({
+            "version":"2.0.0-alpha.2",
+            "platforms":{
+                "windows-x86_64":{"url":windows_url,"signature":signature},
+                "linux-x86_64-appimage":{"url":linux_url,"signature":signature}
+            },
+            "minepixBlockmap":map(TARGET,windows_url),
+            "minepixBlockmaps":{"linux-x86_64-appimage":map(TARGET,&linux_url)}
+        });
+        let linux_update=app(&feed.endpoint).updater_builder().target("linux-x86_64-appimage").build().unwrap().restore_update(multi).unwrap().unwrap();
+        let root=tempfile::tempdir().unwrap();
+        let appimage=root.path().join("MinePix_2.0.0-alpha.1_amd64.AppImage");
+        std::fs::write(&appimage,base()).unwrap();
+        let (bytes,stats)=tauri::async_runtime::block_on(download_with_base(&linux_update,root.path(),Some(&appimage),|_|{})).unwrap();
+        assert_eq!(bytes,TARGET);
+        assert_eq!(stats.mode,"differential");
+        assert!(stats.reused_bytes>0);
+        assert!(stats.downloaded_bytes<TARGET.len()as u64);
+        assert_eq!(feed.traffic.lock().unwrap().full,0);
+        assert!(feed.traffic.lock().unwrap().ranges>0);
+
+        // Legacy Windows-only manifest without minepixBlockmaps does not trigger false fallback on Linux.
+        let legacy_only=json!({
+            "version":"2.0.0-alpha.2",
+            "platforms":{
+                "windows-x86_64":{"url":windows_url,"signature":signature},
+                "linux-x86_64":{"url":linux_url,"signature":signature}
+            },
+            "minepixBlockmap":map(TARGET,windows_url)
+        });
+        let legacy_update=app(&feed.endpoint).updater_builder().target("linux-x86_64").build().unwrap().restore_update(legacy_only).unwrap().unwrap();
+        let (bytes,stats)=tauri::async_runtime::block_on(download_with_base(&legacy_update,root.path(),Some(&appimage),|_|{})).unwrap();
+        assert_eq!(bytes,TARGET);
+        assert_eq!(stats.mode,"full");
+        assert!(stats.fallback_reason.is_none());
     }
 }

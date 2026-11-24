@@ -54,7 +54,11 @@ pub fn launch_paths(arguments: &[String], cwd: &Path) -> Vec<PathBuf> {
         .skip(1)
         .filter(|arg| !arg.starts_with('-'))
         .filter_map(|arg| {
-            let path = cwd.join(arg);
+            let path = if arg.starts_with("file://") {
+                tauri::Url::parse(arg).ok()?.to_file_path().ok()?
+            } else {
+                cwd.join(arg)
+            };
             let extension = path.extension()?.to_str()?.to_ascii_lowercase();
             if ![
                 "pix", "json", "png", "jpg", "jpeg", "webp", "bmp", "gif", "svg", "ico", "ase", "aseprite",
@@ -672,7 +676,13 @@ mod tests {
                 ],
                 root.path()
             ),
-            vec![absolute]
+            vec![absolute.clone()]
+        );
+        let spaced = root.path().join("my art.pix");
+        let uri = tauri::Url::from_file_path(&spaced).unwrap().to_string();
+        assert_eq!(
+            launch_paths(&["minepix".into(), uri], root.path()),
+            vec![spaced]
         );
     }
 

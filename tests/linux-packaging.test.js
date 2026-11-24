@@ -104,9 +104,22 @@ test('create-update-manifest 在存在 Linux AppImage 时生成多平台清单�
 
   await exec(process.execPath,[script,'--require-linux'],{cwd:dir,windowsHide:true});
   const manifest=JSON.parse(await readFile(path.join(dir,'artifacts/release/latest.json'),'utf8'));
+  const expectedLinuxUrl=`https://github.com/Spicyfish95/minepix/releases/download/minepix-v${version}/${linuxAppImageAssetName(version)}`;
   assert.equal(manifest.version,version);
-  assert.equal(manifest.platforms['linux-x86_64'].signature,linuxSig);
-  assert.equal(manifest.platforms['linux-x86_64-appimage'].url,`https://github.com/Spicyfish95/minepix/releases/download/minepix-v${version}/${linuxAppImageAssetName(version)}`);
+  assert.equal(manifest.platforms['linux-x86_64'],undefined);
+  assert.equal(manifest.platforms['linux-x86_64-appimage'].signature,linuxSig);
+  assert.equal(manifest.platforms['linux-x86_64-appimage'].url,expectedLinuxUrl);
   assert.ok(manifest.platforms['windows-x86_64-nsis'].url.endsWith(`MinePix_${version}_x64-setup.exe`));
+  assert.equal(manifest.minepixBlockmaps['linux-x86_64-appimage'].format,'minepix-blockmap-v1');
+  assert.equal(manifest.minepixBlockmaps['linux-x86_64-appimage'].url,expectedLinuxUrl);
+  assert.equal(manifest.minepixBlockmaps['linux-x86_64-appimage'].size,64);
+  assert.ok(manifest.minepixBlockmap.url.endsWith(`MinePix_${version}_x64-setup.exe`));
  }finally{await rm(dir,{recursive:true,force:true});}
+});
+
+test('desktop.js 在非 WebView2 平台（Linux WebKitGTK）拖放与剪贴板粘贴均有回退实现',async()=>{
+ const desktop=await readFile(new URL('../src/desktop.js',import.meta.url),'utf8');
+ assert.ok(desktop.includes('open_dropped_bytes'));
+ assert.ok(!desktop.includes('当前 WebView2 不支持本地文件路径'));
+ assert.ok(desktop.includes('navigator.clipboard?.read'));
 });

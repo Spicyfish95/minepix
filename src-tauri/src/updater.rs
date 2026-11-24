@@ -278,6 +278,14 @@ impl Updates {
                 *self.downloaded.lock().unwrap() = None;
                 self.publish(app, json!({"status":"current","version":null,"notes":""}))
             }
+            #[cfg(target_os = "linux")]
+            Err(tauri_plugin_updater::Error::TargetsNotFound(_))
+                if std::env::var_os("APPIMAGE").is_none_or(|value| value.is_empty()) =>
+            {
+                *self.available.lock().unwrap() = None;
+                *self.downloaded.lock().unwrap() = None;
+                self.publish(app, json!({"status":"current","version":null,"notes":""}))
+            }
             Err(error) => self.fail(app, "check", error),
         }
     }
@@ -361,10 +369,18 @@ impl Updates {
         }
         self.publish(app, json!({"status":"installing"}));
         let update = self.available.lock().unwrap().clone().unwrap();
-        // The official updater re-verifies bytes, starts NSIS and exits only after launch succeeds.
-        let bytes = self.downloaded.lock().unwrap();
-        match update.install(bytes.as_ref().unwrap()) {
-            Ok(()) => self.state(),
+        // On Windows NSIS exits and relaunches; on Linux AppImage replaces the file in place and needs app.restart().
+        let result = {
+            let bytes = self.downloaded.lock().unwrap();
+            update.install(bytes.as_ref().unwrap())
+        };
+        match result {
+            Ok(()) => {
+                #[cfg(not(windows))]
+                app.restart();
+                #[cfg(windows)]
+                self.state()
+            }
             Err(error) => self.fail(app, "install", error),
         }
     }

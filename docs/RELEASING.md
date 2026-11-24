@@ -43,7 +43,7 @@ GitHub 缓存按分支和标签隔离，不同发布标签不能直接共享彼�
 
 版本发布工作流 `release.yml` 仅由推送 `minepix-v*` 标签触发。普通 main 推送、PR 和手动操作均不触发该发布工作流。标签运行并行执行 `windows` 与 `linux` 两个构建任务：各自完成前后端回归、前端构建、资源及仓库检查、签名安装包构建与固定公钥/版本绑定校验（`verify-release.mjs` / `verify-linux-release.mjs` 与 `update-tool`）；双平台均通过后由 `publish` 任务汇总产物，生成包含 Windows NSIS 与 Linux AppImage 的多平台 `latest.json`，上传版本资产、校验公开下载并提升更新频道；任一步失败都会停止后续步骤。
 
-安装器和 .sig 归属对应版本 Release。latest.json 指向版本资产（包含 `windows-x86_64-nsis`、`windows-x86_64`、`linux-x86_64-appimage` 与 `linux-x86_64` 平台项，Windows 保留差分块图 `minepixBlockmap`），更新频道标签为 tauri-latest；它不匹配 `minepix-v*`，不会再次触发构建。先上传并验证全部平台版本资产，最后提升频道。已发布版本资产不覆盖；频道拒绝被较低版本回退。正式版在公开资产与频道验证通过后标为 Latest，预发布版保持 Prerelease 且不占用正式版 Latest 入口。
+安装器和 .sig 归属对应版本 Release。latest.json 指向版本资产（包含 `windows-x86_64-nsis`、`windows-x86_64` 与 `linux-x86_64-appimage` 平台项；不提供通用 `linux-x86_64` 回退项以避免 `.deb` 安装误下载 AppImage；Windows 使用顶层差分块图 `minepixBlockmap`，Linux AppImage 使用按平台差分块图 `minepixBlockmaps["linux-x86_64-appimage"]` 并在运行态复用 `$APPIMAGE` 基线），更新频道标签为 tauri-latest；它不匹配 `minepix-v*`，不会再次触发构建。先上传并验证全部平台版本资产，最后提升频道。已发布版本资产不覆盖；频道拒绝被较低版本回退。正式版在公开资产与频道验证通过后标为 Latest，预发布版保持 Prerelease 且不占用正式版 Latest 入口。
 
 版本标签统一使用 `minepix-v<版本号>`，例如 `minepix-v2.0.1`。已有预览版使用的 `tauri-latest` 频道地址继续保留，它与版本标签前缀分开管理。
 

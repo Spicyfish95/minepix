@@ -43,17 +43,25 @@ test('wrong versions and mutable channel asset URLs cannot be promoted',()=>{
  const wrong=fixture();wrong.version='2.0.0-alpha.2';assert.throws(()=>verifyManifest(wrong,version,bytes,signature));
  const mutable=fixture();mutable.platforms['windows-x86_64'].url='https://example.com/latest.exe';assert.throws(()=>verifyManifest(mutable,version,bytes,signature));
 });
-test('multi-platform manifests bind Linux AppImage assets and reject mismatched URLs or signatures',()=>{
+test('multi-platform manifests bind Linux AppImage assets, blockmaps, and reject mismatches',()=>{
  const linuxSignature='linux signature';
+ const linuxBytes=Buffer.from('linux appimage payload');
  const linuxUrl=`https://github.com/${repository}/releases/download/minepix-v${version}/MinePix_${version}_amd64.AppImage`;
  const combined=fixture();
  combined.platforms['linux-x86_64-appimage']={url:linuxUrl,signature:linuxSignature};
- combined.platforms['linux-x86_64']={url:linuxUrl,signature:linuxSignature};
- const verified=verifyManifest(combined,version,bytes,signature,{signature:linuxSignature});
+ combined.minepixBlockmaps={'linux-x86_64-appimage':blockmap(linuxBytes,version,linuxUrl)};
+ const verified=verifyManifest(combined,version,bytes,signature,{signature:linuxSignature,bytes:linuxBytes});
  assert.equal(verified.linux.assetName,`MinePix_${version}_amd64.AppImage`);
  assert.equal(verified.linux.url,linuxUrl);
- assert.throws(()=>verifyManifest(combined,version,bytes,signature,{signature:'other linux signature'}));
+ assert.throws(()=>verifyManifest(combined,version,bytes,signature,{signature:'other linux signature',bytes:linuxBytes}));
+ assert.throws(()=>verifyManifest(combined,version,bytes,signature,{signature:linuxSignature,bytes:Buffer.from('tampered linux payload')}));
+ const missingBlockmap=structuredClone(combined);
+ delete missingBlockmap.minepixBlockmaps;
+ assert.throws(()=>verifyManifest(missingBlockmap,version,bytes,signature,{signature:linuxSignature,bytes:linuxBytes}));
+ const genericLinux=structuredClone(combined);
+ genericLinux.platforms['linux-x86_64']={url:linuxUrl,signature:linuxSignature};
+ assert.throws(()=>verifyManifest(genericLinux,version,bytes,signature,{signature:linuxSignature,bytes:linuxBytes}));
  const wrongUrl=structuredClone(combined);
- wrongUrl.platforms['linux-x86_64'].url=linuxUrl.replace('minepix-v','tauri-v');
- assert.throws(()=>verifyManifest(wrongUrl,version,bytes,signature,{signature:linuxSignature}));
+ wrongUrl.platforms['linux-x86_64-appimage'].url=linuxUrl.replace('minepix-v','tauri-v');
+ assert.throws(()=>verifyManifest(wrongUrl,version,bytes,signature,{signature:linuxSignature,bytes:linuxBytes}));
 });

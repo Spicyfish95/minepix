@@ -586,10 +586,6 @@ pub fn export_sheet_bytes(parent:&Path,options:&Value,png:Option<&[u8]>)->io::Re
     )
 }
 
-#[cfg(test)]
-pub fn check_sheet_image(image: &Path, options: &Value) -> io::Result<()> {
-    check_sheet_image_bytes(image,options,None)
-}
 pub fn check_sheet_image_bytes(image:&Path,options:&Value,png:Option<&[u8]>)->io::Result<()>{
     let expected = if let Some(png)=png{png.to_vec()}else{STANDARD
         .decode(options["png"].as_str().ok_or_else(|| invalid("缺少预期 PNG"))?)
