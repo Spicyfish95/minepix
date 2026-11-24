@@ -1,5 +1,9 @@
 # 开发与验证
 
+## 2.0.13 发布准备范围
+
+`minepix-v2.0.12` 标签工作流（运行 `45340571745`）在 Windows 与 Linux 的 `Frontend and backend regression` 步骤均因 `tests/linux-packaging.test.js` 调用 `verifyLinuxRelease` 时读取全局 `process.env.GITHUB_REF` 与夹具版本 `2.0.11` 冲突而失败，未创建或修改 2.0.12 Release 及 `tauri-latest` 频道。现已为 `verifyLinuxRelease` 增加 `githubRef` 可选参数并在测试中显式隔离（补充不匹配标签拒绝断言，提交 `70b929d`），保留已推送的 `minepix-v2.0.12` 标签不移动，将版本同步升级至 `2.0.13` 并把 `CHANGELOG.md` 合并章节调整为 `2.0.13`。本地在模拟 `GITHUB_REF=refs/tags/minepix-v2.0.13` 环境下复验发布与 Linux 打包相关 Node 34 项、Rust `--locked` 后端单元测试 97 项、前端生产构建及资源／仓库检查后，推送 `main` 与 `minepix-v2.0.13` 标签触发双平台构建、签名校验与发布。
+
 ## 2.0.12 发布准备范围
 
 用户要求发布新版本，远端最新正式版为 2.0.10、`minepix-v2.0.11` 标签对应 `3ff0304`，`minepix-v2.0.12` 尚未创建。同步五处版本文件与中英文 README 至 2.0.12，并在 `CHANGELOG.md` 新增 `2.0.12` 章节，归入 `2.0.11` 之后的 4 项变更：Linux x64（AppImage + deb）打包与多平台发布流程、Linux AppImage 差分更新与桌面行为对齐、Linux “另存为”目录与文件名拆分，以及浮动面板关闭前迁回主停放容器修复。本地定向运行发布／Linux 打包／差分块图／说明／下载／安装配置 Node 测试、`--locked` Rust 后端单元测试、前端生产构建及资源／仓库检查，不重复无关全量回归；提交并推送 `main` 与 `minepix-v2.0.12` 标签后，由标签工作流并行执行 Windows 与 Linux 完整前后端回归、签名构建、固定公钥／版本绑定校验、资产发布及 `tauri-latest` 更新频道提升。
