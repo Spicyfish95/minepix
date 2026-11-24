@@ -63,7 +63,7 @@ test('verifyLinuxRelease 校验 ELF、deb 与版本绑定签名，并拒绝损�
   await writeFile(deb,Buffer.from('!<arch>\ndebian-binary'));
   await writeFile(raw,elf64X86Fixture());
 
-  const result=await verifyLinuxRelease({cwd:dir});
+  const result=await verifyLinuxRelease({cwd:dir,githubRef:`refs/tags/minepix-v${version}`});
   assert.equal(result.ok,true);
   assert.equal(result.appimage.assetName,linuxAppImageAssetName(version));
   assert.equal(result.deb.assetName,linuxDebAssetName(version));
@@ -71,12 +71,14 @@ test('verifyLinuxRelease 校验 ELF、deb 与版本绑定签名，并拒绝损�
   const report=JSON.parse(await readFile(path.join(dir,'artifacts/release/validation-linux.json'),'utf8'));
   assert.equal(report.version,version);
 
+  await assert.rejects(()=>verifyLinuxRelease({cwd:dir,githubRef:'refs/tags/minepix-v9.9.9'}),/minepix-v2\.0\.11/);
+
   await writeFile(deb,Buffer.from('not-a-deb'));
-  await assert.rejects(()=>verifyLinuxRelease({cwd:dir}),/deb/);
+  await assert.rejects(()=>verifyLinuxRelease({cwd:dir,githubRef:`refs/tags/minepix-v${version}`}),/deb/);
   await writeFile(deb,Buffer.from('!<arch>\ndebian-binary'));
 
   await writeFile(appimage+'.sig',Buffer.from('trusted comment: fixture\tversion:9.9.9\n').toString('base64'));
-  await assert.rejects(()=>verifyLinuxRelease({cwd:dir}),/版本/);
+  await assert.rejects(()=>verifyLinuxRelease({cwd:dir,githubRef:`refs/tags/minepix-v${version}`}),/版本/);
  }finally{await rm(dir,{recursive:true,force:true});}
 });
 

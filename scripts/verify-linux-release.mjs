@@ -31,7 +31,7 @@ function assertElf64X86(bytes,label){
  assert.equal(bytes.readUInt16LE(18),0x3e,`${label} 必须是 x86_64 架构`);
 }
 
-export async function verifyLinuxRelease({requireRaw=true,writeReport=requireRaw,cwd=process.cwd()}={}){
+export async function verifyLinuxRelease({requireRaw=true,writeReport=requireRaw,cwd=process.cwd(),githubRef=process.env.GITHUB_REF}={}){
  const read=async name=>JSON.parse(await readFile(path.join(cwd,name),'utf8'));
  const config=await read('src-tauri/tauri.conf.json');
  const linuxConfig=await read('src-tauri/tauri.linux.conf.json');
@@ -42,7 +42,7 @@ export async function verifyLinuxRelease({requireRaw=true,writeReport=requireRaw
  assert.equal(lock.packages[''].version,pkg.version);
  const cargo=await readFile(path.join(cwd,'src-tauri/Cargo.toml'),'utf8');
  assert.ok(cargo.includes('version = '+String.fromCharCode(34)+pkg.version+String.fromCharCode(34)));
- if(process.env.GITHUB_REF?.startsWith('refs/tags/'))assert.equal(process.env.GITHUB_REF,`refs/tags/minepix-v${pkg.version}`);
+ if(githubRef?.startsWith('refs/tags/'))assert.equal(githubRef,`refs/tags/minepix-v${pkg.version}`);
  assert.ok(linuxConfig.bundle?.targets?.includes('appimage'),'Linux 构建配置必须包含 appimage 目标');
  assert.ok(linuxConfig.bundle?.targets?.includes('deb'),'Linux 构建配置必须包含 deb 目标');
  assert.equal(config.plugins.updater.requireSignedVersion,true);
